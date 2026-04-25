@@ -1,0 +1,191 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+
+enum KeyScope {
+  read_only
+  read_write
+  admin
+}
+
+enum AdminRole {
+  support
+  finance
+  superadmin
+}
+
+enum WalletStatus {
+  active
+  frozen
+  pending_closure
+  closed
+}
+
+enum TransactionType {
+  credit
+  debit
+  reversal
+}
+
+// Models
+
+model Tenant {
+  id           String   @id @default(cuid())
+  name         String
+  contactEmail String?
+  config       Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  apiKeys     ApiKey[]
+  adminUsers  AdminUser[]
+  wallets     Wallet[]
+  transactions Transaction[]
+  auditLogs   AuditLog[]
+  webhooks    Webhook[]
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  tenantId  String
+  keyHash   String
+  prefix    String
+  scope     KeyScope
+  isSandbox Boolean  @default(false)
+  isActive  Boolean  @default(true)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model AdminUser {
+  id         String    @id @default(cuid())
+  tenantId   String
+  supabaseUid String
+  email      String
+  role       AdminRole
+  isActive   Boolean   @default(true)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, supabaseUid])
+  @@index([tenantId])
+}
+
+model Wallet {
+  id                String        @id @default(cuid())
+  tenantId          String
+  externalUserId    String
+  label             String?
+  balance           Decimal       @db.Decimal(20, 4) @default(0)
+  currency          String        @default("USD")
+  status            WalletStatus  @default(active)
+  isSandbox         Boolean       @default(false)
+  metadata          Json?
+  closureScheduledAt DateTime?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([tenantId, externalUserId, isSandbox])
+  @@index([tenantId])
+  @@index([externalUserId])
+}
+
+model Transaction {
+  id               String          @id @default(cuid())
+  tenantId         String
+  walletId         String
+  type             TransactionType
+  amount           Decimal         @db.Decimal(20, 4)
+  currency         String
+  balanceBefore    Decimal         @db.Decimal(20, 4)
+  balanceAfter     Decimal         @db.Decimal(20, 4)
+  referenceId      String?         // For reversals, references original transaction
+  idempotencyKey   String?
+  metadata         Json?
+  createdAt        DateTime        @default(now())
+
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  wallet   Wallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId])
+  @@index([walletId])
+  @@index([referenceId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  entityType String
+  entityId   String
+  action     String
+  changes    Json?
+  actorId    String?  // User or system who performed the action
+  actorType  String?  // e.g., "admin_user", "api_key", "system"
+  timestamp  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+}
+
+model Webhook {
+  id          String   @id @default(cuid())
+  tenantId    String
+  url         String
+  events      String[] // List of event types to subscribe to
+  secret      String   // HMAC secret for signing
+  isActive    Boolean  @default(true)
+  lastAttempt DateTime?
+  failureCount Int     @default(0)
+  status      String   @default("active") // active, degraded, disabled
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model WebhookDelivery {
+  id          String   @id @default(cuid())
+  webhookId   String
+  eventType   String
+  payload     Json
+  statusCode  Int?
+  response    String?
+  attemptNum  Int
+  nextAttempt DateTime?
+  deliveredAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([webhookId])
+  @@index([nextAttempt])
+}
+
+model SessionToken {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tokenHash String
+  scope     String   // e.g., "ui:read"
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tokenHash])
+}

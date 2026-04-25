@@ -1,200 +1,188 @@
-generator client {
-  provider = "prisma-client-js"
-}
+# Schema.md
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+## Database Overview
 
-enum KeyScope {
-  read_only
-  read_write
-  admin
-}
+WalletOS uses **PostgreSQL + Prisma ORM** with a multi-tenant architecture.  
+Every core table is scoped to a `tenantId` for isolation.
 
-enum AdminRole {
-  support
-  finance
-  superadmin
-}
+The schema supports:
 
-enum WalletStatus {
-  active
-  frozen
-  pending_closure
-  closed
-}
+- Multi-tenant wallets
+- Secure API key access
+- Immutable financial transactions
+- Audit logging
+- Admin management
+- Session tokens
+- Webhook delivery system
 
-enum TransactionType {
-  credit
-  debit
-  reversal
-}
+---
 
-model Tenant {
-  id           String   @id @default(cuid())
-  name         String
-  contactEmail String?
-  config       Json?    
-  
-  apiKeys      ApiKey[]
-  adminUsers   AdminUser[]
-  wallets      Wallet[]
-  transactions Transaction[]
-  auditLogs    AuditLog[]
-  webhooks     WebhookEndpoint[]
+# Core Design Principles
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
+## Multi-Tenant Isolation
 
-model ApiKey {
-  id         String   @id @default(cuid())
-  tenantId   String
-  tenant     Tenant   @relation(fields: [tenantId], references: [id])
-  
-  keyHash    String   // Stores SHA-256 hash
-  prefix     String   
-  scope      KeyScope
-  isSandbox  Boolean
-  isActive   Boolean  @default(true)
-  
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+Every important entity belongs to a tenant:
 
-  @@index([prefix, isActive])
-}
+- Wallets
+- Transactions
+- API Keys
+- Admin Users
+- Audit Logs
+- Webhooks
 
-model AdminUser {
-  id            String    @id @default(cuid())
-  tenantId      String
-  tenant        Tenant    @relation(fields: [tenantId], references: [id])
-  
-  supabaseUid   String    @unique
-  email         String
-  role          AdminRole
-  isActive      Boolean   @default(true)
+## Financial Integrity
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-}
+- Wallet balances use `Decimal(20,4)`
+- No float arithmetic
+- Reversals instead of destructive edits
+- Full before/after balances stored
 
-model Wallet {
-  id               String       @id @default(cuid())
-  tenantId         String
-  tenant           Tenant       @relation(fields: [tenantId], references: [id])
-  
-  externalUserId   String
-  label            String?
-  balance          Decimal      @db.Decimal(20, 4) @default(0.0000)
-  currency         String       @default("INR")
-  status           WalletStatus @default(active)
-  isSandbox        Boolean      @default(false)
-  metadata         Json?
-  closureScheduledAt DateTime?
+## Security
 
-  transactions     Transaction[]
-  auditLogs        AuditLog[]
-  sessionTokens    UserSessionToken[]
+- API keys stored as SHA-256 hash
+- Session tokens stored as hash
+- Role-based admin users
 
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+---
 
-  @@unique([tenantId, externalUserId, isSandbox])
-}
+# Enums
 
-model Transaction {
-  id              String          @id @default(cuid())
-  tenantId        String
-  tenant          Tenant          @relation(fields: [tenantId], references: [id])
-  
-  walletId        String
-  wallet          Wallet          @relation(fields: [walletId], references: [id])
-  
-  type            TransactionType
-  amount          Decimal         @db.Decimal(20, 4)
-  balanceBefore   Decimal         @db.Decimal(20, 4)
-  balanceAfter    Decimal         @db.Decimal(20, 4)
-  description     String
-  referenceId     String?
-  idempotencyKey  String?
-  createdBy       String          
-  isSandbox       Boolean         @default(false)
-  metadata        Json?
+## KeyScope
 
-  originalTxId    String?
-  originalTx      Transaction?    @relation("Reversals", fields: [originalTxId], references: [id])
-  reversals       Transaction[]   @relation("Reversals")
+Defines API key permission level.
 
-  createdAt       DateTime        @default(now())
+| Value | Meaning |
+|------|---------|
+| read_only | Can only fetch data |
+| read_write | Can create financial actions |
+| admin | Full tenant API access |
 
-  @@unique([tenantId, idempotencyKey])
-  @@index([walletId, createdAt])
-}
+---
 
-model AuditLog {
-  id        String   @id @default(cuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  
-  walletId  String?
-  wallet    Wallet?  @relation(fields: [walletId], references: [id])
-  
-  action    String
-  actor     String   
-  before    Json?
-  after     Json?
-  ipAddress String?
-  
-  createdAt DateTime @default(now())
+## AdminRole
 
-  // Note: Database uses table partitioning on createdAt by month.
-  @@index([walletId])
-  @@index([tenantId, createdAt])
-}
+Defines dashboard privileges.
 
-model UserSessionToken {
-  id         String   @id @default(cuid())
-  walletId   String
-  wallet     Wallet   @relation(fields: [walletId], references: [id])
-  
-  tokenHash  String   @unique
-  expiresAt  DateTime
-  
-  createdAt  DateTime @default(now())
-}
+| Value | Meaning |
+|------|---------|
+| support | Support operations |
+| finance | Financial operations |
+| superadmin | Full internal control |
 
-model WebhookEndpoint {
-  id         String            @id @default(cuid())
-  tenantId   String
-  tenant     Tenant            @relation(fields: [tenantId], references: [id])
-  
-  url        String
-  events     String[]          
-  secret     String
-  isActive   Boolean           @default(true)
-  status     String            @default("active") // active or degraded
+---
 
-  deliveries WebhookDelivery[]
-  
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-}
+## WalletStatus
 
-model WebhookDelivery {
-  id             String          @id @default(cuid())
-  endpointId     String
-  endpoint       WebhookEndpoint @relation(fields: [endpointId], references: [id])
-  
-  event          String
-  payload        Json
-  status         String          
-  attemptCount   Int             @default(0)
-  responseCode   Int?
-  
-  scheduledFor   DateTime
-  succeededAt    DateTime?
-  failedAt       DateTime?
-  createdAt      DateTime        @default(now())
-}
+| Value | Meaning |
+|------|---------|
+| active | Normal wallet |
+| frozen | Transactions blocked |
+| pending_closure | Awaiting closure |
+| closed | Permanently closed |
+
+---
+
+## TransactionType
+
+| Value | Meaning |
+|------|---------|
+| credit | Add funds |
+| debit | Remove funds |
+| reversal | Undo previous transaction |
+
+---
+
+# Tables
+
+---
+
+# Tenant
+
+Stores each client/business using WalletOS.
+
+| Field | Type |
+|------|------|
+| id | String |
+| name | String |
+| contactEmail | String? |
+| config | Json? |
+| createdAt | DateTime |
+| updatedAt | DateTime |
+
+## Relations
+
+A tenant owns:
+
+- API keys
+- Admin users
+- Wallets
+- Transactions
+- Audit logs
+- Webhooks
+
+---
+
+# ApiKey
+
+Stores tenant API credentials.
+
+| Field | Type |
+|------|------|
+| id | String |
+| tenantId | String |
+| keyHash | String |
+| prefix | String |
+| scope | KeyScope |
+| isSandbox | Boolean |
+| isActive | Boolean |
+
+## Notes
+
+- Real key is never stored
+- Only SHA-256 hash stored
+- Prefix helps identify key quickly
+
+---
+
+# AdminUser
+
+Dashboard users.
+
+| Field | Type |
+|------|------|
+| id | String |
+| tenantId | String |
+| supabaseUid | String |
+| email | String |
+| role | AdminRole |
+| isActive | Boolean |
+
+## Notes
+
+Uses Supabase authentication.
+
+---
+
+# Wallet
+
+Main user balance account.
+
+| Field | Type |
+|------|------|
+| id | String |
+| tenantId | String |
+| externalUserId | String |
+| label | String? |
+| balance | Decimal(20,4) |
+| currency | String |
+| status | WalletStatus |
+| isSandbox | Boolean |
+| metadata | Json? |
+| closureScheduledAt | DateTime? |
+
+## Constraints
+
+Unique:
+
+```text
+tenantId + externalUserId + isSandbox
