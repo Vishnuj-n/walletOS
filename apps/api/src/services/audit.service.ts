@@ -51,7 +51,7 @@ export async function createAuditLog(params: AuditLogParams): Promise<void> {
  */
 export async function withAudit<T>(
   auditParams: AuditLogParams,
-  callback: (tx: typeof prisma) => Promise<T>
+  callback: (tx: any) => Promise<T>
 ): Promise<T> {
   return await prisma.$transaction(async (tx) => {
     // Execute the state change
@@ -59,15 +59,7 @@ export async function withAudit<T>(
 
     // Create audit log within the same transaction
     await tx.auditLog.create({
-      data: {
-        tenantId: auditParams.tenantId,
-        entityType: auditParams.entityType,
-        entityId: auditParams.entityId,
-        action: auditParams.action,
-        changes: auditParams.changes,
-        actorId: auditParams.actorId,
-        actorType: auditParams.actorType,
-      },
+      data: auditParams,
     });
 
     return result;

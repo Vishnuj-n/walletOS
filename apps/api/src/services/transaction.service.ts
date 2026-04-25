@@ -385,7 +385,7 @@ export async function reverseTransaction(params: ReverseParams) {
         metadata: {
           originalTxId: originalTransaction.id,
           reason: params.reason,
-          originalDescription: originalTransaction.metadata?.description,
+          originalDescription: (originalTransaction.metadata as any)?.description,
         },
       },
     });

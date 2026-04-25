@@ -71,7 +71,7 @@ export async function idempotencyMiddleware(
         amount: existingTransaction.amount.toFixed(4),
         balance_before: existingTransaction.balanceBefore.toFixed(4),
         balance_after: existingTransaction.balanceAfter.toFixed(4),
-        description: existingTransaction.metadata?.description || '',
+        description: (existingTransaction.metadata as any)?.description || '',
         reference_id: existingTransaction.referenceId,
         idempotency_key: existingTransaction.idempotencyKey,
         metadata: existingTransaction.metadata,

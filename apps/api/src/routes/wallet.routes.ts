@@ -45,7 +45,6 @@ router.post(
       status: wallet.status,
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
-      created_at: wallet.createdAt,
     });
   }
 );
@@ -71,8 +70,6 @@ router.get(
       status: wallet.status,
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
-      created_at: wallet.createdAt,
-      updated_at: wallet.updatedAt,
     });
   }
 );
@@ -102,8 +99,6 @@ router.get(
       status: wallet.status,
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
-      created_at: wallet.createdAt,
-      updated_at: wallet.updatedAt,
     });
   }
 );
@@ -139,8 +134,6 @@ router.patch(
       status: wallet.status,
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
-      created_at: wallet.createdAt,
-      updated_at: wallet.updatedAt,
     });
   }
 );
@@ -176,8 +169,6 @@ router.post(
       status: wallet.status,
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
-      created_at: wallet.createdAt,
-      updated_at: wallet.updatedAt,
     });
   }
 );
@@ -213,8 +204,6 @@ router.post(
       status: wallet.status,
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
-      created_at: wallet.createdAt,
-      updated_at: wallet.updatedAt,
     });
   }
 );
@@ -250,8 +239,6 @@ router.post(
       status: wallet.status,
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
-      created_at: wallet.createdAt,
-      updated_at: wallet.updatedAt,
     });
   }
 );
