@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "skills": {
+    "check": {
+      "source": "tw93/Waza",
+      "sourceType": "github",
+      "computedHash": "75a22740d8e1e7b68ad1b57a1185cec4f923f6bff19d34e4a3d87fe7c9bb961f"
+    },
+    "design": {
+      "source": "tw93/Waza",
+      "sourceType": "github",
+      "computedHash": "3d7f914e6fed9a512ef81c9387627c64652092370a2b515e9ffedeed7f5c9f61"
+    },
+    "health": {
+      "source": "tw93/Waza",
+      "sourceType": "github",
+      "computedHash": "dac9c4b33dbc6668bf31c0423cc73a001c29d522cff08327950ce0ad11f92587"
+    },
+    "hunt": {
+      "source": "tw93/Waza",
+      "sourceType": "github",
+      "computedHash": "72ec5859b0279fb8ad4adcca36ffbafb04b3c67642fb3aabd80c5a23e37ed141"
+    },
+    "read": {
+      "source": "tw93/Waza",
+      "sourceType": "github",
+      "computedHash": "ef24f10a7149348c172419cf9a0e073be48ab7fb8faf7aaed4391cea22e9ffb0"
+    },
+    "think": {
+      "source": "tw93/Waza",
+      "sourceType": "github",
+      "computedHash": "82c717003daa55025146ab24140bca5096ffc4bf67de333f53db1e92d5da9f0f"
+    },
+    "write": {
+      "source": "tw93/Waza",
+      "sourceType": "github",
+      "computedHash": "abebedec7146c8498c2dbadc3d5123f5da4bd1eded6de065910f2ffb8fe7a5c7"
+    }
+  }
+}

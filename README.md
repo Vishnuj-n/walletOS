@@ -1,96 +1,198 @@
 # WalletOS
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+An API-first wallet management service. Integrate it into any project to give users a balance, transaction history, and audit trail — without writing balance logic.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+---
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+## What's in the repo
 
-## Run tasks
-
-To run tasks with Nx use:
-
-```sh
-npx nx <target> <project-name>
+```
+walletOS/
+├── apps/
+│   ├── api/      Express + Prisma. All REST endpoints and business logic.
+│   ├── web/      Next.js. User-facing wallet UI.
+│   └── admin/    Next.js. Admin dashboard for support and operations teams.
+└── docs/
+    ├── Requirements.md
+    ├── APP FLOW.md
+    ├── Architecture.md
+    ├── Data API.md
+    ├── Plan Scope.md
+    └── Schema.md
 ```
 
-For example:
+---
 
-```sh
-npx nx build myproject
+## Prerequisites
+
+- Node.js 20+
+- npm 10+
+- A Supabase project (handles Postgres and Auth)
+
+---
+
+## Local setup
+
+**1. Clone and install**
+
+```bash
+git clone <repo>
+cd walletOS
+npm install
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+**2. Set up environment variables**
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Add new projects
-
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
-
-To install a new plugin you can use the `nx add` command. Here's an example of adding the React plugin:
-```sh
-npx nx add @nx/react
+```bash
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env.local
+cp apps/admin/.env.example apps/admin/.env.local
 ```
 
-Use the plugin's generator to create new projects. For example, to create a new React app or library:
+Fill in `apps/api/.env` with your Supabase credentials:
 
-```sh
-# Generate an app
-npx nx g @nx/react:app demo
-
-# Generate a library
-npx nx g @nx/react:lib some-lib
+```
+DATABASE_URL=postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres
+SUPABASE_URL=https://[ref].supabase.co
+SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_JWT_SECRET=...
+USER_SESSION_SECRET=any-random-string-min-32-chars
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
 ```
 
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
+**3. Run the database migration**
 
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Set up CI!
-
-### Step 1
-
-To connect to Nx Cloud, run the following command:
-
-```sh
-npx nx connect
+```bash
+cd apps/api
+npx prisma migrate dev --name init
 ```
 
-Connecting to Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
+After the first migration runs, revoke delete/update on the audit log table. In the Supabase SQL editor:
 
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-### Step 2
-
-Use the following command to configure a CI workflow for your workspace:
-
-```sh
-npx nx g ci-workflow
+```sql
+REVOKE UPDATE, DELETE ON audit_logs FROM postgres;
 ```
 
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+Replace `postgres` with your actual app DB role if different.
 
-## Install Nx Console
+**4. Start all three apps**
 
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
+Open three terminals from the repo root:
 
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+```bash
+# Terminal 1 — API
+npx nx run @walletOS/api:serve
 
-## Useful links
+# Terminal 2 — User UI
+npx nx run web:serve
 
-Learn more:
+# Terminal 3 — Admin dashboard
+npx nx run admin:serve
+```
 
-- [Learn more about this workspace setup](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+| App | URL |
+|---|---|
+| API | http://localhost:3333 |
+| User UI | http://localhost:3000 |
+| Admin dashboard | http://localhost:3001 |
 
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+Check the API is up: `GET http://localhost:3333/api/health`
+
+---
+
+## Creating a tenant and first API key
+
+The admin dashboard is the UI for this. Alternatively, hit the API directly as a superadmin:
+
+```bash
+curl -X POST http://localhost:3333/api/tenants \
+  -H "Authorization: Bearer <supabase_admin_jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "My Project" }'
+```
+
+Response includes `live_key` and `test_key`. Copy them immediately — they are not shown again.
+
+---
+
+## Making your first API call
+
+```bash
+# Create a wallet
+curl -X POST http://localhost:3333/api/wallets \
+  -H "Authorization: Bearer wlt_live_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "external_user_id": "user_123",
+    "label": "Cashback Wallet"
+  }'
+
+# Credit the wallet
+curl -X POST http://localhost:3333/api/transactions/credit \
+  -H "Authorization: Bearer wlt_live_xxx" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: first_credit_user_123" \
+  -d '{
+    "wallet_id": "clxyz...",
+    "amount": "250.00",
+    "description": "Welcome bonus"
+  }'
+```
+
+Use `wlt_test_xxx` to work in the sandbox. Sandbox data never mixes with live data.
+
+---
+
+## Key concepts
+
+**Sandbox** — every tenant gets a test key (`wlt_test_xxx`) that operates in a completely separate data namespace. Use it for development and staging. Switch to `wlt_live_xxx` for production.
+
+**Idempotency** — all write endpoints require an `Idempotency-Key` header. If your request fails mid-flight, retry with the same key — the operation won't execute twice. Keys are unique for 24 hours.
+
+**Immutable transactions** — transaction records are never modified or deleted. Corrections go through reversals: a new transaction of the opposite type linked to the original.
+
+**Audit log** — every wallet and transaction change writes an audit entry automatically. The database user the API connects with cannot delete or update audit records.
+
+**Session tokens** — the live API key never reaches the browser. Your backend calls `POST /wallets/session-token` server-to-server and sends the resulting short-lived token (1 hour, scoped to one wallet) to your frontend.
+
+---
+
+## Useful commands
+
+```bash
+# View all Nx project names
+npx nx show projects
+
+# Dependency graph
+npx nx graph
+
+# Run linter
+npx nx run @walletOS/api:lint
+npx nx run web:lint
+npx nx run admin:lint
+
+# Build for production
+npx nx run @walletOS/api:build
+npx nx run web:build
+npx nx run admin:build
+
+# Prisma studio (browse DB in browser)
+cd apps/api && npx prisma studio
+
+# Generate Prisma client after schema changes
+cd apps/api && npx prisma generate
+
+# Run a new migration
+cd apps/api && npx prisma migrate dev --name <migration-name>
+```
+
+---
+
+## Docs
+
+- [Requirements](./docs/Requirements.md) — full feature list with P0/P1/P2 tags
+- [App Flow](./docs/APP%20FLOW.md) — request flows for each actor
+- [Architecture](./docs/Architecture.md) — database, auth, middleware, deployment decisions
+- [Data API](./docs/Data%20API.md) — endpoint reference with request/response shapes
+- [Plan Scope](./docs/Plan%20Scope.md) — build order and open questions
+- [Schema](./docs/Schema.md) — Prisma schema reference
