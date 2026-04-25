@@ -10,6 +10,7 @@ import {
 } from '../services/wallet.service';
 import { apiKeyAuthMiddleware, AuthenticatedRequest } from '../middleware/auth';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 
 const router = Router();
 
@@ -20,7 +21,7 @@ const router = Router();
 router.post(
   '/wallets',
   apiKeyAuthMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { external_user_id, currency, label, metadata } = req.body;
 
     if (!external_user_id || !currency) {
@@ -46,7 +47,7 @@ router.post(
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
     });
-  }
+  })
 );
 
 /**
@@ -56,7 +57,7 @@ router.post(
 router.get(
   '/wallets/:walletId',
   apiKeyAuthMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { walletId } = req.params;
 
     const wallet = await getWalletById(walletId, req.tenantId!, req.isSandbox || false);
@@ -71,7 +72,7 @@ router.get(
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
     });
-  }
+  })
 );
 
 /**
@@ -81,7 +82,7 @@ router.get(
 router.get(
   '/wallets/user/:externalUserId',
   apiKeyAuthMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { externalUserId } = req.params;
 
     const wallet = await getWalletByExternalUserId(
@@ -100,7 +101,7 @@ router.get(
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
     });
-  }
+  })
 );
 
 /**
@@ -110,7 +111,7 @@ router.get(
 router.patch(
   '/wallets/:walletId',
   apiKeyAuthMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { walletId } = req.params;
     const { label, metadata } = req.body;
 
@@ -135,7 +136,7 @@ router.patch(
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
     });
-  }
+  })
 );
 
 /**
@@ -145,7 +146,7 @@ router.patch(
 router.post(
   '/wallets/:walletId/freeze',
   apiKeyAuthMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { walletId } = req.params;
     const { reason } = req.body;
 
@@ -170,7 +171,7 @@ router.post(
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
     });
-  }
+  })
 );
 
 /**
@@ -180,7 +181,7 @@ router.post(
 router.post(
   '/wallets/:walletId/unfreeze',
   apiKeyAuthMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { walletId } = req.params;
     const { reason } = req.body;
 
@@ -205,7 +206,7 @@ router.post(
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
     });
-  }
+  })
 );
 
 /**
@@ -215,7 +216,7 @@ router.post(
 router.post(
   '/wallets/:walletId/close',
   apiKeyAuthMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { walletId } = req.params;
     const { reason } = req.body;
 
@@ -240,7 +241,7 @@ router.post(
       is_sandbox: wallet.isSandbox,
       metadata: wallet.metadata,
     });
-  }
+  })
 );
 
 export default router;

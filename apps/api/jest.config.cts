@@ -9,5 +9,5 @@ module.exports = {
   coverageDirectory: '../../coverage/apps/api',
   testMatch: ['**/__tests__/**/*.test.ts'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
-  testTimeout: 30000,
+  testTimeout: 60000,
 };

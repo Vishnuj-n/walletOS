@@ -10,6 +10,7 @@ import {
 import { apiKeyAuthMiddleware, AuthenticatedRequest } from '../middleware/auth';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 
 const router = Router();
 
@@ -21,7 +22,7 @@ router.post(
   '/transactions/credit',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { wallet_id, amount, description, reference_id, metadata } = req.body;
     const idempotencyKey = (req as any).idempotencyKey;
 
@@ -60,7 +61,7 @@ router.post(
       metadata: transaction.metadata,
       created_at: transaction.createdAt,
     });
-  }
+  })
 );
 
 /**
@@ -71,7 +72,7 @@ router.post(
   '/transactions/debit',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { wallet_id, amount, description, reference_id, metadata } = req.body;
     const idempotencyKey = (req as any).idempotencyKey;
 
@@ -110,7 +111,7 @@ router.post(
       metadata: transaction.metadata,
       created_at: transaction.createdAt,
     });
-  }
+  })
 );
 
 /**
@@ -121,7 +122,7 @@ router.post(
   '/transactions/transfer',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { from_wallet_id, to_wallet_id, amount, description, reference_id, metadata } = req.body;
     const idempotencyKey = (req as any).idempotencyKey;
 
@@ -182,7 +183,7 @@ router.post(
         created_at: result.creditTransaction.createdAt,
       },
     });
-  }
+  })
 );
 
 /**
@@ -193,7 +194,7 @@ router.post(
   '/transactions/:txId/reverse',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { txId } = req.params;
     const { reason } = req.body;
     const idempotencyKey = (req as any).idempotencyKey;
@@ -221,7 +222,7 @@ router.post(
       description: `Reversal of: ${(transaction.metadata as any)?.originalDescription}`,
       created_at: transaction.createdAt,
     });
-  }
+  })
 );
 
 /**
@@ -231,7 +232,7 @@ router.post(
 router.get(
   '/transactions/:txId',
   apiKeyAuthMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { txId } = req.params;
 
     const transaction = await getTransactionById(txId, req.tenantId!);
@@ -249,7 +250,7 @@ router.get(
       metadata: transaction.metadata,
       created_at: transaction.createdAt,
     });
-  }
+  })
 );
 
 /**
@@ -259,7 +260,7 @@ router.get(
 router.get(
   '/transactions',
   apiKeyAuthMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const {
       wallet_id,
       type,
@@ -302,7 +303,7 @@ router.get(
       next_cursor: result.nextCursor,
       total: result.total,
     });
-  }
+  })
 );
 
 export default router;

@@ -42,14 +42,13 @@ describe('Wallet Tests', () => {
     });
 
     it('should reject duplicate wallet creation', async () => {
-      await createTestSetup('user_duplicate');
-      const { tenant, apiKey } = await createTestSetup('user_duplicate');
+      const { tenant, apiKey } = await createTestSetup();
 
       const firstResponse = await request(app)
         .post('/api/v1/wallets')
         .set('x-api-key', apiKey.plainKey)
         .send({
-          external_user_id: 'user_duplicate',
+          external_user_id: 'user_duplicate_test',
           currency: 'INR',
         });
 
@@ -59,7 +58,7 @@ describe('Wallet Tests', () => {
         .post('/api/v1/wallets')
         .set('x-api-key', apiKey.plainKey)
         .send({
-          external_user_id: 'user_duplicate',
+          external_user_id: 'user_duplicate_test',
           currency: 'INR',
         });
 
