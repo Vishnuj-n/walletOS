@@ -46,3 +46,7 @@ Thumbs.db
 #AI
 .agents/
 .windsurf/
+
+# Next.js
+.next
+out
