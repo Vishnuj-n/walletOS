@@ -183,6 +183,7 @@ describe('Idempotency Tests', () => {
       const wallet2 = await request(app)
         .post('/api/v1/wallets')
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', Date.now().toString() + Math.random())
         .send({
           external_user_id: 'user_transfer_2',
           currency: 'INR',

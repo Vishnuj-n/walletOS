@@ -235,13 +235,14 @@ describe('Debit Tests', () => {
       await request(app)
         .post(`/api/v1/wallets/${wallet.id}/freeze`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', Date.now().toString() + Math.random())
         .send({ reason: 'Test freeze' });
 
       // Try to debit
       const response = await request(app)
         .post('/api/v1/transactions/debit')
         .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', 'test_debit_8')
+        .set('Idempotency-Key', Date.now().toString() + Math.random())
         .send({
           wallet_id: wallet.id,
           amount: 100,
@@ -283,13 +284,14 @@ describe('Debit Tests', () => {
       await request(app)
         .post(`/api/v1/wallets/${wallet.id}/close`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', Date.now().toString() + Math.random())
         .send({ reason: 'Test close' });
 
       // Try to debit
       const response = await request(app)
         .post('/api/v1/transactions/debit')
         .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', 'test_debit_9')
+        .set('Idempotency-Key', Date.now().toString() + Math.random())
         .send({
           wallet_id: wallet.id,
           amount: 100,

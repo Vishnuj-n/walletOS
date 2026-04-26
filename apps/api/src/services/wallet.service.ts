@@ -72,7 +72,7 @@ export async function createWallet(params: CreateWalletParams) {
     });
 
     return wallet;
-  });
+  }, { timeout: 20000 });
 }
 
 /**
@@ -165,7 +165,7 @@ export async function updateWallet(
     });
 
     return updatedWallet;
-  });
+  }, { timeout: 20000 });
 }
 
 /**
@@ -218,7 +218,7 @@ export async function freezeWallet(
     });
 
     return updatedWallet;
-  });
+  }, { timeout: 20000 });
 }
 
 /**
@@ -267,7 +267,7 @@ export async function unfreezeWallet(
     });
 
     return updatedWallet;
-  });
+  }, { timeout: 20000 });
 }
 
 /**
@@ -326,7 +326,7 @@ export async function closeWallet(
     });
 
     return updatedWallet;
-  });
+  }, { timeout: 20000 });
 }
 
 /**

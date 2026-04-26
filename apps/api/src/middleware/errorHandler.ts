@@ -48,7 +48,10 @@ export function errorHandlerMiddleware(
   const requestId = req.id || 'unknown';
 
   if (err instanceof AppError) {
-    console.error(`[${requestId}] ${err.statusCode} [${err.code}]: ${err.message}`);
+    // Only log errors to the console if we are NOT running tests
+    if (process.env.NODE_ENV !== 'test') {
+      console.error(`[${requestId}] ${err.statusCode} [${err.code}]: ${err.message}`);
+    }
     res.status(err.statusCode).json({
       error: {
         code: err.code,
@@ -59,7 +62,10 @@ export function errorHandlerMiddleware(
     return;
   }
 
-  console.error(`[${requestId}] Unexpected error:`, err);
+  // Only log errors to the console if we are NOT running tests
+  if (process.env.NODE_ENV !== 'test') {
+    console.error(`[${requestId}] Unexpected error:`, err);
+  }
   res.status(500).json({
     error: {
       code: ErrorCode.INTERNAL_ERROR,

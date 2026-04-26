@@ -24,6 +24,7 @@ describe('Wallet Tests', () => {
       const response = await request(app)
         .post('/api/v1/wallets')
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_create_success_test_1')
         .send({
           external_user_id: 'user_123',
           currency: 'INR',
@@ -47,6 +48,7 @@ describe('Wallet Tests', () => {
       const firstResponse = await request(app)
         .post('/api/v1/wallets')
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_duplicate_first_1')
         .send({
           external_user_id: 'user_duplicate_test',
           currency: 'INR',
@@ -57,6 +59,7 @@ describe('Wallet Tests', () => {
       const secondResponse = await request(app)
         .post('/api/v1/wallets')
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_duplicate_second_1')
         .send({
           external_user_id: 'user_duplicate_test',
           currency: 'INR',
@@ -75,6 +78,7 @@ describe('Wallet Tests', () => {
       const response = await request(app)
         .post('/api/v1/wallets')
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_validation_test_1')
         .send({
           external_user_id: 'user_123',
           // missing currency
@@ -157,6 +161,7 @@ describe('Wallet Tests', () => {
       const response = await request(app)
         .patch(`/api/v1/wallets/${wallet.id}`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_update_label_1')
         .send({
           label: 'Updated Label',
           metadata: { key: 'value' },
@@ -176,6 +181,7 @@ describe('Wallet Tests', () => {
       const response = await request(app)
         .patch(`/api/v1/wallets/${wallet.id}`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_update_validation_1')
         .send({});
 
       expect(response.status).toBe(400);
@@ -193,6 +199,7 @@ describe('Wallet Tests', () => {
       const response = await request(app)
         .post(`/api/v1/wallets/${wallet.id}/freeze`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_freeze_success_1')
         .send({
           reason: 'Test freeze',
         });
@@ -209,6 +216,7 @@ describe('Wallet Tests', () => {
       const response = await request(app)
         .post(`/api/v1/wallets/${wallet.id}/freeze`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_freeze_validation_1')
         .send({});
 
       expect(response.status).toBe(400);
@@ -227,12 +235,14 @@ describe('Wallet Tests', () => {
       await request(app)
         .post(`/api/v1/wallets/${wallet.id}/freeze`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_freeze_setup_1')
         .send({ reason: 'Test freeze' });
 
       // Then unfreeze it
       const response = await request(app)
         .post(`/api/v1/wallets/${wallet.id}/unfreeze`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_unfreeze_success_1')
         .send({
           reason: 'Test unfreeze',
         });
@@ -251,6 +261,7 @@ describe('Wallet Tests', () => {
       const response = await request(app)
         .post(`/api/v1/wallets/${wallet.id}/close`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_close_zero_balance_1')
         .send({
           reason: 'Test close',
         });
@@ -279,6 +290,7 @@ describe('Wallet Tests', () => {
       const response = await request(app)
         .post(`/api/v1/wallets/${wallet.id}/close`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'wallet_close_nonzero_balance_1')
         .send({
           reason: 'Test close',
         });

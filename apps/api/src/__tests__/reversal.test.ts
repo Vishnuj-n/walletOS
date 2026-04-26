@@ -265,6 +265,7 @@ describe('Reversal Tests', () => {
       await request(app)
         .post(`/api/v1/wallets/${wallet.id}/freeze`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'test_reversal_freeze_setup')
         .send({ reason: 'Test freeze' });
 
       // Try to reverse the credit

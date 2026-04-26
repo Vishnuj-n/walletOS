@@ -242,6 +242,7 @@ describe('Concurrency Tests', () => {
         request(app)
           .patch(`/api/v1/wallets/${wallet.id}`)
           .set('x-api-key', apiKey.plainKey)
+          .set('Idempotency-Key', Date.now().toString() + Math.random())
           .send({
             label: `Updated Label ${i}`,
             metadata: { iteration: i },

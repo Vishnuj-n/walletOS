@@ -128,31 +128,33 @@ export async function idempotencyMiddleware(
       
       // Persist response to transaction metadata when response finishes
       res.on('finish', async () => {
-        const cachedResponse = req.cachedResponse;
-        if (cachedResponse && req.idempotencyKey) {
+        // ONLY cache successful responses (2xx)
+        if (res.statusCode >= 200 && res.statusCode < 300 && req.cachedResponse && req.idempotencyKey) {
           try {
-            // Find the transaction created with this idempotency key
-            const transaction = await prisma.transaction.findFirst({
+            const txToUpdate = await prisma.transaction.findFirst({
               where: {
                 tenantId,
-                idempotencyKey: req.idempotencyKey,
-              },
+                OR: [
+                  { idempotencyKey: req.idempotencyKey },
+                  { metadata: { path: ['rawIdempotencyKey'], equals: req.idempotencyKey } }
+                ]
+              }
             });
             
-            if (transaction) {
+            if (txToUpdate) {
               await prisma.transaction.update({
-                where: { id: transaction.id },
+                where: { id: txToUpdate.id },
                 data: {
                   metadata: {
-                    ...(transaction.metadata as any || {}),
-                    response: cachedResponse,
+                    ...(txToUpdate.metadata as any || {}),
+                    response: req.cachedResponse,
                     requestFingerprint: req.requestFingerprint,
                   },
                 },
               });
             }
           } catch (error) {
-            console.error(`[${req.id}] Error persisting idempotency response:`, error);
+            // Fail silently. Caching failure shouldn't break the app.
           }
         }
       });
@@ -165,7 +167,10 @@ export async function idempotencyMiddleware(
     if (error instanceof AppError) {
       return next(error);
     }
-    console.error(`[${req.id}] Error checking idempotency:`, error);
+    // Only log errors to the console if we are NOT running tests
+    if (process.env.NODE_ENV !== 'test') {
+      console.error(`[${req.id}] Error checking idempotency:`, error);
+    }
     return next(new AppError(500, ErrorCode.INTERNAL_ERROR, 'Error checking idempotency'));
   }
 }

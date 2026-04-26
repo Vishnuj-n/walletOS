@@ -13,6 +13,7 @@
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
+    "isolatedModules": true,
     "paths": {}
   },
   "exclude": ["node_modules", "tmp"]

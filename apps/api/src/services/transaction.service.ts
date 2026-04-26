@@ -117,7 +117,7 @@ export async function creditWallet(params: CreditParams) {
     });
 
     return transaction;
-  });
+  }, { timeout: 20000, maxWait: 20000 });
 }
 
 /**
@@ -187,7 +187,7 @@ export async function debitWallet(params: DebitParams) {
     });
 
     return transaction;
-  });
+  }, { timeout: 20000, maxWait: 20000 });
 }
 
 /**
@@ -327,7 +327,7 @@ export async function transferBetweenWallets(params: TransferParams) {
       debitTransaction,
       creditTransaction,
     };
-  });
+  }, { timeout: 20000, maxWait: 20000 });
 }
 
 /**
@@ -445,7 +445,7 @@ export async function reverseTransaction(params: ReverseParams) {
     });
 
     return reversalTransaction;
-  });
+  }, { timeout: 20000, maxWait: 20000 });
 }
 
 /**
@@ -484,8 +484,7 @@ export async function listTransactions(params: {
   limit?: number;
   after?: string;
 }) {
-  const limit = Math.min(params.limit ?? 20, 1000);
-  if (limit < 1) limit = 1;
+  let finalLimit = Math.max(1, Math.min(params.limit ?? 20, 1000));
   const where: any = {
     tenantId: params.tenantId,
   };
@@ -526,13 +525,13 @@ export async function listTransactions(params: {
   const transactions = await prisma.transaction.findMany({
     where,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    take: limit + 1, // Fetch one extra to determine if there are more results
+    take: finalLimit + 1, // Fetch one extra to determine if there are more results
     include: {
       wallet: true,
     },
   });
 
-  const hasMore = transactions.length > limit;
+  const hasMore = transactions.length > finalLimit;
   const data = hasMore ? transactions.slice(0, -1) : transactions;
   const nextCursor = hasMore ? data[data.length - 1].id : null;
 

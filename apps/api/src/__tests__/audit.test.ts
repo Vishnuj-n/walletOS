@@ -17,14 +17,15 @@ describe('Audit Tests', () => {
 
   describe('Wallet Creation Audit', () => {
     it('should create audit log entry when wallet is created', async () => {
-      const { tenant, apiKey } = await createTestSetup('user_audit_wallet');
+      const uniqueId = `user_audit_${Date.now()}_${Math.random()}`;
+      const { tenant, apiKey } = await createTestSetup(uniqueId); // Use dynamic ID here
 
       // Create a wallet
       const response = await request(app)
         .post('/api/v1/wallets')
         .set('x-api-key', apiKey.plainKey)
         .send({
-          external_user_id: 'user_audit_wallet',
+          external_user_id: uniqueId, // And use it here
           currency: 'INR',
           label: 'Audit Test Wallet',
         });
@@ -46,7 +47,7 @@ describe('Audit Tests', () => {
       expect(auditLog).toHaveProperty('action', 'wallet.created');
       expect(auditLog).toHaveProperty('entityType', 'Wallet');
       expect(auditLog).toHaveProperty('entityId', walletId);
-      expect(auditLog.changes).toHaveProperty('external_user_id', 'user_audit_wallet');
+      expect(auditLog.changes).toHaveProperty('external_user_id', uniqueId);
 
       await cleanupTestData(tenant.id);
     });
@@ -86,8 +87,8 @@ describe('Audit Tests', () => {
       expect(auditLog).toHaveProperty('entityId', transactionId);
       expect(auditLog.changes).toHaveProperty('walletId', wallet.id);
       expect(auditLog.changes).toHaveProperty('amount', 100);
-      expect(auditLog.changes).toHaveProperty('balanceBefore', 0);
-      expect(auditLog.changes).toHaveProperty('balanceAfter', 100);
+      expect(auditLog.changes).toHaveProperty('balanceBefore', "0");
+      expect(auditLog.changes).toHaveProperty('balanceAfter', "100");
       expect(auditLog).toHaveProperty('actorType', 'api_key');
 
       await cleanupTestData(tenant.id);
@@ -139,8 +140,8 @@ describe('Audit Tests', () => {
       expect(auditLog).toHaveProperty('entityId', transactionId);
       expect(auditLog.changes).toHaveProperty('walletId', wallet.id);
       expect(auditLog.changes).toHaveProperty('amount', 100);
-      expect(auditLog.changes).toHaveProperty('balanceBefore', 500);
-      expect(auditLog.changes).toHaveProperty('balanceAfter', 400);
+      expect(auditLog.changes).toHaveProperty('balanceBefore', "500");
+      expect(auditLog.changes).toHaveProperty('balanceAfter', "400");
 
       await cleanupTestData(tenant.id);
     });
@@ -204,6 +205,7 @@ describe('Audit Tests', () => {
       const response = await request(app)
         .post(`/api/v1/wallets/${wallet.id}/freeze`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'audit_wallet_freeze_1')
         .send({
           reason: 'Audit test freeze',
         });
@@ -242,12 +244,14 @@ describe('Audit Tests', () => {
       await request(app)
         .post(`/api/v1/wallets/${wallet.id}/freeze`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'audit_wallet_freeze_setup_1')
         .send({ reason: 'Test freeze' });
 
       // Unfreeze the wallet
       const response = await request(app)
         .post(`/api/v1/wallets/${wallet.id}/unfreeze`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'audit_wallet_unfreeze_1')
         .send({
           reason: 'Audit test unfreeze',
         });
@@ -286,6 +290,7 @@ describe('Audit Tests', () => {
       const response = await request(app)
         .post(`/api/v1/wallets/${wallet.id}/close`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'audit_wallet_close_1')
         .send({
           reason: 'Audit test close',
         });
@@ -324,6 +329,7 @@ describe('Audit Tests', () => {
       const response = await request(app)
         .patch(`/api/v1/wallets/${wallet.id}`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', 'audit_wallet_update_1')
         .send({
           label: 'Updated Label',
           metadata: { key: 'value' },

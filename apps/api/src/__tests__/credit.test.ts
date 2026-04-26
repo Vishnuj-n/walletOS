@@ -149,13 +149,14 @@ describe('Credit Tests', () => {
       await request(app)
         .post(`/api/v1/wallets/${wallet.id}/freeze`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', Date.now().toString() + Math.random())
         .send({ reason: 'Test freeze' });
 
       // Try to credit
       const response = await request(app)
         .post('/api/v1/transactions/credit')
         .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', 'test_credit_6')
+        .set('Idempotency-Key', `frozen_test_${Date.now()}`)
         .send({
           wallet_id: wallet.id,
           amount: 100,
@@ -176,13 +177,14 @@ describe('Credit Tests', () => {
       await request(app)
         .post(`/api/v1/wallets/${wallet.id}/close`)
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', Date.now().toString() + Math.random())
         .send({ reason: 'Test close' });
 
       // Try to credit
       const response = await request(app)
         .post('/api/v1/transactions/credit')
         .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', 'test_credit_7')
+        .set('Idempotency-Key', Date.now().toString() + Math.random())
         .send({
           wallet_id: wallet.id,
           amount: 100,
