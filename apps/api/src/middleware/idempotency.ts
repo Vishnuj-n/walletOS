@@ -45,12 +45,12 @@ export async function idempotencyMiddleware(
 
   // Idempotency key is required for write operations
   if (!idempotencyKey) {
-    throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key header is required for write operations');
+    return next(new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key header is required for write operations'));
   }
 
   // Validate idempotency key format (max 255 characters)
   if (idempotencyKey.length > 255) {
-    throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key must be at most 255 characters');
+    return next(new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key must be at most 255 characters'));
   }
 
   try {
@@ -58,10 +58,14 @@ export async function idempotencyMiddleware(
     const requestFingerprint = computeRequestFingerprint(req);
 
     // Check for existing transaction with this idempotency key
+    // First try direct match, then check metadata.rawIdempotencyKey for transfers
     const existingTransaction = await prisma.transaction.findFirst({
       where: {
         tenantId,
-        idempotencyKey,
+        OR: [
+          { idempotencyKey },
+          { metadata: { path: ['rawIdempotencyKey'], equals: idempotencyKey } }
+        ],
         createdAt: {
           gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
         },
@@ -73,14 +77,14 @@ export async function idempotencyMiddleware(
 
     // Ensure sandbox isolation
     if (existingTransaction && existingTransaction.wallet.isSandbox !== req.isSandbox) {
-      throw new AppError(403, ErrorCode.TENANT_ISOLATION, 'Idempotency key belongs to different environment');
+      return next(new AppError(403, ErrorCode.TENANT_ISOLATION, 'Idempotency key belongs to different environment'));
     }
 
     if (existingTransaction) {
       // Check if request fingerprint matches
       const storedFingerprint = (existingTransaction.metadata as any)?.requestFingerprint;
       if (storedFingerprint && storedFingerprint !== requestFingerprint) {
-        throw new AppError(409, ErrorCode.IDEMPOTENCY_CONFLICT, 'Idempotency key used with different request parameters');
+        return next(new AppError(409, ErrorCode.IDEMPOTENCY_CONFLICT, 'Idempotency key used with different request parameters'));
       }
 
       // Return cached response with custom header
@@ -110,26 +114,58 @@ export async function idempotencyMiddleware(
     }
 
     // Store idempotency key and fingerprint on request for later use
-    (req as any).idempotencyKey = idempotencyKey;
-    (req as any).requestFingerprint = requestFingerprint;
+    req.idempotencyKey = idempotencyKey;
+    req.requestFingerprint = requestFingerprint;
 
     // Override res.json to capture response for caching
     const originalJson = res.json;
     res.json = function(body: any) {
       // Store response in metadata for future idempotency checks
-      (req as any).cachedResponse = {
+      req.cachedResponse = {
         status: res.statusCode,
         body: body
       };
+      
+      // Persist response to transaction metadata when response finishes
+      res.on('finish', async () => {
+        const cachedResponse = req.cachedResponse;
+        if (cachedResponse && req.idempotencyKey) {
+          try {
+            // Find the transaction created with this idempotency key
+            const transaction = await prisma.transaction.findFirst({
+              where: {
+                tenantId,
+                idempotencyKey: req.idempotencyKey,
+              },
+            });
+            
+            if (transaction) {
+              await prisma.transaction.update({
+                where: { id: transaction.id },
+                data: {
+                  metadata: {
+                    ...(transaction.metadata as any || {}),
+                    response: cachedResponse,
+                    requestFingerprint: req.requestFingerprint,
+                  },
+                },
+              });
+            }
+          } catch (error) {
+            console.error(`[${req.id}] Error persisting idempotency response:`, error);
+          }
+        }
+      });
+      
       return originalJson.call(this, body);
     };
 
     next();
   } catch (error) {
     if (error instanceof AppError) {
-      throw error;
+      return next(error);
     }
     console.error(`[${req.id}] Error checking idempotency:`, error);
-    throw new AppError(500, ErrorCode.INTERNAL_ERROR, 'Error checking idempotency');
+    return next(new AppError(500, ErrorCode.INTERNAL_ERROR, 'Error checking idempotency'));
   }
 }

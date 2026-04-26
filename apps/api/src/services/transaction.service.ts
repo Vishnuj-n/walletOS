@@ -267,6 +267,7 @@ export async function transferBetweenWallets(params: TransferParams) {
           description: params.description,
           transferType: 'source',
           createdBy: params.createdBy,
+          rawIdempotencyKey: params.idempotencyKey, // Store raw key for idempotency middleware
         },
       },
     });
@@ -288,6 +289,7 @@ export async function transferBetweenWallets(params: TransferParams) {
           description: params.description,
           transferType: 'destination',
           createdBy: params.createdBy,
+          rawIdempotencyKey: params.idempotencyKey, // Store raw key for idempotency middleware
         },
       },
     });
@@ -373,20 +375,18 @@ export async function reverseTransaction(params: ReverseParams) {
       throw new AppError(409, ErrorCode.ALREADY_REVERSED, 'Transaction already reversed');
     }
 
-    const wallet = originalTransaction.wallet;
+    // Lock the wallet row with proper tenant and sandbox validation
+    const lockedWallet = await lockWallet(tx, originalTransaction.walletId, params.tenantId, params.isSandbox);
 
-    // Lock the wallet row
-    await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${wallet.id} FOR UPDATE`;
-
-    // Validate wallet status
-    validateWalletForTransaction(wallet);
+    // Validate wallet status using fresh locked wallet
+    validateWalletForTransaction(lockedWallet);
 
     // Determine reversal type and amount
     const reversalType = originalTransaction.type === 'credit' ? 'debit' : 'credit';
-    const balanceBefore = wallet.balance;
+    const balanceBefore = lockedWallet.balance;
 
     // For debit reversals (adding money back), no balance check needed
-    // For credit reversals (taking money away), check sufficient balance
+    // For credit reversals (taking money away), check sufficient balance using locked wallet
     if (reversalType === 'debit') {
       if (balanceBefore.lt(originalTransaction.amount)) {
         throw new AppError(422, ErrorCode.INSUFFICIENT_BALANCE, 'Cannot reverse: wallet balance too low');
@@ -402,10 +402,10 @@ export async function reverseTransaction(params: ReverseParams) {
     const reversalTransaction = await tx.transaction.create({
       data: {
         tenantId: params.tenantId,
-        walletId: wallet.id,
+        walletId: lockedWallet.id,
         type: 'reversal',
         amount: originalTransaction.amount,
-        currency: wallet.currency,
+        currency: lockedWallet.currency,
         balanceBefore,
         balanceAfter,
         referenceId: originalTransaction.referenceId,
@@ -420,7 +420,7 @@ export async function reverseTransaction(params: ReverseParams) {
 
     // Update wallet balance
     await tx.wallet.update({
-      where: { id: wallet.id },
+      where: { id: lockedWallet.id },
       data: { balance: balanceAfter },
     });
 
@@ -433,7 +433,7 @@ export async function reverseTransaction(params: ReverseParams) {
         action: 'transaction.reversed',
         changes: {
           originalTxId: originalTransaction.id,
-          walletId: wallet.id,
+          walletId: lockedWallet.id,
           amount: originalTransaction.amount.toString(),
           reason: params.reason,
           balanceBefore: balanceBefore.toString(),
@@ -484,7 +484,8 @@ export async function listTransactions(params: {
   limit?: number;
   after?: string;
 }) {
-  const limit = Math.min(params.limit || 20, 1000);
+  const limit = Math.min(params.limit ?? 20, 1000);
+  if (limit < 1) limit = 1;
   const where: any = {
     tenantId: params.tenantId,
   };
@@ -515,16 +516,16 @@ export async function listTransactions(params: {
   }
 
   // Handle cursor-based pagination
+  const baseWhere = { ...where };
   if (params.after) {
-    where.createdAt = { 
-      ...where.createdAt,
-      lt: new Date(params.after) // Convert cursor timestamp to Date for comparison
+    where.id = {
+      lt: params.after // Use ID cursor directly
     };
   }
 
   const transactions = await prisma.transaction.findMany({
     where,
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1, // Fetch one extra to determine if there are more results
     include: {
       wallet: true,
@@ -533,10 +534,10 @@ export async function listTransactions(params: {
 
   const hasMore = transactions.length > limit;
   const data = hasMore ? transactions.slice(0, -1) : transactions;
-  const nextCursor = hasMore ? data[data.length - 1].createdAt.toISOString() : null;
+  const nextCursor = hasMore ? data[data.length - 1].id : null;
 
   // Get total count efficiently (excluding the extra record we fetched)
-  const total = await prisma.transaction.count({ where });
+  const total = await prisma.transaction.count({ where: baseWhere });
 
   return {
     data,

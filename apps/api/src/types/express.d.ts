@@ -6,6 +6,8 @@ declare global {
       apiKeyScope?: string;
       isSandbox?: boolean;
       idempotencyKey?: string;
+      requestFingerprint?: string;
+      cachedResponse?: { status: number; body: unknown };
     }
   }
 }

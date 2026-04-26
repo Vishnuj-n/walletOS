@@ -4,10 +4,17 @@
  * Utility functions for setting up test data and making API requests.
  */
 
-import { PrismaClient, KeyScope } from '@prisma/client';
+import { PrismaClient, KeyScope, Decimal } from '@prisma/client';
 import { createHash } from 'crypto';
 
 const prisma = new PrismaClient();
+
+/**
+ * Disconnect Prisma client - useful for test cleanup
+ */
+export async function disconnectPrisma(): Promise<void> {
+  await prisma.$disconnect();
+}
 
 export interface TestTenant {
   id: string;
@@ -30,7 +37,7 @@ export interface TestWallet {
   externalUserId: string;
   currency: string;
   label: string | null;
-  balance: number;
+  balance: string;
   status: string;
   isSandbox: boolean;
 }
@@ -115,7 +122,7 @@ export async function createTestWallet(
     externalUserId: wallet.externalUserId,
     currency: wallet.currency,
     label: wallet.label,
-    balance: wallet.balance.toNumber(),
+    balance: wallet.balance.toString(),
     status: wallet.status,
     isSandbox: wallet.isSandbox,
   };
@@ -139,12 +146,14 @@ export async function createTestSetup(
 }
 
 /**
- * Clean up test data
+ * Clean up test data atomically
  */
 export async function cleanupTestData(tenantId: string) {
-  await prisma.auditLog.deleteMany({ where: { tenantId } });
-  await prisma.transaction.deleteMany({ where: { tenantId } });
-  await prisma.wallet.deleteMany({ where: { tenantId } });
-  await prisma.apiKey.deleteMany({ where: { tenantId } });
-  await prisma.tenant.delete({ where: { id: tenantId } });
+  await prisma.$transaction([
+    prisma.auditLog.deleteMany({ where: { tenantId } }),
+    prisma.transaction.deleteMany({ where: { tenantId } }),
+    prisma.wallet.deleteMany({ where: { tenantId } }),
+    prisma.apiKey.deleteMany({ where: { tenantId } }),
+    prisma.tenant.delete({ where: { id: tenantId } }),
+  ]);
 }

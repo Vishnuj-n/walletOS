@@ -16,6 +16,22 @@ import { asyncHandler } from '../middleware/asyncHandler';
 const router = Router();
 
 /**
+ * Serialize wallet data for API responses
+ */
+function serializeWallet(wallet: any) {
+  return {
+    wallet_id: wallet.id,
+    external_user_id: wallet.externalUserId,
+    label: wallet.label,
+    balance: wallet.balance.toFixed(4),
+    currency: wallet.currency,
+    status: wallet.status,
+    is_sandbox: wallet.isSandbox,
+    metadata: wallet.metadata,
+  };
+}
+
+/**
  * POST /wallets
  * Create a wallet for a user
  */
@@ -25,7 +41,6 @@ router.post(
   idempotencyMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
     const { external_user_id, currency, label, metadata } = req.body;
-    const idempotencyKey = (req as any).idempotencyKey;
 
     if (!external_user_id || !currency) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'external_user_id and currency are required');
@@ -40,16 +55,7 @@ router.post(
       isSandbox: req.isSandbox || false,
     });
 
-    res.status(201).json({
-      wallet_id: wallet.id,
-      external_user_id: wallet.externalUserId,
-      label: wallet.label,
-      balance: wallet.balance.toFixed(4),
-      currency: wallet.currency,
-      status: wallet.status,
-      is_sandbox: wallet.isSandbox,
-      metadata: wallet.metadata,
-    });
+    res.status(201).json(serializeWallet(wallet));
   })
 );
 
@@ -65,16 +71,7 @@ router.get(
 
     const wallet = await getWalletById(walletId, req.tenantId!, req.isSandbox || false);
 
-    res.json({
-      wallet_id: wallet.id,
-      external_user_id: wallet.externalUserId,
-      label: wallet.label,
-      balance: wallet.balance.toFixed(4),
-      currency: wallet.currency,
-      status: wallet.status,
-      is_sandbox: wallet.isSandbox,
-      metadata: wallet.metadata,
-    });
+    res.json(serializeWallet(wallet));
   })
 );
 
@@ -94,16 +91,7 @@ router.get(
       req.isSandbox || false
     );
 
-    res.json({
-      wallet_id: wallet.id,
-      external_user_id: wallet.externalUserId,
-      label: wallet.label,
-      balance: wallet.balance.toFixed(4),
-      currency: wallet.currency,
-      status: wallet.status,
-      is_sandbox: wallet.isSandbox,
-      metadata: wallet.metadata,
-    });
+    res.json(serializeWallet(wallet));
   })
 );
 
@@ -130,16 +118,7 @@ router.patch(
       { label, metadata }
     );
 
-    res.json({
-      wallet_id: wallet.id,
-      external_user_id: wallet.externalUserId,
-      label: wallet.label,
-      balance: wallet.balance.toFixed(4),
-      currency: wallet.currency,
-      status: wallet.status,
-      is_sandbox: wallet.isSandbox,
-      metadata: wallet.metadata,
-    });
+    res.json(serializeWallet(wallet));
   })
 );
 
@@ -166,16 +145,7 @@ router.post(
       reason
     );
 
-    res.json({
-      wallet_id: wallet.id,
-      external_user_id: wallet.externalUserId,
-      label: wallet.label,
-      balance: wallet.balance.toFixed(4),
-      currency: wallet.currency,
-      status: wallet.status,
-      is_sandbox: wallet.isSandbox,
-      metadata: wallet.metadata,
-    });
+    res.json(serializeWallet(wallet));
   })
 );
 
@@ -202,16 +172,7 @@ router.post(
       reason
     );
 
-    res.json({
-      wallet_id: wallet.id,
-      external_user_id: wallet.externalUserId,
-      label: wallet.label,
-      balance: wallet.balance.toFixed(4),
-      currency: wallet.currency,
-      status: wallet.status,
-      is_sandbox: wallet.isSandbox,
-      metadata: wallet.metadata,
-    });
+    res.json(serializeWallet(wallet));
   })
 );
 
@@ -238,16 +199,7 @@ router.post(
       reason
     );
 
-    res.json({
-      wallet_id: wallet.id,
-      external_user_id: wallet.externalUserId,
-      label: wallet.label,
-      balance: wallet.balance.toFixed(4),
-      currency: wallet.currency,
-      status: wallet.status,
-      is_sandbox: wallet.isSandbox,
-      metadata: wallet.metadata,
-    });
+    res.json(serializeWallet(wallet));
   })
 );
 

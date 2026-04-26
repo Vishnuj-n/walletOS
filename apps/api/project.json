@@ -55,27 +55,29 @@
     },
     "db-push": {
       "executor": "nx:run-commands",
+      "defaultConfiguration": "development",
       "options": {
         "command": "npx prisma db push",
         "cwd": "{projectRoot}",
-        "envFile": "{workspaceRoot}/.env.test"
+        "envFile": "{workspaceRoot}/.env"
       },
       "configurations": {
-        "development": {
-          "envFile": "{workspaceRoot}/.env"
+        "test": {
+          "envFile": "{workspaceRoot}/.env.test"
         }
       }
     },
     "db-studio": {
       "executor": "nx:run-commands",
+      "defaultConfiguration": "development",
       "options": {
         "command": "npx prisma studio",
         "cwd": "{projectRoot}",
-        "envFile": "{workspaceRoot}/.env.test"
+        "envFile": "{workspaceRoot}/.env"
       },
       "configurations": {
-        "development": {
-          "envFile": "{workspaceRoot}/.env"
+        "test": {
+          "envFile": "{workspaceRoot}/.env.test"
         }
       }
     }

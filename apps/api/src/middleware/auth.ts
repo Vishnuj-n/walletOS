@@ -1,8 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { createHash } from 'crypto';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma';
 
 export async function apiKeyAuthMiddleware(
   req: Request,
