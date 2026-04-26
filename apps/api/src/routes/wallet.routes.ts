@@ -9,6 +9,7 @@ import {
   closeWallet,
 } from '../services/wallet.service';
 import { apiKeyAuthMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
 
@@ -21,8 +22,10 @@ const router = Router();
 router.post(
   '/wallets',
   apiKeyAuthMiddleware,
+  idempotencyMiddleware,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { external_user_id, currency, label, metadata } = req.body;
+    const idempotencyKey = (req as any).idempotencyKey;
 
     if (!external_user_id || !currency) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'external_user_id and currency are required');
@@ -111,6 +114,7 @@ router.get(
 router.patch(
   '/wallets/:walletId',
   apiKeyAuthMiddleware,
+  idempotencyMiddleware,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { walletId } = req.params;
     const { label, metadata } = req.body;
@@ -146,6 +150,7 @@ router.patch(
 router.post(
   '/wallets/:walletId/freeze',
   apiKeyAuthMiddleware,
+  idempotencyMiddleware,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { walletId } = req.params;
     const { reason } = req.body;
@@ -181,6 +186,7 @@ router.post(
 router.post(
   '/wallets/:walletId/unfreeze',
   apiKeyAuthMiddleware,
+  idempotencyMiddleware,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { walletId } = req.params;
     const { reason } = req.body;
@@ -216,6 +222,7 @@ router.post(
 router.post(
   '/wallets/:walletId/close',
   apiKeyAuthMiddleware,
+  idempotencyMiddleware,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { walletId } = req.params;
     const { reason } = req.body;

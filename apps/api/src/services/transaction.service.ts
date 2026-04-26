@@ -86,6 +86,7 @@ export async function creditWallet(params: CreditParams) {
         metadata: {
           ...params.metadata,
           description: params.description,
+          createdBy: params.createdBy,
         },
       },
     });
@@ -106,8 +107,8 @@ export async function creditWallet(params: CreditParams) {
         changes: {
           walletId: params.walletId,
           amount: params.amount,
-          balanceBefore: balanceBefore.toNumber(),
-          balanceAfter: balanceAfter.toNumber(),
+          balanceBefore: balanceBefore.toString(),
+          balanceAfter: balanceAfter.toString(),
           referenceId: params.referenceId,
         },
         actorId: params.createdBy,
@@ -133,7 +134,7 @@ export async function debitWallet(params: DebitParams) {
 
     // Check sufficient balance
     const balanceBefore = wallet.balance;
-    if (balanceBefore.toNumber() < params.amount) {
+    if (balanceBefore.lt(params.amount)) {
       throw new AppError(422, ErrorCode.INSUFFICIENT_BALANCE, 'Wallet balance is too low for this debit');
     }
 
@@ -155,6 +156,7 @@ export async function debitWallet(params: DebitParams) {
         metadata: {
           ...params.metadata,
           description: params.description,
+          createdBy: params.createdBy,
         },
       },
     });
@@ -175,8 +177,8 @@ export async function debitWallet(params: DebitParams) {
         changes: {
           walletId: params.walletId,
           amount: params.amount,
-          balanceBefore: balanceBefore.toNumber(),
-          balanceAfter: balanceAfter.toNumber(),
+          balanceBefore: balanceBefore.toString(),
+          balanceAfter: balanceAfter.toString(),
           referenceId: params.referenceId,
         },
         actorId: params.createdBy,
@@ -193,6 +195,11 @@ export async function debitWallet(params: DebitParams) {
  * Sorts wallet IDs lexicographically before locking to prevent deadlocks
  */
 export async function transferBetweenWallets(params: TransferParams) {
+  // Prevent self-transfers
+  if (params.fromWalletId === params.toWalletId) {
+    throw new AppError(422, ErrorCode.INVALID_OPERATION, 'Cannot transfer to the same wallet');
+  }
+
   return await prisma.$transaction(async (tx) => {
     // Sort wallet IDs lexicographically to prevent deadlocks
     const sortedWalletIds = [params.fromWalletId, params.toWalletId].sort();
@@ -223,9 +230,9 @@ export async function transferBetweenWallets(params: TransferParams) {
       throw new AppError(404, ErrorCode.NOT_FOUND, 'One or both wallets not found');
     }
 
-    // Ensure both wallets are in same tenant
-    if (fromWallet.tenantId !== toWallet.tenantId) {
-      throw new AppError(403, ErrorCode.CROSS_TENANT_TRANSFER, 'Cannot transfer between wallets in different tenants');
+    // Check currency match
+    if (fromWallet.currency !== toWallet.currency) {
+      throw new AppError(422, ErrorCode.CURRENCY_MISMATCH, 'Cannot transfer between wallets with different currencies');
     }
 
     // Validate wallet status
@@ -233,7 +240,7 @@ export async function transferBetweenWallets(params: TransferParams) {
     validateWalletForTransaction(toWallet);
 
     // Check sufficient balance in source wallet
-    if (fromWallet.balance.toNumber() < params.amount) {
+    if (fromWallet.balance.lt(params.amount)) {
       throw new AppError(422, ErrorCode.INSUFFICIENT_BALANCE, 'Source wallet balance is too low for this transfer');
     }
 
@@ -259,6 +266,7 @@ export async function transferBetweenWallets(params: TransferParams) {
           ...params.metadata,
           description: params.description,
           transferType: 'source',
+          createdBy: params.createdBy,
         },
       },
     });
@@ -279,6 +287,7 @@ export async function transferBetweenWallets(params: TransferParams) {
           ...params.metadata,
           description: params.description,
           transferType: 'destination',
+          createdBy: params.createdBy,
         },
       },
     });
@@ -345,6 +354,25 @@ export async function reverseTransaction(params: ReverseParams) {
       throw new AppError(409, ErrorCode.CANNOT_REVERSE_REVERSAL, 'Cannot reverse a reversal transaction');
     }
 
+    // Check for existing reversal
+    const existingReversal = await tx.transaction.findFirst({
+      where: {
+        tenantId: params.tenantId,
+        type: 'reversal',
+        metadata: {
+          path: ['originalTxId'],
+          equals: originalTransaction.id
+        }
+      }
+    });
+
+    if (existingReversal) {
+      if (existingReversal.idempotencyKey === params.idempotencyKey) {
+        return existingReversal;
+      }
+      throw new AppError(409, ErrorCode.ALREADY_REVERSED, 'Transaction already reversed');
+    }
+
     const wallet = originalTransaction.wallet;
 
     // Lock the wallet row
@@ -360,7 +388,7 @@ export async function reverseTransaction(params: ReverseParams) {
     // For debit reversals (adding money back), no balance check needed
     // For credit reversals (taking money away), check sufficient balance
     if (reversalType === 'debit') {
-      if (balanceBefore.toNumber() < originalTransaction.amount.toNumber()) {
+      if (balanceBefore.lt(originalTransaction.amount)) {
         throw new AppError(422, ErrorCode.INSUFFICIENT_BALANCE, 'Cannot reverse: wallet balance too low');
       }
     }
@@ -406,10 +434,10 @@ export async function reverseTransaction(params: ReverseParams) {
         changes: {
           originalTxId: originalTransaction.id,
           walletId: wallet.id,
-          amount: originalTransaction.amount.toNumber(),
+          amount: originalTransaction.amount.toString(),
           reason: params.reason,
-          balanceBefore: balanceBefore.toNumber(),
-          balanceAfter: balanceAfter.toNumber(),
+          balanceBefore: balanceBefore.toString(),
+          balanceAfter: balanceAfter.toString(),
         },
         actorId: params.createdBy,
         actorType: 'api_key',
@@ -456,7 +484,7 @@ export async function listTransactions(params: {
   limit?: number;
   after?: string;
 }) {
-  const limit = Math.min(params.limit || 20, 100);
+  const limit = Math.min(params.limit || 20, 1000);
   const where: any = {
     tenantId: params.tenantId,
   };
@@ -475,34 +503,45 @@ export async function listTransactions(params: {
     if (params.to) where.createdAt.lte = params.to;
   }
 
-  if (params.minAmount || params.maxAmount) {
+  // Use Decimal comparisons for amount filtering
+  if (params.minAmount !== undefined || params.maxAmount !== undefined) {
     where.amount = {};
-    if (params.minAmount) where.amount.gte = params.minAmount;
-    if (params.maxAmount) where.amount.lte = params.maxAmount;
+    if (params.minAmount !== undefined) where.amount.gte = params.minAmount;
+    if (params.maxAmount !== undefined) where.amount.lte = params.maxAmount;
   }
 
   if (params.referenceId) {
     where.referenceId = params.referenceId;
   }
 
+  // Handle cursor-based pagination
   if (params.after) {
-    where.id = { gt: params.after };
+    where.createdAt = { 
+      ...where.createdAt,
+      lt: new Date(params.after) // Convert cursor timestamp to Date for comparison
+    };
   }
 
   const transactions = await prisma.transaction.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    take: limit,
+    take: limit + 1, // Fetch one extra to determine if there are more results
     include: {
       wallet: true,
     },
   });
 
+  const hasMore = transactions.length > limit;
+  const data = hasMore ? transactions.slice(0, -1) : transactions;
+  const nextCursor = hasMore ? data[data.length - 1].createdAt.toISOString() : null;
+
+  // Get total count efficiently (excluding the extra record we fetched)
   const total = await prisma.transaction.count({ where });
 
   return {
-    data: transactions,
-    nextCursor: transactions.length === limit ? transactions[transactions.length - 1].id : null,
+    data,
+    nextCursor,
     total,
+    hasMore,
   };
 }

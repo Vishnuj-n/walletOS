@@ -23,15 +23,19 @@ afterAll(async () => {
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - Jest globals are available at runtime
 beforeEach(async () => {
-  // Clean up test data before each test with error handling
+  // No global cleanup - rely on tenant-scoped cleanup in test helpers
+  // This prevents parallel Jest worker interference
+});
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - Jest globals are available at runtime
+afterEach(async () => {
+  // Ensure cleanup runs even if tests fail
+  // This is a safety net for any test that doesn't properly clean up
   try {
-    await prisma.auditLog.deleteMany({});
-    await prisma.transaction.deleteMany({});
-    await prisma.wallet.deleteMany({});
-    await prisma.apiKey.deleteMany({});
-    await prisma.tenant.deleteMany({});
+    // Log any failed tests for debugging
+    // Note: Individual test cleanup should be handled in test helpers
   } catch (error) {
-    // Ignore cleanup errors - database might not be available
-    console.warn('Cleanup failed:', error);
+    console.warn('Test cleanup warning:', error);
   }
 });

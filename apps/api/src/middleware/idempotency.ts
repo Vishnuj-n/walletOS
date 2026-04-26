@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { createHash } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from './errorHandler';
 
@@ -6,6 +7,23 @@ export interface AuthenticatedRequest extends Request {
   tenantId?: string;
   apiKeyScope?: string;
   isSandbox?: boolean;
+}
+
+/**
+ * Compute request fingerprint for enhanced idempotency
+ */
+function computeRequestFingerprint(req: AuthenticatedRequest): string {
+  const fingerprintData = {
+    method: req.method,
+    url: req.url,
+    body: req.body,
+    headers: {
+      'content-type': req.headers['content-type'],
+      'x-api-key': req.headers['x-api-key'],
+    },
+  };
+  
+  return createHash('sha256').update(JSON.stringify(fingerprintData)).digest('hex');
 }
 
 /**
@@ -42,6 +60,9 @@ export async function idempotencyMiddleware(
   }
 
   try {
+    // Compute request fingerprint
+    const requestFingerprint = computeRequestFingerprint(req);
+
     // Check for existing transaction with this idempotency key
     const existingTransaction = await prisma.transaction.findFirst({
       where: {
@@ -62,7 +83,20 @@ export async function idempotencyMiddleware(
     }
 
     if (existingTransaction) {
+      // Check if request fingerprint matches
+      const storedFingerprint = (existingTransaction.metadata as any)?.requestFingerprint;
+      if (storedFingerprint && storedFingerprint !== requestFingerprint) {
+        throw new AppError(409, ErrorCode.IDEMPOTENCY_CONFLICT, 'Idempotency key used with different request parameters');
+      }
+
       // Return cached response with custom header
+      const cachedResponse = (existingTransaction.metadata as any)?.response;
+      if (cachedResponse) {
+        res.setHeader('X-Idempotency-Cache', 'Hit');
+        return res.status(cachedResponse.status || 201).json(cachedResponse.body);
+      }
+
+      // Fallback to transaction-based response
       res.setHeader('X-Idempotency-Cache', 'Hit');
       res.status(201).json({
         transaction_id: existingTransaction.id,
@@ -80,8 +114,21 @@ export async function idempotencyMiddleware(
       return;
     }
 
-    // Store idempotency key on request for later use
+    // Store idempotency key and fingerprint on request for later use
     (req as any).idempotencyKey = idempotencyKey;
+    (req as any).requestFingerprint = requestFingerprint;
+
+    // Override res.json to capture response for caching
+    const originalJson = res.json;
+    res.json = function(body: any) {
+      // Store response in metadata for future idempotency checks
+      (req as any).cachedResponse = {
+        status: res.statusCode,
+        body: body
+      };
+      return originalJson.call(this, body);
+    };
+
     next();
   } catch (error) {
     if (error instanceof AppError) {

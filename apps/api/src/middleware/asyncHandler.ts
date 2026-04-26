@@ -7,10 +7,10 @@ import { Request, Response, NextFunction } from 'express';
  * to Express error middleware via next(err). This ensures AppError exceptions
  * are properly converted into HTTP responses.
  */
-export function asyncHandler(
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<any>
+export function asyncHandler<Req extends Request = Request>(
+  fn: (req: Req, res: Response, next: NextFunction) => Promise<any>
 ) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Req, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 }

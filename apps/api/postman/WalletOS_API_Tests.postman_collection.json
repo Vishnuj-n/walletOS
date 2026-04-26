@@ -24,6 +24,21 @@
       "key": "transactionId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "externalUserId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "targetWalletId",
+      "value": "TARGET_WALLET_ID",
+      "type": "string"
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "{{$randomUUID}}",
+      "type": "string"
     }
   ],
   "item": [
@@ -44,6 +59,23 @@
               "mode": "raw",
               "raw": "{\n  \"external_user_id\": \"user_test_{{$timestamp}}\",\n  \"currency\": \"INR\",\n  \"label\": \"Test Wallet\",\n  \"metadata\": {}\n}"
             },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (pm.response.code === 201) {",
+                    "    const response = pm.response.json();",
+                    "    pm.collectionVariables.set('walletId', response.wallet_id);",
+                    "    pm.collectionVariables.set('externalUserId', response.external_user_id);",
+                    "    console.log('Set walletId:', response.wallet_id);",
+                    "    console.log('Set externalUserId:', response.external_user_id);",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/wallets",
               "host": ["{{baseUrl}}"],
@@ -83,9 +115,9 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/wallets/user/user_test_123",
+              "raw": "{{baseUrl}}/api/v1/wallets/user/{{externalUserId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "wallets", "user", "user_test_123"]
+              "path": ["api", "v1", "wallets", "user", "{{externalUserId}}"]
             },
             "description": "Fetch wallet by external user ID"
           },
@@ -211,7 +243,22 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "v1", "transactions", "credit"]
             },
-            "description": "Credit a wallet"
+            "description": "Credit a wallet",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (pm.response.code === 201) {",
+                    "    const response = pm.response.json();",
+                    "    pm.collectionVariables.set('transactionId', response.transaction_id);",
+                    "    console.log('Set transactionId:', response.transaction_id);",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
           },
           "response": []
         },
@@ -258,7 +305,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"from_wallet_id\": \"{{walletId}}\",\n  \"to_wallet_id\": \"TARGET_WALLET_ID\",\n  \"amount\": 100.00,\n  \"description\": \"Reward transfer\",\n  \"reference_id\": \"transfer_ref_001\"\n}"
+              "raw": "{\n  \"from_wallet_id\": \"{{walletId}}\",\n  \"to_wallet_id\": \"{{targetWalletId}}\",\n  \"amount\": 100.00,\n  \"description\": \"Reward transfer\",\n  \"reference_id\": \"transfer_ref_001\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/transactions/transfer",

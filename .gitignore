@@ -53,3 +53,4 @@ out
 # Environment files - ignore all but allow example
 .env*
 !.env.example
+context.md 

@@ -8,8 +8,11 @@ This directory contains Postman collections for manual regression testing of the
 2. Configure the following environment variables:
    - `baseUrl`: The base URL of your API (default: `http://localhost:3333`)
    - `apiKey`: Your test API key (generate from your tenant)
-   - `walletId`: Will be auto-populated after creating a wallet
-   - `transactionId`: Will be auto-populated after creating a transaction
+   - `targetWalletId`: Set this to a valid wallet ID for transfer tests
+   - `walletId`: Auto-populated after creating a wallet
+   - `transactionId`: Auto-populated after creating a transaction
+   - `externalUserId`: Auto-populated after creating a wallet
+   - `idempotencyKey`: Auto-generated UUID for idempotency tests
 
 ## Collection Structure
 
@@ -39,10 +42,11 @@ This directory contains Postman collections for manual regression testing of the
 
 ## Usage
 
-1. Run the "Create Wallet" request first to get a wallet ID
-2. Use the wallet ID in subsequent requests
-3. For transaction tests, run credit operations first to fund the wallet
-4. Use the transaction ID from responses for reversal tests
+1. Run the "Create Wallet" request first - it will automatically populate `walletId` and `externalUserId` variables
+2. Use the auto-populated variables in subsequent requests
+3. For transaction tests, run credit operations first to fund the wallet - they will auto-populate `transactionId`
+4. Set `targetWalletId` variable before running transfer tests
+5. All collection variables are automatically set by post-response scripts
 
 ## Running Tests
 
@@ -50,7 +54,9 @@ You can run individual requests or entire folders as collections in Postman Runn
 
 ## Notes
 
-- All write operations require an `Idempotency-Key` header
-- The collection uses Postman variables for dynamic values
+- Transaction endpoints (credit, debit, transfer, reverse) require an `Idempotency-Key` header
+- Wallet endpoints currently do not require idempotency headers
+- The collection uses Postman variables for dynamic values that are auto-populated
 - Update the `apiKey` variable with your actual test API key before running tests
+- Set `targetWalletId` variable before running transfer tests
 - Ensure your API server is running before executing requests

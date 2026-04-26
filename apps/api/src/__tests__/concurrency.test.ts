@@ -19,7 +19,7 @@ describe('Concurrency Tests', () => {
       const { tenant, apiKey, wallet } = await createTestSetup();
 
       // Setup: credit the wallet with 1000
-      await request(app)
+      const setupRes = await request(app)
         .post('/api/v1/transactions/credit')
         .set('x-api-key', apiKey.plainKey)
         .set('Idempotency-Key', 'concurrency_debit_setup')
@@ -28,6 +28,10 @@ describe('Concurrency Tests', () => {
           amount: 1000,
           description: 'Setup credit',
         });
+      
+      expect(setupRes.status).toBe(201);
+      expect(setupRes.body).toHaveProperty('transaction_id');
+      expect(setupRes.body.amount).toBe('1000.0000');
 
       // Execute 10 parallel debit requests of 50 each (total 500)
       const debitPromises = Array.from({ length: 10 }, (_, i) =>
@@ -55,6 +59,27 @@ describe('Concurrency Tests', () => {
 
       expect(walletResponse.body.balance).toBe('500.0000');
 
+      // Ledger consistency assertion: sum of all transactions should equal final balance
+      const transactionsResponse = await request(app)
+        .get(`/api/v1/transactions?wallet_id=${wallet.id}`)
+        .set('x-api-key', apiKey.plainKey);
+
+      expect(transactionsResponse.status).toBe(200);
+      const transactions = transactionsResponse.body.data;
+      
+      // Calculate expected balance: initial (0) + credit (1000) - debits (10 * 50) = 500
+      const creditSum = transactions
+        .filter(tx => tx.type === 'credit')
+        .reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
+      
+      const debitSum = transactions
+        .filter(tx => tx.type === 'debit')
+        .reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
+      
+      const expectedBalance = creditSum - debitSum;
+      expect(expectedBalance).toBe(500);
+      expect(parseFloat(walletResponse.body.balance)).toBe(expectedBalance);
+
       await cleanupTestData(tenant.id);
     });
 
@@ -62,7 +87,7 @@ describe('Concurrency Tests', () => {
       const { tenant, apiKey, wallet } = await createTestSetup();
 
       // Setup: credit the wallet with 300
-      await request(app)
+      const setupRes = await request(app)
         .post('/api/v1/transactions/credit')
         .set('x-api-key', apiKey.plainKey)
         .set('Idempotency-Key', 'concurrency_debit_exceed_setup')
@@ -71,6 +96,10 @@ describe('Concurrency Tests', () => {
           amount: 300,
           description: 'Setup credit',
         });
+      
+      expect(setupRes.status).toBe(201);
+      expect(setupRes.body).toHaveProperty('transaction_id');
+      expect(setupRes.body.amount).toBe('300.0000');
 
       // Execute 10 parallel debit requests of 50 each (total 500, but only 300 available)
       const debitPromises = Array.from({ length: 10 }, (_, i) =>
@@ -147,7 +176,7 @@ describe('Concurrency Tests', () => {
       const { tenant, apiKey, wallet } = await createTestSetup();
 
       // Setup: credit the wallet with 500
-      await request(app)
+      const setupRes = await request(app)
         .post('/api/v1/transactions/credit')
         .set('x-api-key', apiKey.plainKey)
         .set('Idempotency-Key', 'concurrency_mixed_setup')
@@ -156,6 +185,10 @@ describe('Concurrency Tests', () => {
           amount: 500,
           description: 'Setup credit',
         });
+      
+      expect(setupRes.status).toBe(201);
+      expect(setupRes.body).toHaveProperty('transaction_id');
+      expect(setupRes.body.amount).toBe('500.0000');
 
       // Execute 5 parallel credit requests of 100 each (total 500)
       const creditPromises = Array.from({ length: 5 }, (_, i) =>

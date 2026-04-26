@@ -26,7 +26,7 @@ router.post(
     const { wallet_id, amount, description, reference_id, metadata } = req.body;
     const idempotencyKey = (req as any).idempotencyKey;
 
-    if (!wallet_id || !amount || !description) {
+    if (wallet_id == null || amount == null || description == null) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'wallet_id, amount, and description are required');
     }
 
@@ -76,7 +76,7 @@ router.post(
     const { wallet_id, amount, description, reference_id, metadata } = req.body;
     const idempotencyKey = (req as any).idempotencyKey;
 
-    if (!wallet_id || !amount || !description) {
+    if (wallet_id == null || amount == null || description == null) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'wallet_id, amount, and description are required');
     }
 
@@ -126,7 +126,7 @@ router.post(
     const { from_wallet_id, to_wallet_id, amount, description, reference_id, metadata } = req.body;
     const idempotencyKey = (req as any).idempotencyKey;
 
-    if (!from_wallet_id || !to_wallet_id || !amount || !description) {
+    if (from_wallet_id == null || to_wallet_id == null || amount == null || description == null) {
       throw new AppError(
         400,
         ErrorCode.VALIDATION_ERROR,
@@ -136,6 +136,10 @@ router.post(
 
     if (amount <= 0) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'amount must be positive');
+    }
+
+    if (from_wallet_id === to_wallet_id) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'from_wallet_id and to_wallet_id must be different');
     }
 
     const result = await transferBetweenWallets({
@@ -212,14 +216,23 @@ router.post(
       createdBy: `api_key:${req.tenantId}`,
     });
 
+    const originalDescription = (transaction.metadata as any)?.originalDescription;
+    const description = originalDescription ? `Reversal of: ${originalDescription}` : '';
+
     res.status(201).json({
       transaction_id: transaction.id,
+      wallet_id: transaction.walletId,
       type: transaction.type,
       original_tx_id: (transaction.metadata as any)?.originalTxId,
       amount: transaction.amount.toFixed(4),
       balance_before: transaction.balanceBefore.toFixed(4),
       balance_after: transaction.balanceAfter.toFixed(4),
-      description: `Reversal of: ${(transaction.metadata as any)?.originalDescription}`,
+      description,
+      reference_id: transaction.referenceId,
+      idempotency_key: transaction.idempotencyKey,
+      created_by: `api_key:${req.tenantId}`,
+      is_sandbox: req.isSandbox || false,
+      metadata: transaction.metadata,
       created_at: transaction.createdAt,
     });
   })
@@ -273,16 +286,43 @@ router.get(
       after,
     } = req.query;
 
+    // Parse and validate query parameters
+    const parsedLimit = limit ? parseInt(limit as string, 10) : undefined;
+    const parsedMinAmount = min_amount ? parseFloat(min_amount as string) : undefined;
+    const parsedMaxAmount = max_amount ? parseFloat(max_amount as string) : undefined;
+    const parsedFrom = from ? new Date(from as string) : undefined;
+    const parsedTo = to ? new Date(to as string) : undefined;
+
+    // Validate parsed numbers
+    if (parsedLimit !== undefined && (!Number.isFinite(parsedLimit) || parsedLimit < 1 || parsedLimit > 1000)) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'limit must be a number between 1 and 1000');
+    }
+    if (parsedMinAmount !== undefined && !Number.isFinite(parsedMinAmount)) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'min_amount must be a valid number');
+    }
+    if (parsedMaxAmount !== undefined && !Number.isFinite(parsedMaxAmount)) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'max_amount must be a valid number');
+    }
+    if (parsedMinAmount !== undefined && parsedMaxAmount !== undefined && parsedMinAmount > parsedMaxAmount) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'min_amount cannot be greater than max_amount');
+    }
+    if (parsedFrom !== undefined && isNaN(parsedFrom.getTime())) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'from must be a valid date');
+    }
+    if (parsedTo !== undefined && isNaN(parsedTo.getTime())) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'to must be a valid date');
+    }
+
     const result = await listTransactions({
       tenantId: req.tenantId!,
       walletId: wallet_id as string,
       type: type as string,
-      from: from ? new Date(from as string) : undefined,
-      to: to ? new Date(to as string) : undefined,
-      minAmount: min_amount ? parseFloat(min_amount as string) : undefined,
-      maxAmount: max_amount ? parseFloat(max_amount as string) : undefined,
+      from: parsedFrom,
+      to: parsedTo,
+      minAmount: parsedMinAmount,
+      maxAmount: parsedMaxAmount,
       referenceId: reference_id as string,
-      limit: limit ? parseInt(limit as string) : undefined,
+      limit: parsedLimit,
       after: after as string,
     });
 

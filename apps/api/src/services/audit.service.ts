@@ -22,8 +22,12 @@ export interface AuditLogParams {
  * This should be called within database transactions to ensure
  * atomicity with the state change being audited.
  */
-export async function createAuditLog(params: AuditLogParams): Promise<void> {
-  await prisma.auditLog.create({
+export async function createAuditLog(
+  params: AuditLogParams,
+  tx?: any
+): Promise<void> {
+  const client = tx || prisma;
+  await client.auditLog.create({
     data: {
       tenantId: params.tenantId,
       entityType: params.entityType,

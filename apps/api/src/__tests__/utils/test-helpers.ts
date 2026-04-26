@@ -39,10 +39,11 @@ export interface TestWallet {
  * Create a test tenant
  */
 export async function createTestTenant(name = 'Test Tenant'): Promise<TestTenant> {
+  const randomSuffix = Math.random().toString(36).substring(7);
   const tenant = await prisma.tenant.create({
     data: {
       name,
-      contactEmail: `test-${Date.now()}@example.com`,
+      contactEmail: `test-${Date.now()}-${randomSuffix}@example.com`,
     },
   });
 
