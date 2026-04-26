@@ -25,6 +25,8 @@
 * **Idempotency:** Build middleware checking the `(tenantId, idempotencyKey)` combination with 30-day retention.
 * **Audit logging:** Wire automatic record creation into every state-changing database transaction.
 * **Reversal logic:** Implement opposite-type transactions with mandatory balance checks.
+* **Transfers:** Implement atomic transfers with lexicographical wallet ID sorting to prevent deadlocks (Completed ahead of schedule).
+* **Pagination:** Build compound cursor logic for stable, high-performance transaction listing.
 
 **Agent to Use:** `apps/api/AGENTS.md`
 **Skills to Use:** `think`, `write`, `check`
@@ -44,6 +46,7 @@
 * **Reversal Tests:** reverse valid transaction, reject duplicate reversal.
 * **Concurrency Tests:** parallel debit requests preserve correct final balance.
 * **Audit Tests:** state-changing actions create audit log entries.
+* **Infrastructure Tuning:** Tune Prisma connection pooling and timeouts to manage high-concurrency testing and prevent connection leaks.
 * Add Postman collection for manual regression testing.
 
 **Agent to Use:** `apps/api/AGENTS.md`
@@ -76,7 +79,6 @@
 * **Webhook Dispatcher:** Build the worker with exponential backoff (up to 5 attempts) and HMAC-SHA256 signing.
 * **Circuit Breaker:** Mark failing endpoints as `degraded` and pause dispatch after 10 consecutive failures.
 * **Rate Limiting:** Implement per-API key limits for read and write operations.
-* **Transfers:** Implement atomic transfers with lexicographical wallet ID sorting to prevent deadlocks.
 * Add retry, failure, and rate-limit tests for resilience logic.
 
 **Agent to Use:** `root AGENTS.md` + `apps/api/AGENTS.md`
