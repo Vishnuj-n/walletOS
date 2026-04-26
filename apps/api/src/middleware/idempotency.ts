@@ -95,6 +95,54 @@ export async function idempotencyMiddleware(
         return;
       }
 
+      // Check if this is a transfer (has rawIdempotencyKey in metadata)
+      const isTransfer = (existingTransaction.metadata as any)?.rawIdempotencyKey === idempotencyKey;
+      
+      if (isTransfer) {
+        // For transfers, fetch both debit and credit transactions
+        const relatedTransactions = await prisma.transaction.findMany({
+          where: {
+            tenantId,
+            metadata: { path: ['rawIdempotencyKey'], equals: idempotencyKey }
+          },
+          include: { wallet: true }
+        });
+
+        const debitTx = relatedTransactions.find(tx => tx.type === 'debit');
+        const creditTx = relatedTransactions.find(tx => tx.type === 'credit');
+
+        if (debitTx && creditTx) {
+          res.setHeader('X-Idempotency-Cache', 'Hit');
+          res.status(201).json({
+            debit_transaction: {
+              transaction_id: debitTx.id,
+              wallet_id: debitTx.walletId,
+              type: debitTx.type,
+              amount: debitTx.amount.toFixed(4),
+              balance_before: debitTx.balanceBefore.toFixed(4),
+              balance_after: debitTx.balanceAfter.toFixed(4),
+              description: (debitTx.metadata as any)?.description || '',
+              reference_id: debitTx.referenceId,
+              idempotency_key: debitTx.idempotencyKey,
+              created_at: debitTx.createdAt,
+            },
+            credit_transaction: {
+              transaction_id: creditTx.id,
+              wallet_id: creditTx.walletId,
+              type: creditTx.type,
+              amount: creditTx.amount.toFixed(4),
+              balance_before: creditTx.balanceBefore.toFixed(4),
+              balance_after: creditTx.balanceAfter.toFixed(4),
+              description: (creditTx.metadata as any)?.description || '',
+              reference_id: creditTx.referenceId,
+              idempotency_key: creditTx.idempotencyKey,
+              created_at: creditTx.createdAt,
+            },
+          });
+          return;
+        }
+      }
+
       // Fallback to transaction-based response
       res.setHeader('X-Idempotency-Cache', 'Hit');
       res.status(201).json({
@@ -128,34 +176,27 @@ export async function idempotencyMiddleware(
       
       // Persist response to transaction metadata when response finishes
       res.on('finish', async () => {
-        // ONLY cache successful responses (2xx)
-        if (res.statusCode >= 200 && res.statusCode < 300 && req.cachedResponse && req.idempotencyKey) {
-          try {
-            const txToUpdate = await prisma.transaction.findFirst({
-              where: {
-                tenantId,
-                OR: [
-                  { idempotencyKey: req.idempotencyKey },
-                  { metadata: { path: ['rawIdempotencyKey'], equals: req.idempotencyKey } }
-                ]
-              }
-            });
-            
-            if (txToUpdate) {
-              await prisma.transaction.update({
-                where: { id: txToUpdate.id },
-                data: {
-                  metadata: {
-                    ...(txToUpdate.metadata as any || {}),
-                    response: req.cachedResponse,
-                    requestFingerprint: req.requestFingerprint,
-                  },
-                },
+        if ((res.statusCode === 201 || res.statusCode === 200) && req.cachedResponse && req.idempotencyKey) {
+          // Use a delay to ensure the TX exists in DB before updating metadata
+          setTimeout(async () => {
+            try {
+              const tx = await prisma.transaction.findFirst({
+                where: { 
+                  tenantId, 
+                  OR: [
+                    { idempotencyKey: req.idempotencyKey },
+                    { metadata: { path: ['rawIdempotencyKey'], equals: req.idempotencyKey } }
+                  ]
+                }
               });
-            }
-          } catch (error) {
-            // Fail silently. Caching failure shouldn't break the app.
-          }
+              if (tx) {
+                await prisma.transaction.update({
+                  where: { id: tx.id },
+                  data: { metadata: { ...(tx.metadata as any || {}), response: req.cachedResponse } }
+                });
+              }
+            } catch (e) { /* silent catch for background task */ }
+          }, 250); // 250ms delay to let the main transaction commit
         }
       });
       

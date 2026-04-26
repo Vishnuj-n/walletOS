@@ -9,23 +9,28 @@
 
 import request from 'supertest';
 import { createTestApp } from './utils/app';
-import { createTestSetup, cleanupTestData } from './utils/test-helpers';
+import { createTestSetup, cleanupTestData, disconnectPrisma } from './utils/test-helpers';
 import { prisma } from '../lib/prisma';
 
 describe('Audit Tests', () => {
   const app = createTestApp();
 
+  afterAll(async () => {
+    await disconnectPrisma();
+  });
+
   describe('Wallet Creation Audit', () => {
     it('should create audit log entry when wallet is created', async () => {
-      const uniqueId = `user_audit_${Date.now()}_${Math.random()}`;
-      const { tenant, apiKey } = await createTestSetup(uniqueId); // Use dynamic ID here
+      const setupId = `user_audit_setup_${Date.now()}_${Math.random()}`;
+      const { tenant, apiKey } = await createTestSetup(setupId);
 
-      // Create a wallet
+      // Create a wallet with a different user ID to avoid conflict
+      const walletUserId = `user_audit_wallet_${Date.now()}_${Math.random()}`;
       const response = await request(app)
         .post('/api/v1/wallets')
         .set('x-api-key', apiKey.plainKey)
         .send({
-          external_user_id: uniqueId, // And use it here
+          external_user_id: walletUserId,
           currency: 'INR',
           label: 'Audit Test Wallet',
         });
@@ -47,7 +52,7 @@ describe('Audit Tests', () => {
       expect(auditLog).toHaveProperty('action', 'wallet.created');
       expect(auditLog).toHaveProperty('entityType', 'Wallet');
       expect(auditLog).toHaveProperty('entityId', walletId);
-      expect(auditLog.changes).toHaveProperty('external_user_id', uniqueId);
+      expect(auditLog.changes).toHaveProperty('externalUserId', walletUserId);
 
       await cleanupTestData(tenant.id);
     });

@@ -11,10 +11,14 @@
 
 import request from 'supertest';
 import { createTestApp } from './utils/app';
-import { createTestSetup, cleanupTestData } from './utils/test-helpers';
+import { createTestSetup, cleanupTestData, disconnectPrisma } from './utils/test-helpers';
 
 describe('Credit Tests', () => {
   const app = createTestApp();
+
+  afterAll(async () => {
+    await disconnectPrisma();
+  });
 
   describe('POST /api/v1/transactions/credit', () => {
     it('should credit a wallet successfully', async () => {

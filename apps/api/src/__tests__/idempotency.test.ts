@@ -9,10 +9,14 @@
 
 import request from 'supertest';
 import { createTestApp } from './utils/app';
-import { createTestSetup, cleanupTestData } from './utils/test-helpers';
+import { createTestSetup, cleanupTestData, disconnectPrisma } from './utils/test-helpers';
 
 describe('Idempotency Tests', () => {
   const app = createTestApp();
+
+  afterAll(async () => {
+    await disconnectPrisma();
+  });
 
   describe('Credit Idempotency', () => {
     it('should return original response on duplicate credit request', async () => {
@@ -183,7 +187,7 @@ describe('Idempotency Tests', () => {
       const wallet2 = await request(app)
         .post('/api/v1/wallets')
         .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', Date.now().toString() + Math.random())
+        .set('Idempotency-Key', `wallet2_${Date.now()}_${Math.random()}`)
         .send({
           external_user_id: 'user_transfer_2',
           currency: 'INR',
