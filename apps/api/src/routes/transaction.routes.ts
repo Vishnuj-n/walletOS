@@ -7,10 +7,11 @@ import {
   getTransactionById,
   listTransactions,
 } from '../services/transaction.service';
-import { apiKeyAuthMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import { apiKeyAuthMiddleware } from '../middleware/auth';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { TransactionMetadata, TransactionResponse, ListTransactionsQuery } from '../types/transaction';
 
 const router = Router();
 
@@ -22,9 +23,9 @@ router.post(
   '/transactions/credit',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { wallet_id, amount, description, reference_id, metadata } = req.body;
-    const idempotencyKey = (req as any).idempotencyKey;
+    const idempotencyKey = req.idempotencyKey;
 
     if (wallet_id == null || amount == null || description == null) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'wallet_id, amount, and description are required');
@@ -34,8 +35,12 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'amount must be positive');
     }
 
+    if (!req.tenantId) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Authentication required');
+    }
+
     const transaction = await creditWallet({
-      tenantId: req.tenantId!,
+      tenantId: req.tenantId,
       walletId: wallet_id,
       amount,
       description,
@@ -46,6 +51,7 @@ router.post(
       createdBy: `api_key:${req.tenantId}`,
     });
 
+    const transactionMetadata = transaction.metadata as TransactionMetadata;
     res.status(201).json({
       transaction_id: transaction.id,
       wallet_id: transaction.walletId,
@@ -53,10 +59,10 @@ router.post(
       amount: transaction.amount.toFixed(4),
       balance_before: transaction.balanceBefore.toFixed(4),
       balance_after: transaction.balanceAfter.toFixed(4),
-      description: (transaction.metadata as any)?.description || description,
+      description: transactionMetadata.description || description,
       reference_id: transaction.referenceId,
       idempotency_key: transaction.idempotencyKey,
-      created_by: (transaction.metadata as any)?.createdBy || `api_key:${req.tenantId}`,
+      created_by: transactionMetadata.createdBy || `api_key:${req.tenantId}`,
       is_sandbox: req.isSandbox || false,
       metadata: transaction.metadata,
       created_at: transaction.createdAt,
@@ -72,9 +78,9 @@ router.post(
   '/transactions/debit',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { wallet_id, amount, description, reference_id, metadata } = req.body;
-    const idempotencyKey = (req as any).idempotencyKey;
+    const idempotencyKey = req.idempotencyKey;
 
     if (wallet_id == null || amount == null || description == null) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'wallet_id, amount, and description are required');
@@ -84,8 +90,12 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'amount must be positive');
     }
 
+    if (!req.tenantId) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Authentication required');
+    }
+
     const transaction = await debitWallet({
-      tenantId: req.tenantId!,
+      tenantId: req.tenantId,
       walletId: wallet_id,
       amount,
       description,
@@ -96,6 +106,7 @@ router.post(
       createdBy: `api_key:${req.tenantId}`,
     });
 
+    const transactionMetadata = transaction.metadata as TransactionMetadata;
     res.status(201).json({
       transaction_id: transaction.id,
       wallet_id: transaction.walletId,
@@ -103,10 +114,10 @@ router.post(
       amount: transaction.amount.toFixed(4),
       balance_before: transaction.balanceBefore.toFixed(4),
       balance_after: transaction.balanceAfter.toFixed(4),
-      description: (transaction.metadata as any)?.description || description,
+      description: transactionMetadata.description || description,
       reference_id: transaction.referenceId,
       idempotency_key: transaction.idempotencyKey,
-      created_by: (transaction.metadata as any)?.createdBy || `api_key:${req.tenantId}`,
+      created_by: transactionMetadata.createdBy || `api_key:${req.tenantId}`,
       is_sandbox: req.isSandbox || false,
       metadata: transaction.metadata,
       created_at: transaction.createdAt,
@@ -122,9 +133,9 @@ router.post(
   '/transactions/transfer',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { from_wallet_id, to_wallet_id, amount, description, reference_id, metadata } = req.body;
-    const idempotencyKey = (req as any).idempotencyKey;
+    const idempotencyKey = req.idempotencyKey;
 
     if (from_wallet_id == null || to_wallet_id == null || amount == null || description == null) {
       throw new AppError(
@@ -142,8 +153,12 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'from_wallet_id and to_wallet_id must be different');
     }
 
+    if (!req.tenantId) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Authentication required');
+    }
+
     const result = await transferBetweenWallets({
-      tenantId: req.tenantId!,
+      tenantId: req.tenantId,
       fromWalletId: from_wallet_id,
       toWalletId: to_wallet_id,
       amount,
@@ -155,6 +170,8 @@ router.post(
       createdBy: `api_key:${req.tenantId}`,
     });
 
+    const debitMetadata = result.debitTransaction.metadata as TransactionMetadata;
+    const creditMetadata = result.creditTransaction.metadata as TransactionMetadata;
     res.status(201).json({
       debit_transaction: {
         transaction_id: result.debitTransaction.id,
@@ -163,10 +180,10 @@ router.post(
         amount: result.debitTransaction.amount.toFixed(4),
         balance_before: result.debitTransaction.balanceBefore.toFixed(4),
         balance_after: result.debitTransaction.balanceAfter.toFixed(4),
-        description: (result.debitTransaction.metadata as any)?.description || description,
+        description: debitMetadata.description || description,
         reference_id: result.debitTransaction.referenceId,
         idempotency_key: result.debitTransaction.idempotencyKey,
-        created_by: (result.debitTransaction.metadata as any)?.createdBy || `api_key:${req.tenantId}`,
+        created_by: debitMetadata.createdBy || `api_key:${req.tenantId}`,
         is_sandbox: req.isSandbox || false,
         metadata: result.debitTransaction.metadata,
         created_at: result.debitTransaction.createdAt,
@@ -178,10 +195,10 @@ router.post(
         amount: result.creditTransaction.amount.toFixed(4),
         balance_before: result.creditTransaction.balanceBefore.toFixed(4),
         balance_after: result.creditTransaction.balanceAfter.toFixed(4),
-        description: (result.creditTransaction.metadata as any)?.description || description,
+        description: creditMetadata.description || description,
         reference_id: result.creditTransaction.referenceId,
         idempotency_key: result.creditTransaction.idempotencyKey,
-        created_by: (result.creditTransaction.metadata as any)?.createdBy || `api_key:${req.tenantId}`,
+        created_by: creditMetadata.createdBy || `api_key:${req.tenantId}`,
         is_sandbox: req.isSandbox || false,
         metadata: result.creditTransaction.metadata,
         created_at: result.creditTransaction.createdAt,
@@ -198,17 +215,21 @@ router.post(
   '/transactions/:txId/reverse',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { txId } = req.params;
     const { reason } = req.body;
-    const idempotencyKey = (req as any).idempotencyKey;
+    const idempotencyKey = req.idempotencyKey;
 
     if (!reason) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'reason is required');
     }
 
+    if (!req.tenantId) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Authentication required');
+    }
+
     const transaction = await reverseTransaction({
-      tenantId: req.tenantId!,
+      tenantId: req.tenantId,
       transactionId: txId,
       reason,
       idempotencyKey,
@@ -216,14 +237,15 @@ router.post(
       createdBy: `api_key:${req.tenantId}`,
     });
 
-    const originalDescription = (transaction.metadata as any)?.originalDescription;
+    const transactionMetadata = transaction.metadata as TransactionMetadata;
+    const originalDescription = transactionMetadata.originalDescription;
     const description = originalDescription ? `Reversal of: ${originalDescription}` : '';
 
     res.status(201).json({
       transaction_id: transaction.id,
       wallet_id: transaction.walletId,
       type: transaction.type,
-      original_tx_id: (transaction.metadata as any)?.originalTxId,
+      original_tx_id: transactionMetadata.originalTxId,
       amount: transaction.amount.toFixed(4),
       balance_before: transaction.balanceBefore.toFixed(4),
       balance_after: transaction.balanceAfter.toFixed(4),
@@ -245,11 +267,16 @@ router.post(
 router.get(
   '/transactions/:txId',
   apiKeyAuthMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response, next: any): Promise<void> => {
     const { txId } = req.params;
 
-    const transaction = await getTransactionById(txId, req.tenantId!);
+    if (!req.tenantId) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Authentication required');
+    }
 
+    const transaction = await getTransactionById(txId, req.tenantId);
+
+    const metadata = transaction.metadata as TransactionMetadata;
     res.json({
       transaction_id: transaction.id,
       wallet_id: transaction.walletId,
@@ -257,7 +284,7 @@ router.get(
       amount: transaction.amount.toFixed(4),
       balance_before: transaction.balanceBefore.toFixed(4),
       balance_after: transaction.balanceAfter.toFixed(4),
-      description: (transaction.metadata as any)?.description,
+      description: metadata.description,
       reference_id: transaction.referenceId,
       idempotency_key: transaction.idempotencyKey,
       metadata: transaction.metadata,
@@ -273,7 +300,8 @@ router.get(
 router.get(
   '/transactions',
   apiKeyAuthMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response, next: any): Promise<void> => {
+    const query = req.query as ListTransactionsQuery;
     const {
       wallet_id,
       type,
@@ -284,14 +312,14 @@ router.get(
       reference_id,
       limit,
       after,
-    } = req.query;
+    } = query;
 
     // Parse and validate query parameters
-    const parsedLimit = limit ? parseInt(limit as string, 10) : undefined;
-    const parsedMinAmount = min_amount ? parseFloat(min_amount as string) : undefined;
-    const parsedMaxAmount = max_amount ? parseFloat(max_amount as string) : undefined;
-    const parsedFrom = from ? new Date(from as string) : undefined;
-    const parsedTo = to ? new Date(to as string) : undefined;
+    const parsedLimit = limit ? Number(limit) : undefined;
+    const parsedMinAmount = min_amount ? Number(min_amount) : undefined;
+    const parsedMaxAmount = max_amount ? Number(max_amount) : undefined;
+    const parsedFrom = from ? new Date(from) : undefined;
+    const parsedTo = to ? new Date(to) : undefined;
 
     // Validate parsed numbers
     if (parsedLimit !== undefined && (!Number.isFinite(parsedLimit) || parsedLimit < 1 || parsedLimit > 1000)) {
@@ -313,33 +341,40 @@ router.get(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'to must be a valid date');
     }
 
+    if (!req.tenantId) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Authentication required');
+    }
+
     const result = await listTransactions({
-      tenantId: req.tenantId!,
-      walletId: wallet_id as string,
-      type: type as string,
+      tenantId: req.tenantId,
+      walletId: wallet_id ?? undefined,
+      type: type ?? undefined,
       from: parsedFrom,
       to: parsedTo,
       minAmount: parsedMinAmount,
       maxAmount: parsedMaxAmount,
-      referenceId: reference_id as string,
+      referenceId: reference_id ?? undefined,
       limit: parsedLimit,
-      after: after as string,
+      after: after ?? undefined,
     });
 
     res.json({
-      data: result.data.map((tx) => ({
-        transaction_id: tx.id,
-        wallet_id: tx.walletId,
-        type: tx.type,
-        amount: tx.amount.toFixed(4),
-        balance_before: tx.balanceBefore.toFixed(4),
-        balance_after: tx.balanceAfter.toFixed(4),
-        description: (tx.metadata as any)?.description,
-        reference_id: tx.referenceId,
-        idempotency_key: tx.idempotencyKey,
-        metadata: tx.metadata,
-        created_at: tx.createdAt,
-      })),
+      data: result.data.map((tx) => {
+        const metadata = tx.metadata as TransactionMetadata;
+        return {
+          transaction_id: tx.id,
+          wallet_id: tx.walletId,
+          type: tx.type,
+          amount: tx.amount.toFixed(4),
+          balance_before: tx.balanceBefore.toFixed(4),
+          balance_after: tx.balanceAfter.toFixed(4),
+          description: metadata.description,
+          reference_id: tx.referenceId,
+          idempotency_key: tx.idempotencyKey,
+          metadata: tx.metadata,
+          created_at: tx.createdAt,
+        };
+      }),
       next_cursor: result.nextCursor,
       total: result.total,
     });

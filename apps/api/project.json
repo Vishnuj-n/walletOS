@@ -52,6 +52,32 @@
       "options": {
         "passWithNoTests": true
       }
+    },
+    "db-push": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx prisma db push",
+        "cwd": "{projectRoot}",
+        "envFile": "{workspaceRoot}/.env.test"
+      },
+      "configurations": {
+        "development": {
+          "envFile": "{workspaceRoot}/.env"
+        }
+      }
+    },
+    "db-studio": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx prisma studio",
+        "cwd": "{projectRoot}",
+        "envFile": "{workspaceRoot}/.env.test"
+      },
+      "configurations": {
+        "development": {
+          "envFile": "{workspaceRoot}/.env"
+        }
+      }
     }
   }
 }

@@ -4,14 +4,8 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-export interface AuthenticatedRequest extends Request {
-  tenantId?: string;
-  apiKeyScope?: string;
-  isSandbox?: boolean;
-}
-
 export async function apiKeyAuthMiddleware(
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {

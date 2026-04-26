@@ -3,16 +3,10 @@ import { createHash } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from './errorHandler';
 
-export interface AuthenticatedRequest extends Request {
-  tenantId?: string;
-  apiKeyScope?: string;
-  isSandbox?: boolean;
-}
-
 /**
  * Compute request fingerprint for enhanced idempotency
  */
-function computeRequestFingerprint(req: AuthenticatedRequest): string {
+function computeRequestFingerprint(req: Request): string {
   const fingerprintData = {
     method: req.method,
     url: req.url,
@@ -36,7 +30,7 @@ function computeRequestFingerprint(req: AuthenticatedRequest): string {
  * before entering heavy transaction logic.
  */
 export async function idempotencyMiddleware(
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
@@ -93,7 +87,8 @@ export async function idempotencyMiddleware(
       const cachedResponse = (existingTransaction.metadata as any)?.response;
       if (cachedResponse) {
         res.setHeader('X-Idempotency-Cache', 'Hit');
-        return res.status(cachedResponse.status || 201).json(cachedResponse.body);
+        res.status(cachedResponse.status || 201).json(cachedResponse.body);
+        return;
       }
 
       // Fallback to transaction-based response

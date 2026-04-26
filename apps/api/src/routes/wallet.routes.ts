@@ -8,7 +8,7 @@ import {
   unfreezeWallet,
   closeWallet,
 } from '../services/wallet.service';
-import { apiKeyAuthMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import { apiKeyAuthMiddleware } from '../middleware/auth';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -23,7 +23,7 @@ router.post(
   '/wallets',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { external_user_id, currency, label, metadata } = req.body;
     const idempotencyKey = (req as any).idempotencyKey;
 
@@ -60,7 +60,7 @@ router.post(
 router.get(
   '/wallets/:walletId',
   apiKeyAuthMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { walletId } = req.params;
 
     const wallet = await getWalletById(walletId, req.tenantId!, req.isSandbox || false);
@@ -85,7 +85,7 @@ router.get(
 router.get(
   '/wallets/user/:externalUserId',
   apiKeyAuthMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { externalUserId } = req.params;
 
     const wallet = await getWalletByExternalUserId(
@@ -115,7 +115,7 @@ router.patch(
   '/wallets/:walletId',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { walletId } = req.params;
     const { label, metadata } = req.body;
 
@@ -151,7 +151,7 @@ router.post(
   '/wallets/:walletId/freeze',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { walletId } = req.params;
     const { reason } = req.body;
 
@@ -187,7 +187,7 @@ router.post(
   '/wallets/:walletId/unfreeze',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { walletId } = req.params;
     const { reason } = req.body;
 
@@ -223,7 +223,7 @@ router.post(
   '/wallets/:walletId/close',
   apiKeyAuthMiddleware,
   idempotencyMiddleware,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { walletId } = req.params;
     const { reason } = req.body;
 
