@@ -5,9 +5,10 @@ import { WalletDto } from '../../types/wallet';
 
 describe('BalanceCard', () => {
   it('should render loading state', () => {
-    render(<BalanceCard loading={true} />);
+    const { container } = render(<BalanceCard loading={true} />);
 
-    expect(screen.getByText('Current Ledger Balance')).toBeInTheDocument();
+    const skeletons = container.querySelectorAll('.skeleton');
+    expect(skeletons.length).toBe(2);
   });
 
   it('should render wallet balance when data is available', () => {

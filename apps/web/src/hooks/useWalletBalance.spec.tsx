@@ -1,13 +1,12 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useWalletBalance } from './useWalletBalance';
+import { fetchWallet } from '../lib/api-client';
 
 // Mock the api-client
 jest.mock('../lib/api-client', () => ({
   fetchWallet: jest.fn(),
 }));
-
-const { fetchWallet } = require('../lib/api-client');
 
 describe('useWalletBalance', () => {
   let queryClient: QueryClient;

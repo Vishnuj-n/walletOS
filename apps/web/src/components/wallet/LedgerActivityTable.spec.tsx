@@ -24,7 +24,7 @@ describe('LedgerActivityTable', () => {
   ];
 
   it('should render loading state', () => {
-    render(
+    const { container } = render(
       <LedgerActivityTable
         items={[]}
         loading={true}
@@ -37,6 +37,16 @@ describe('LedgerActivityTable', () => {
 
     expect(screen.getByText('Recent Ledger Activity')).toBeInTheDocument();
     expect(screen.getByText('20 per page')).toBeInTheDocument();
+
+    // Table headers should not be present in loading state
+    expect(screen.queryByText(/type/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/amount/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/description/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/created/i)).not.toBeInTheDocument();
+
+    // Skeleton elements should be present
+    const skeletons = container.querySelectorAll('.skeleton');
+    expect(skeletons.length).toBe(3);
   });
 
   it('should render activities when data is available', () => {
@@ -193,9 +203,9 @@ describe('LedgerActivityTable', () => {
       />
     );
 
-    expect(screen.getByText('TYPE')).toBeInTheDocument();
-    expect(screen.getByText('AMOUNT')).toBeInTheDocument();
-    expect(screen.getByText('DESCRIPTION')).toBeInTheDocument();
-    expect(screen.getByText('CREATED')).toBeInTheDocument();
+    expect(screen.getByText(/type/i)).toBeInTheDocument();
+    expect(screen.getByText(/amount/i)).toBeInTheDocument();
+    expect(screen.getByText(/description/i)).toBeInTheDocument();
+    expect(screen.getByText(/created/i)).toBeInTheDocument();
   });
 });

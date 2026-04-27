@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { act } from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useWalletSession } from './useWalletSession';
@@ -19,7 +19,7 @@ describe('useWalletSession', () => {
         },
       },
     });
-    jest.useFakeTimers();
+    jest.useFakeTimers({ doNotFake: ['setInterval'] });
     jest.clearAllMocks();
   });
 
@@ -72,7 +72,9 @@ describe('useWalletSession', () => {
     });
 
     // Fast-forward to 5 minutes before expiry
-    jest.advanceTimersByTime(fiveMinutesFromNow - now);
+    act(() => {
+      jest.advanceTimersByTime(fiveMinutesFromNow - now);
+    });
 
     await waitFor(() => {
       expect(fetchSessionForWallet).toHaveBeenCalledTimes(2);
@@ -97,7 +99,9 @@ describe('useWalletSession', () => {
     });
 
     // Fast-forward significantly - should not trigger refresh
-    jest.advanceTimersByTime(60 * 60 * 1000);
+    act(() => {
+      jest.advanceTimersByTime(60 * 60 * 1000);
+    });
 
     expect(fetchSessionForWallet).toHaveBeenCalledTimes(1);
   });
