@@ -10,6 +10,7 @@ import { requestIdMiddleware } from './middleware/requestId';
 import { errorHandlerMiddleware } from './middleware/errorHandler';
 import walletRoutes from './routes/wallet.routes';
 import transactionRoutes from './routes/transaction.routes';
+import adminRoutes from './routes/admin.routes';
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use('/assets', express.static(path.join(__dirname, 'assets')));
 // API Routes
 app.use('/api/v1', walletRoutes);
 app.use('/api/v1', transactionRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 // Health check
 app.get('/api', (req, res) => {
@@ -33,7 +35,13 @@ app.get('/api', (req, res) => {
 app.use(errorHandlerMiddleware);
 
 const port = process.env.PORT || 3333;
-const server = app.listen(port, () => {
-  console.log(`Listening at http://localhost:${port}/api`);
-});
-server.on('error', console.error);
+
+// Only start the server if not in test environment (supertest handles its own server)
+if (process.env.NODE_ENV !== 'test') {
+  const server = app.listen(port, () => {
+    console.log(`Listening at http://localhost:${port}/api`);
+  });
+  server.on('error', console.error);
+}
+
+export { app };

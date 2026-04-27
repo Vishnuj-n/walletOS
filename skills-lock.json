@@ -26,6 +26,16 @@
       "sourceType": "github",
       "computedHash": "ef24f10a7149348c172419cf9a0e073be48ab7fb8faf7aaed4391cea22e9ffb0"
     },
+    "supabase": {
+      "source": "supabase/agent-skills",
+      "sourceType": "github",
+      "computedHash": "818d65251221019d5fed1d4fb4039866db09d9e4a05f97e536e95c407643b442"
+    },
+    "supabase-postgres-best-practices": {
+      "source": "supabase/agent-skills",
+      "sourceType": "github",
+      "computedHash": "8e41c7417894e6f394614ee7ca3ee5322b1e58d890255d441f42dea98732597f"
+    },
     "think": {
       "source": "tw93/Waza",
       "sourceType": "github",

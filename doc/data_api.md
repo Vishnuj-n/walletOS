@@ -47,7 +47,16 @@ Create a wallet for a user. Requires `read_write` scope.
 }
 ```
 
-`currency` defaults to `INR`. `label` and `metadata` are optional.
+**Parameters**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `external_user_id` | string | Yes | Unique identifier for the user in the tenant's system |
+| `currency` | string | Yes | 3-letter currency code (e.g., "INR", "USD") |
+| `label` | string | No | Human-readable label for the wallet |
+| `metadata` | object | No | Arbitrary JSON metadata for the wallet |
+
+`currency` is required. `label` and `metadata` are optional.
 
 **Response 201**
 ```json

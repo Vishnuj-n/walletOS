@@ -198,12 +198,11 @@ export async function idempotencyMiddleware(
       // Persist response to transaction metadata when response finishes
       res.on('finish', async () => {
         if ((res.statusCode === 201 || res.statusCode === 200) && req.cachedResponse && req.idempotencyKey) {
-          // Use a delay to ensure the TX exists in DB before updating metadata
-          setTimeout(async () => {
+          const updateMetadata = async () => {
             try {
               const tx = await prisma.transaction.findFirst({
-                where: { 
-                  tenantId, 
+                where: {
+                  tenantId,
                   OR: [
                     { idempotencyKey: req.idempotencyKey },
                     { metadata: { path: ['rawIdempotencyKey'], equals: req.idempotencyKey } }
@@ -217,7 +216,15 @@ export async function idempotencyMiddleware(
                 });
               }
             } catch (e) { /* silent catch for background task */ }
-          }, 250); // 250ms delay to let the main transaction commit
+          };
+
+          // In test environment, run immediately to prevent async leaks
+          // In production, use delay to ensure the TX exists in DB before updating metadata
+          if (process.env.NODE_ENV === 'test') {
+            await updateMetadata();
+          } else {
+            setTimeout(updateMetadata, 250); // 250ms delay to let the main transaction commit
+          }
         }
       });
       

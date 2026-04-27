@@ -1,6 +1,6 @@
 ### SPRINT.md
 
-### Sprint 1: The Secure Foundation
+### Sprint 1: The Secure Foundation [DONE]
 **Goal:** Establish the Nx monorepo, secure database schema, and global middleware.
 
 **Tasks:**
@@ -16,7 +16,7 @@
 
 ---
 
-### Sprint 2: Core Ledger & Concurrency
+### Sprint 2: Core Ledger & Concurrency [DONE]
 **Goal:** Build the wallet, transaction, and concurrency-safe ledger logic.
 
 **Tasks:**
@@ -34,7 +34,7 @@
 
 ---
 
-### Sprint 2.5: Ledger Testing & Validation
+### Sprint 2.5: Ledger Testing & Validation [DONE]
 **Goal:** Verify Sprint 2 financial correctness, edge cases, and transaction safety.
 
 **Tasks:**
@@ -55,7 +55,7 @@
 
 ---
 
-### Sprint 3: Administrative Control
+### Sprint 3: Administrative Control [CURRENT]
 **Goal:** Deliver internal tools for support and operations staff.
 
 **Tasks:**

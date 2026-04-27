@@ -44,21 +44,24 @@ npm install
 **2. Set up environment variables**
 
 ```bash
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env.local
-cp apps/admin/.env.example apps/admin/.env.local
+cp .env.example .env
+cp .env.example .env.test
 ```
 
-Fill in `apps/api/.env` with your Supabase credentials:
+Fill in `.env` with your Supabase credentials:
 
 ```
-DATABASE_URL=postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres:[password]@db.[ref].supabase.co:6543/postgres?pgbouncer=true&sslmode=require
+DIRECT_URL=postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres?sslmode=require
 SUPABASE_URL=https://[ref].supabase.co
 SUPABASE_SERVICE_ROLE_KEY=...
-SUPABASE_JWT_SECRET=...
-USER_SESSION_SECRET=any-random-string-min-32-chars
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+NEXT_PUBLIC_SUPABASE_URL=https://[ref].supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_API_URL=http://localhost:3333/api/v1
+NODE_ENV=development
 ```
+
+`.env.test` uses local Docker database (ensure Docker is running) and only needs Supabase auth credentials. See `doc/ENV_SETUP_GUIDE.md` for details.
 
 **3. Run the database migration**
 
@@ -70,10 +73,8 @@ npx prisma migrate dev --name init
 After the first migration runs, revoke delete/update on the audit log table. In the Supabase SQL editor:
 
 ```sql
-REVOKE UPDATE, DELETE ON audit_logs FROM postgres;
+REVOKE UPDATE, DELETE ON audit_logs FROM your_actual_app_DB_role;
 ```
-
-Replace `postgres` with your actual app DB role if different.
 
 **4. Start all three apps**
 
@@ -81,13 +82,13 @@ Open three terminals from the repo root:
 
 ```bash
 # Terminal 1 — API (loads .env)
-npx dotenv-cli -e apps/api/.env -- npx nx run @walletOS/api:serve
+npx dotenv-cli -e .env -- npx nx run @walletOS/api:serve
 
 # Terminal 2 — User UI (loads .env.local)
 npx nx run web:serve
 
 # Terminal 3 — Admin dashboard (loads .env.local)
-npx nx run admin:serve
+npx nx run admin:serve --port 3002
 ```
 
 > **Note:** Use `nx serve <app>` for quick local development. Use `npx nx run @walletOS/<app>:serve` in workspace scripts or CI for explicit namespacing.
@@ -192,17 +193,17 @@ cd apps/api && npx prisma migrate dev --name <migration-name>
 
 ## Running the API
 
-**Development mode** (loads `.env.development`):
+**Development mode** (loads `.env`):
 ```bash
-npx dotenv-cli -e .env.development -- nx serve api
+npx dotenv-cli -e .env -- nx serve api
 ```
 
-**Production mode** (loads `.env.production`):
+**Production mode** (uses CI/CD environment variables):
 ```bash
-npx dotenv-cli -e .env.production -- nx serve api
+nx serve api
 ```
 
-> **Note:** Use `nx serve api` for local development. Use `npx nx run @walletOS/api:serve` in CI or workspace scripts. Prefix with `npx dotenv-cli -e <env-file> --` when environment variables need to be loaded.
+> **Note:** Use `nx serve api` for local development. Use `npx nx run @walletOS/api:serve` in CI or workspace scripts. Prefix with `npx dotenv-cli -e .env --` for development when environment variables need to be loaded. For production, use CI/CD environment variables instead of .env files.
 
 The API will be available at `http://localhost:3333`
 
