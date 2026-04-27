@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { supabase, API_BASE_URL } from '../../../lib/supabase';
 
 interface AuditLog {
   id: string;
@@ -19,10 +19,26 @@ export default function AuditLogPage() {
   const [error, setError] = useState('');
   const [walletFilter, setWalletFilter] = useState('');
   const [actionFilter, setActionFilter] = useState('');
+  const [debouncedWalletFilter, setDebouncedWalletFilter] = useState('');
+  const [debouncedActionFilter, setDebouncedActionFilter] = useState('');
 
   useEffect(() => {
     fetchAuditLogs();
-  }, [walletFilter, actionFilter]);
+  }, [debouncedWalletFilter, debouncedActionFilter]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedWalletFilter(walletFilter);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [walletFilter]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedActionFilter(actionFilter);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [actionFilter]);
 
   const fetchAuditLogs = async () => {
     try {
@@ -30,11 +46,11 @@ export default function AuditLogPage() {
       if (!session) return;
 
       const params = new URLSearchParams();
-      if (walletFilter) params.append('wallet_id', walletFilter);
-      if (actionFilter) params.append('action', actionFilter);
+      if (debouncedWalletFilter) params.append('wallet_id', debouncedWalletFilter);
+      if (debouncedActionFilter) params.append('action', debouncedActionFilter);
 
       const response = await fetch(
-        `http://localhost:3333/api/v1/admin/audit?${params.toString()}`,
+        `${API_BASE_URL}/admin/audit?${params.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${session.access_token}`,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '../../../../lib/supabase';
+import { supabase, API_BASE_URL } from '../../../../lib/supabase';
 
 interface Wallet {
   wallet_id: string;
@@ -32,7 +32,7 @@ export default function WalletDetailPage() {
       if (!session) return;
 
       const response = await fetch(
-        `http://localhost:3333/api/v1/admin/wallets/${walletId}`,
+        `${API_BASE_URL}/admin/wallets/${walletId}`,
         {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -62,7 +62,7 @@ export default function WalletDetailPage() {
       if (!session) return;
 
       const response = await fetch(
-        `http://localhost:3333/api/v1/admin/wallets/${walletId}/freeze`,
+        `${API_BASE_URL}/admin/wallets/${walletId}/freeze`,
         {
           method: 'POST',
           headers: {
@@ -92,7 +92,7 @@ export default function WalletDetailPage() {
       if (!session) return;
 
       const response = await fetch(
-        `http://localhost:3333/api/v1/admin/wallets/${walletId}/unfreeze`,
+        `${API_BASE_URL}/admin/wallets/${walletId}/unfreeze`,
         {
           method: 'POST',
           headers: {

@@ -1,7 +1,26 @@
 import request from 'supertest';
 import { app } from '../main';
 import { prisma } from '../lib/prisma';
-import { createHash } from 'crypto';
+
+// Mock @supabase/supabase-js entirely to prevent real network calls
+jest.mock('@supabase/supabase-js', () => ({
+  createClient: jest.fn(() => ({
+    auth: {
+      getUser: jest.fn(() => Promise.resolve({
+        data: {
+          user: {
+            id: 'test-admin-uuid',
+            email: 'admin@test.com',
+            app_metadata: {
+              tenantId: 'default',
+            },
+          },
+        },
+        error: null,
+      })),
+    },
+  })),
+}));
 
 describe('Admin API Endpoints', () => {
   let adminAuthToken: string;
@@ -32,12 +51,20 @@ describe('Admin API Endpoints', () => {
     });
     testWalletId = wallet.id;
 
-    // Create admin user for testing
-    await prisma.adminUser.create({
-      data: {
-        tenantId: testTenantId,
-        supabaseUid: 'test-admin-uid',
-        email: 'admin@example.com',
+    // Seed AdminUser record matching the mocked Supabase user ID
+    // This prevents the "Ghost Admin" issue where the middleware can't find the user
+    await prisma.adminUser.upsert({
+      where: {
+        tenantId_supabaseUid: {
+          tenantId: 'default',
+          supabaseUid: 'test-admin-uuid',
+        },
+      },
+      update: {},
+      create: {
+        tenantId: 'default',
+        supabaseUid: 'test-admin-uuid',
+        email: 'admin@test.com',
         role: 'superadmin',
         isActive: true,
       },
@@ -53,6 +80,7 @@ describe('Admin API Endpoints', () => {
     await prisma.transaction.deleteMany({ where: { tenantId: testTenantId } });
     await prisma.wallet.deleteMany({ where: { tenantId: testTenantId } });
     await prisma.adminUser.deleteMany({ where: { tenantId: testTenantId } });
+    await prisma.adminUser.deleteMany({ where: { tenantId: 'default', supabaseUid: 'test-admin-uuid' } });
     await prisma.tenant.delete({ where: { id: testTenantId } });
   });
 

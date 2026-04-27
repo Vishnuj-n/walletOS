@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { supabase, API_BASE_URL } from '../../../lib/supabase';
 
 export default function TenantsPage() {
   const [name, setName] = useState('');
@@ -24,7 +24,7 @@ export default function TenantsPage() {
         throw new Error('Not authenticated');
       }
 
-      const response = await fetch('http://localhost:3333/api/v1/admin/tenants', {
+      const response = await fetch(`${API_BASE_URL}/admin/tenants`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -55,9 +55,13 @@ export default function TenantsPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    alert('Copied to clipboard!');
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Copied to clipboard!');
+    } catch (err) {
+      alert('Failed to copy to clipboard. Please copy manually.');
+    }
   };
 
   return (

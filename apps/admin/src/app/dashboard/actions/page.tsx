@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { supabase } from '../../../lib/supabase';
+import { supabase, API_BASE_URL } from '../../../lib/supabase';
 
 export default function ManualActionsPage() {
   const searchParams = useSearchParams();
@@ -33,7 +33,7 @@ export default function ManualActionsPage() {
       let body: any = {};
 
       if (actionType === 'credit') {
-        endpoint = 'http://localhost:3333/api/v1/admin/transactions/credit';
+        endpoint = `${API_BASE_URL}/admin/transactions/credit`;
         body = {
           wallet_id: walletId,
           amount: amount,
@@ -42,7 +42,7 @@ export default function ManualActionsPage() {
           reason,
         };
       } else if (actionType === 'debit') {
-        endpoint = 'http://localhost:3333/api/v1/admin/transactions/debit';
+        endpoint = `${API_BASE_URL}/admin/transactions/debit`;
         body = {
           wallet_id: walletId,
           amount: amount,
@@ -51,7 +51,7 @@ export default function ManualActionsPage() {
           reason,
         };
       } else if (actionType === 'reversal') {
-        endpoint = `http://localhost:3333/api/v1/admin/transactions/${walletId}/reverse`;
+        endpoint = `${API_BASE_URL}/admin/transactions/${walletId}/reverse`;
         body = { reason };
       }
 

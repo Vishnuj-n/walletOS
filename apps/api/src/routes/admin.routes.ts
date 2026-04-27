@@ -3,6 +3,7 @@ import { adminAuthMiddleware, requireAdminRole } from '../middleware/adminAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
+import { freezeWallet, unfreezeWallet } from '../services/wallet.service';
 
 const router = Router();
 
@@ -30,14 +31,16 @@ router.get(
       ];
     }
 
+    const cappedLimit = Number(limit) > 100 ? 100 : Number(limit);
     const wallets = await prisma.wallet.findMany({
       where,
-      take: Number(limit) > 100 ? 100 : Number(limit),
+      take: cappedLimit,
+      skip: after ? 1 : 0,
       cursor: after ? { id: after as string } : undefined,
       orderBy: { id: 'desc' },
     });
 
-    const nextCursor = wallets.length === Number(limit) ? wallets[wallets.length - 1].id : null;
+    const nextCursor = wallets.length === cappedLimit ? wallets[wallets.length - 1].id : null;
 
     res.json({
       data: wallets.map(w => ({
@@ -449,31 +452,7 @@ router.post(
       throw new AppError(409, ErrorCode.WALLET_ALREADY_CLOSED, 'Cannot freeze a closed wallet');
     }
 
-    const updatedWallet = await prisma.$transaction(async (tx) => {
-      const updated = await tx.wallet.update({
-        where: { id: walletId },
-        data: { status: 'frozen' },
-      });
-
-      // Create audit log
-      await tx.auditLog.create({
-        data: {
-          tenantId,
-          entityType: 'wallet',
-          entityId: walletId,
-          action: 'wallet.frozen',
-          changes: {
-            previous_status: wallet.status,
-            new_status: 'frozen',
-            reason: reason,
-          },
-          actorId: adminEmail,
-          actorType: 'admin',
-        },
-      });
-
-      return updated;
-    });
+    const updatedWallet = await freezeWallet(walletId, tenantId, wallet.isSandbox, reason);
 
     res.json({
       wallet_id: updatedWallet.id,
@@ -517,31 +496,7 @@ router.post(
       throw new AppError(409, ErrorCode.INVALID_OPERATION, 'Wallet is not frozen');
     }
 
-    const updatedWallet = await prisma.$transaction(async (tx) => {
-      const updated = await tx.wallet.update({
-        where: { id: walletId },
-        data: { status: 'active' },
-      });
-
-      // Create audit log
-      await tx.auditLog.create({
-        data: {
-          tenantId,
-          entityType: 'wallet',
-          entityId: walletId,
-          action: 'wallet.unfrozen',
-          changes: {
-            previous_status: wallet.status,
-            new_status: 'active',
-            reason: reason,
-          },
-          actorId: adminEmail,
-          actorType: 'admin',
-        },
-      });
-
-      return updated;
-    });
+    const updatedWallet = await unfreezeWallet(walletId, tenantId, wallet.isSandbox, reason);
 
     res.json({
       wallet_id: updatedWallet.id,
@@ -571,7 +526,7 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Missing required field: name');
     }
 
-    const { createHash, randomBytes } = await import('crypto');
+    const { randomBytes } = await import('crypto');
     const { default: bcrypt } = await import('bcrypt');
 
     // Generate API keys
@@ -666,14 +621,35 @@ router.get(
       if (to) where.timestamp.lte = new Date(to as string);
     }
 
+    const cappedLimit = Number(limit) > 100 ? 100 : Number(limit);
+
+    // Parse cursor to extract timestamp and id for stable pagination
+    if (after) {
+      const cursorLog = await prisma.auditLog.findUnique({
+        where: { id: after as string },
+        select: { timestamp: true, id: true },
+      });
+
+      if (cursorLog) {
+        where.OR = [
+          { timestamp: { lt: cursorLog.timestamp } },
+          {
+            AND: [
+              { timestamp: cursorLog.timestamp },
+              { id: { lt: cursorLog.id } },
+            ],
+          },
+        ];
+      }
+    }
+
     const auditLogs = await prisma.auditLog.findMany({
       where,
-      take: Number(limit) > 100 ? 100 : Number(limit),
-      cursor: after ? { id: after as string } : undefined,
-      orderBy: { timestamp: 'desc' },
+      take: cappedLimit,
+      orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
     });
 
-    const nextCursor = auditLogs.length === Number(limit) ? auditLogs[auditLogs.length - 1].id : null;
+    const nextCursor = auditLogs.length === cappedLimit ? auditLogs[auditLogs.length - 1].id : null;
 
     res.json({
       data: auditLogs.map(log => ({
