@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { Decimal } from '@prisma/client/runtime/library';
+import { Prisma } from '@prisma/client';
 import { adminAuthMiddleware, requireAdminRole } from '../middleware/adminAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
@@ -24,8 +25,8 @@ router.get(
 
     const where: Prisma.WalletWhereInput = { tenantId, isSandbox };
 
-    if (status) where.status = status;
-    if (currency) where.currency = currency;
+    if (status) where.status = status as any;
+    if (currency) where.currency = Array.isArray(currency) ? currency[0] : currency;
     if (search) {
       where.OR = [
         { externalUserId: { contains: search as string, mode: 'insensitive' } },
@@ -230,6 +231,7 @@ router.post(
       reference_id: result.referenceId,
       is_sandbox: wallet.isSandbox,
       metadata: result.metadata,
+      description: (result.metadata as any)?.description,
       created_at: result.createdAt,
     });
   })
@@ -278,7 +280,6 @@ router.post(
           where: {
             tenantId,
             idempotencyKey,
-            isSandbox,
           },
         });
 
@@ -376,6 +377,7 @@ router.post(
       reference_id: result.referenceId,
       is_sandbox: wallet.isSandbox,
       metadata: result.metadata,
+      description: (result.metadata as any)?.description,
       created_at: result.createdAt,
     });
   })
@@ -437,7 +439,6 @@ router.post(
           where: {
             tenantId,
             idempotencyKey,
-            isSandbox,
           },
         });
 
@@ -841,9 +842,9 @@ router.get(
 
     const where: Prisma.AuditLogWhereInput = { tenantId, isSandbox };
 
-    if (wallet_id) where.entityId = wallet_id;
-    if (actor) where.actorId = actor;
-    if (action) where.action = action;
+    if (wallet_id) where.entityId = Array.isArray(wallet_id) ? wallet_id[0] : wallet_id;
+    if (actor) where.actorId = Array.isArray(actor) ? actor[0] : actor;
+    if (action) where.action = Array.isArray(action) ? action[0] : action;
     if (from || to) {
       where.timestamp = {};
       if (from) where.timestamp.gte = new Date(from as string);
