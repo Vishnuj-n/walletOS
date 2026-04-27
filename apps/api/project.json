@@ -80,6 +80,22 @@
           "envFile": "{workspaceRoot}/.env.test"
         }
       }
+    },
+    "migrate-dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx prisma migrate dev",
+        "cwd": "{projectRoot}",
+        "envFile": "{workspaceRoot}/.env"
+      }
+    },
+    "migrate-test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx prisma migrate dev",
+        "cwd": "{projectRoot}",
+        "envFile": "{workspaceRoot}/.env.test"
+      }
     }
   }
 }

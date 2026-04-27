@@ -2,30 +2,8 @@ import request from 'supertest';
 import { app } from '../main';
 import { prisma } from '../lib/prisma';
 
-// Mock @supabase/supabase-js for fast unit tests
+// Note: @supabase/supabase-js is mocked in setup.ts to ensure the middleware uses the mocked client
 // For integration tests with real Supabase, set environment variable TEST_REAL_SUPABASE=true
-const useRealSupabase = process.env.TEST_REAL_SUPABASE === 'true';
-
-if (!useRealSupabase) {
-  jest.mock('@supabase/supabase-js', () => ({
-    createClient: jest.fn(() => ({
-      auth: {
-        getUser: jest.fn(() => Promise.resolve({
-          data: {
-            user: {
-              id: 'test-admin-uuid',
-              email: 'admin@test.com',
-              app_metadata: {
-                tenantId: 'default',
-              },
-            },
-          },
-          error: null,
-        })),
-      },
-    })),
-  }));
-}
 
 describe('Admin API Endpoints', () => {
   let adminAuthToken: string;

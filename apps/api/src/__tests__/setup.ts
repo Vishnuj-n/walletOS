@@ -1,8 +1,41 @@
 /**
  * Test Setup
- * 
+ *
  * Global test configuration and database setup for API tests.
  */
+
+// Mock @supabase/supabase-js BEFORE any imports that use it
+// This ensures the middleware uses the mocked client instead of the real one
+const useRealSupabase = process.env.TEST_REAL_SUPABASE === 'true';
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - jest global is available at runtime
+if (!useRealSupabase) {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore - jest global is available at runtime
+  jest.mock('@supabase/supabase-js', () => ({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore - jest global is available at runtime
+    createClient: jest.fn(() => ({
+      auth: {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore - jest global is available at runtime
+        getUser: jest.fn(() => Promise.resolve({
+          data: {
+            user: {
+              id: 'test-admin-uuid',
+              email: 'admin@test.com',
+              app_metadata: {
+                tenantId: 'default',
+              },
+            },
+          },
+          error: null,
+        })),
+      },
+    })),
+  }));
+}
 
 import { prisma } from '../lib/prisma';
 
