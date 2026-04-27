@@ -80,15 +80,17 @@ Replace `postgres` with your actual app DB role if different.
 Open three terminals from the repo root:
 
 ```bash
-# Terminal 1 — API
-npx nx run @walletOS/api:serve
+# Terminal 1 — API (loads .env)
+npx dotenv-cli -e apps/api/.env -- npx nx run @walletOS/api:serve
 
-# Terminal 2 — User UI
+# Terminal 2 — User UI (loads .env.local)
 npx nx run web:serve
 
-# Terminal 3 — Admin dashboard
+# Terminal 3 — Admin dashboard (loads .env.local)
 npx nx run admin:serve
 ```
+
+> **Note:** Use `nx serve <app>` for quick local development. Use `npx nx run @walletOS/<app>:serve` in workspace scripts or CI for explicit namespacing.
 
 | App | URL |
 |---|---|
@@ -190,15 +192,17 @@ cd apps/api && npx prisma migrate dev --name <migration-name>
 
 ## Running the API
 
-**Development mode:**
+**Development mode** (loads `.env.development`):
 ```bash
 npx dotenv-cli -e .env.development -- nx serve api
 ```
 
-**Production mode:**
+**Production mode** (loads `.env.production`):
 ```bash
 npx dotenv-cli -e .env.production -- nx serve api
 ```
+
+> **Note:** Use `nx serve api` for local development. Use `npx nx run @walletOS/api:serve` in CI or workspace scripts. Prefix with `npx dotenv-cli -e <env-file> --` when environment variables need to be loaded.
 
 The API will be available at `http://localhost:3333`
 
