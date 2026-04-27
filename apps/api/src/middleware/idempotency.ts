@@ -5,19 +5,15 @@ import { AppError, ErrorCode } from './errorHandler';
 
 /**
  * Compute request fingerprint for enhanced idempotency
+ * Uses canonical body serialization and excludes sensitive headers
  */
 function computeRequestFingerprint(req: Request): string {
-  const fingerprintData = {
-    method: req.method,
-    url: req.url,
-    body: req.body,
-    headers: {
-      'content-type': req.headers['content-type'],
-      'x-api-key': req.headers['x-api-key'],
-    },
-  };
+  // Canonicalize body by sorting keys for consistent hashing
+  const canonicalBody = req.body ? JSON.stringify(req.body, Object.keys(req.body).sort()) : '{}';
   
-  return createHash('sha256').update(JSON.stringify(fingerprintData)).digest('hex');
+  const fingerprintData = `${req.tenantId}|${req.method}|${req.url}|${canonicalBody}`;
+  
+  return createHash('sha256').update(fingerprintData).digest('hex');
 }
 
 /**
@@ -69,6 +65,9 @@ export async function idempotencyMiddleware(
         createdAt: {
           gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
         },
+      },
+      orderBy: {
+        createdAt: 'asc',
       },
       include: {
         wallet: true,
@@ -143,7 +142,30 @@ export async function idempotencyMiddleware(
         }
       }
 
-      // Fallback to transaction-based response
+      // Fallback to transaction-based response (legacy only)
+      const metadata = existingTransaction.metadata as any;
+      const displayIdempotencyKey = metadata?.rawIdempotencyKey ?? idempotencyKey;
+
+      // For reversals, include original_tx_id
+      if (existingTransaction.type === 'reversal' && metadata?.originalTxId) {
+        res.setHeader('X-Idempotency-Cache', 'Hit');
+        res.status(201).json({
+          transaction_id: existingTransaction.id,
+          wallet_id: existingTransaction.walletId,
+          type: existingTransaction.type,
+          amount: existingTransaction.amount.toFixed(4),
+          balance_before: existingTransaction.balanceBefore.toFixed(4),
+          balance_after: existingTransaction.balanceAfter.toFixed(4),
+          description: metadata?.description || '',
+          reference_id: existingTransaction.referenceId,
+          idempotency_key: displayIdempotencyKey,
+          original_tx_id: metadata.originalTxId,
+          created_at: existingTransaction.createdAt,
+        });
+        return;
+      }
+
+      // Standard single transaction response
       res.setHeader('X-Idempotency-Cache', 'Hit');
       res.status(201).json({
         transaction_id: existingTransaction.id,
@@ -152,10 +174,9 @@ export async function idempotencyMiddleware(
         amount: existingTransaction.amount.toFixed(4),
         balance_before: existingTransaction.balanceBefore.toFixed(4),
         balance_after: existingTransaction.balanceAfter.toFixed(4),
-        description: (existingTransaction.metadata as any)?.description || '',
+        description: metadata?.description || '',
         reference_id: existingTransaction.referenceId,
-        idempotency_key: existingTransaction.idempotencyKey,
-        metadata: existingTransaction.metadata,
+        idempotency_key: displayIdempotencyKey,
         created_at: existingTransaction.createdAt,
       });
       return;

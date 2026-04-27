@@ -11,6 +11,19 @@ import request from 'supertest';
 import { createTestApp } from './utils/app';
 import { createTestSetup, cleanupTestData, disconnectPrisma } from './utils/test-helpers';
 
+interface Transaction {
+  type: 'credit' | 'debit' | 'reversal';
+  amount: string;
+}
+
+interface WalletResponse {
+  balance: string;
+}
+
+interface TransactionsResponse {
+  data: Transaction[];
+}
+
 describe('Concurrency Tests', () => {
   const app = createTestApp();
 
@@ -69,17 +82,17 @@ describe('Concurrency Tests', () => {
         .set('x-api-key', apiKey.plainKey);
 
       expect(transactionsResponse.status).toBe(200);
-      const transactions = transactionsResponse.body.data;
-      
+      const transactions: Transaction[] = transactionsResponse.body.data;
+
       // Calculate expected balance: initial (0) + credit (1000) - debits (10 * 50) = 500
       const creditSum = transactions
-        .filter(tx => tx.type === 'credit')
-        .reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
-      
+        .filter((tx: Transaction) => tx.type === 'credit')
+        .reduce((sum: number, tx: Transaction) => sum + parseFloat(tx.amount), 0);
+
       const debitSum = transactions
-        .filter(tx => tx.type === 'debit')
-        .reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
-      
+        .filter((tx: Transaction) => tx.type === 'debit')
+        .reduce((sum: number, tx: Transaction) => sum + parseFloat(tx.amount), 0);
+
       const expectedBalance = creditSum - debitSum;
       expect(expectedBalance).toBe(500);
       expect(parseFloat(walletResponse.body.balance)).toBe(expectedBalance);
@@ -120,22 +133,19 @@ describe('Concurrency Tests', () => {
 
       const responses = await Promise.all(debitPromises);
 
-      // Some should succeed, some should fail with insufficient balance
+      // Enforce deterministic serialization: exactly 6 succeed, 4 fail
       const successCount = responses.filter(r => r.status === 201).length;
       const failureCount = responses.filter(r => r.status === 422).length;
 
-      expect(successCount + failureCount).toBe(10);
-      expect(successCount).toBeGreaterThan(0);
-      expect(failureCount).toBeGreaterThan(0);
+      expect(successCount).toBe(6);
+      expect(failureCount).toBe(4);
 
-      // Final balance should be >= 0 and <= 300
+      // Final balance should be 0 (300 - 6 * 50 = 0)
       const walletResponse = await request(app)
         .get(`/api/v1/wallets/${wallet.id}`)
         .set('x-api-key', apiKey.plainKey);
 
-      const finalBalance = parseFloat(walletResponse.body.balance);
-      expect(finalBalance).toBeGreaterThanOrEqual(0);
-      expect(finalBalance).toBeLessThanOrEqual(300);
+      expect(walletResponse.body.balance).toBe('0.0000');
 
       await cleanupTestData(tenant.id);
     });

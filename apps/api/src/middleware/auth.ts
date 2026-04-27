@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createHash } from 'crypto';
 import { prisma } from '../lib/prisma';
+import { AppError, ErrorCode } from './errorHandler';
 
 export async function apiKeyAuthMiddleware(
   req: Request,
@@ -10,13 +11,7 @@ export async function apiKeyAuthMiddleware(
   const apiKey = req.headers['x-api-key'] as string;
 
   if (!apiKey) {
-    res.status(401).json({
-      error: {
-        message: 'API key is required',
-        requestId: req.id,
-      },
-    });
-    return;
+    return next(new AppError(401, ErrorCode.VALIDATION_ERROR, 'API key is required'));
   }
 
   // Hash the provided API key using SHA-256
@@ -30,13 +25,7 @@ export async function apiKeyAuthMiddleware(
     });
 
     if (!apiKeyRecord || !apiKeyRecord.isActive) {
-      res.status(401).json({
-        error: {
-          message: 'Invalid or inactive API key',
-          requestId: req.id,
-        },
-      });
-      return;
+      return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Invalid or inactive API key'));
     }
 
     // Attach tenant info to request
@@ -46,12 +35,6 @@ export async function apiKeyAuthMiddleware(
 
     next();
   } catch (error) {
-    console.error(`[${req.id}] Error authenticating API key:`, error);
-    res.status(500).json({
-      error: {
-        message: 'Authentication error',
-        requestId: req.id,
-      },
-    });
+    return next(new AppError(500, ErrorCode.INTERNAL_ERROR, 'Authentication error'));
   }
 }

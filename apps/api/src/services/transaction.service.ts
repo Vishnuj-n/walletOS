@@ -205,30 +205,13 @@ export async function transferBetweenWallets(params: TransferParams) {
     const sortedWalletIds = [params.fromWalletId, params.toWalletId].sort();
     const [firstWalletId, secondWalletId] = sortedWalletIds;
 
-    // Lock both wallets in sorted order
-    await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${firstWalletId} AND "tenantId" = ${params.tenantId} AND "isSandbox" = ${params.isSandbox} FOR UPDATE`;
-    await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${secondWalletId} AND "tenantId" = ${params.tenantId} AND "isSandbox" = ${params.isSandbox} FOR UPDATE`;
+    // Lock both wallets in sorted order using lockWallet helper
+    const wallet1 = await lockWallet(tx, firstWalletId, params.tenantId, params.isSandbox);
+    const wallet2 = await lockWallet(tx, secondWalletId, params.tenantId, params.isSandbox);
 
-    // Fetch both wallets
-    const fromWallet = await tx.wallet.findFirst({
-      where: {
-        id: params.fromWalletId,
-        tenantId: params.tenantId,
-        isSandbox: params.isSandbox,
-      },
-    });
-
-    const toWallet = await tx.wallet.findFirst({
-      where: {
-        id: params.toWalletId,
-        tenantId: params.tenantId,
-        isSandbox: params.isSandbox,
-      },
-    });
-
-    if (!fromWallet || !toWallet) {
-      throw new AppError(404, ErrorCode.NOT_FOUND, 'One or both wallets not found');
-    }
+    // Identify which is from and which is to wallet
+    const fromWallet = wallet1.id === params.fromWalletId ? wallet1 : wallet2;
+    const toWallet = wallet1.id === params.toWalletId ? wallet1 : wallet2;
 
     // Check currency match
     if (fromWallet.currency !== toWallet.currency) {
@@ -356,7 +339,10 @@ export async function reverseTransaction(params: ReverseParams) {
       throw new AppError(409, ErrorCode.CANNOT_REVERSE_REVERSAL, 'Cannot reverse a reversal transaction');
     }
 
-    // Check for existing reversal
+    // Lock the wallet row with proper tenant and sandbox validation
+    const lockedWallet = await lockWallet(tx, originalTransaction.walletId, params.tenantId, params.isSandbox);
+
+    // Check for existing reversal (after lock to prevent race)
     const existingReversal = await tx.transaction.findFirst({
       where: {
         tenantId: params.tenantId,
@@ -374,9 +360,6 @@ export async function reverseTransaction(params: ReverseParams) {
       }
       throw new AppError(409, ErrorCode.ALREADY_REVERSED, 'Transaction already reversed');
     }
-
-    // Lock the wallet row with proper tenant and sandbox validation
-    const lockedWallet = await lockWallet(tx, originalTransaction.walletId, params.tenantId, params.isSandbox);
 
     // Validate wallet status using fresh locked wallet
     validateWalletForTransaction(lockedWallet);
@@ -484,7 +467,7 @@ export async function listTransactions(params: {
   limit?: number;
   after?: string;
 }) {
-  let finalLimit = Math.max(1, Math.min(params.limit ?? 20, 1000));
+  const finalLimit = Math.max(1, Math.min(params.limit ?? 20, 1000));
   const where: any = {
     tenantId: params.tenantId,
   };

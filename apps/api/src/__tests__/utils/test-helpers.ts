@@ -5,9 +5,8 @@
  */
 
 import { PrismaClient, KeyScope } from '@prisma/client';
-import { createHash } from 'crypto';
-
-const prisma = new PrismaClient();
+import { createHash, randomBytes } from 'crypto';
+import { prisma } from '../../lib/prisma';
 
 /**
  * Disconnect Prisma client - useful for test cleanup
@@ -46,7 +45,7 @@ export interface TestWallet {
  * Create a test tenant
  */
 export async function createTestTenant(name = 'Test Tenant'): Promise<TestTenant> {
-  const randomSuffix = Math.random().toString(36).substring(7);
+  const randomSuffix = randomBytes(8).toString('hex').slice(0, 8);
   const tenant = await prisma.tenant.create({
     data: {
       name,
@@ -68,7 +67,7 @@ export async function createTestApiKey(
   scope: KeyScope = 'read_write',
   isSandbox = true
 ): Promise<TestApiKey> {
-  const plainKey = `wlt_test_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  const plainKey = `wlt_test_${Date.now()}_${randomBytes(8).toString('hex').slice(0, 8)}`;
   const keyHash = createHash('sha256').update(plainKey).digest('hex');
   const prefix = plainKey.substring(0, 12);
 
@@ -110,7 +109,7 @@ export async function createTestWallet(
       externalUserId,
       currency,
       label,
-      balance: 0,
+      balance: "0",
       status: 'active',
       isSandbox,
     },

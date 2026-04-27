@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
-import { Prisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 /**
  * Wallet Service
@@ -29,50 +29,57 @@ export interface UpdateWalletParams {
  * Enforces unique constraint on (tenantId, externalUserId, isSandbox)
  */
 export async function createWallet(params: CreateWalletParams) {
-  return await prisma.$transaction(async (tx) => {
-    // Check if wallet already exists
-    const existingWallet = await tx.wallet.findFirst({
-      where: {
-        tenantId: params.tenantId,
-        externalUserId: params.externalUserId,
-        isSandbox: params.isSandbox,
-      },
-    });
-
-    if (existingWallet) {
-      throw new AppError(409, ErrorCode.WALLET_ALREADY_EXISTS, 'Wallet already exists for this user in this tenant and environment');
-    }
-
-    // Create wallet
-    const wallet = await tx.wallet.create({
-      data: {
-        tenantId: params.tenantId,
-        externalUserId: params.externalUserId,
-        currency: params.currency,
-        label: params.label,
-        metadata: params.metadata,
-        isSandbox: params.isSandbox,
-        balance: 0,
-      },
-    });
-
-    // Create audit log
-    await tx.auditLog.create({
-      data: {
-        tenantId: params.tenantId,
-        entityType: 'Wallet',
-        entityId: wallet.id,
-        action: 'wallet.created',
-        changes: {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // Check if wallet already exists
+      const existingWallet = await tx.wallet.findFirst({
+        where: {
+          tenantId: params.tenantId,
           externalUserId: params.externalUserId,
-          currency: params.currency,
           isSandbox: params.isSandbox,
         },
-      },
-    });
+      });
 
-    return wallet;
-  }, { timeout: 20000 });
+      if (existingWallet) {
+        throw new AppError(409, ErrorCode.WALLET_ALREADY_EXISTS, 'Wallet already exists for this user in this tenant and environment');
+      }
+
+      // Create wallet
+      const wallet = await tx.wallet.create({
+        data: {
+          tenantId: params.tenantId,
+          externalUserId: params.externalUserId,
+          currency: params.currency,
+          label: params.label,
+          metadata: params.metadata,
+          isSandbox: params.isSandbox,
+          balance: 0,
+        },
+      });
+
+      // Create audit log
+      await tx.auditLog.create({
+        data: {
+          tenantId: params.tenantId,
+          entityType: 'Wallet',
+          entityId: wallet.id,
+          action: 'wallet.created',
+          changes: {
+            externalUserId: params.externalUserId,
+            currency: params.currency,
+            isSandbox: params.isSandbox,
+          },
+        },
+      });
+
+      return wallet;
+    }, { timeout: 20000 });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      throw new AppError(409, ErrorCode.WALLET_ALREADY_EXISTS, 'Wallet already exists for this user in this tenant and environment');
+    }
+    throw error;
+  }
 }
 
 /**
@@ -246,12 +253,21 @@ export async function unfreezeWallet(
       throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
     }
 
+    // Check wallet status before updating
+    if (wallet.status === 'active') {
+      return wallet; // Already active, no change needed
+    }
+
+    if (wallet.status === 'closed') {
+      throw new AppError(409, ErrorCode.WALLET_CLOSED, 'Cannot unfreeze a closed wallet');
+    }
+
     const updatedWallet = await tx.wallet.update({
       where: { id: walletId },
       data: { status: 'active' },
     });
 
-    // Create audit log
+    // Create audit log only when status actually changes
     await tx.auditLog.create({
       data: {
         tenantId,
@@ -334,11 +350,11 @@ export async function closeWallet(
  * Uses SELECT FOR UPDATE to prevent concurrent modifications
  */
 export async function lockWallet(
-  tx: any,
+  tx: Prisma.TransactionClient,
   walletId: string,
   tenantId: string,
   isSandbox: boolean
-): Promise<any> {
+) {
   // Lock the wallet row
   await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${walletId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
 
