@@ -73,7 +73,11 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@supabase/auth-helpers-nextjs": "^0.15.0",
+    "@supabase/supabase-js": "^2.104.1",
+    "@types/bcrypt": "^6.0.0",
     "axios": "^1.6.0",
+    "bcrypt": "^6.0.0",
     "express": "^4.21.2",
     "next": "~16.1.6",
     "react": "^19.0.0",

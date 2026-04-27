@@ -1,3 +1,5 @@
+import { AdminRole } from '@prisma/client';
+
 declare global {
   namespace Express {
     interface Request {
@@ -8,6 +10,13 @@ declare global {
       idempotencyKey?: string;
       requestFingerprint?: string;
       cachedResponse?: { status: number; body: unknown };
+      // Admin auth properties
+      adminUser?: {
+        id: string;
+        email: string;
+        tenantId: string;
+        role: AdminRole;
+      };
     }
   }
 }
