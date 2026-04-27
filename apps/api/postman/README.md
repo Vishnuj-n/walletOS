@@ -5,9 +5,14 @@ This directory contains Postman collections for manual regression testing of the
 ## Setup
 
 1. Import the collection file `WalletOS_API_Tests.postman_collection.json` into Postman
-2. Configure the following environment variables:
+2. Generate an API key for testing:
+   ```bash
+   npx dotenv-cli -e .env.test -- npx ts-node apps/api/src/scripts/generate-key.ts [optional-tenant-name]
+   ```
+   This will create a tenant and output the plain API key. Copy this key for use in Postman.
+3. Configure the following environment variables:
    - `baseUrl`: The base URL of your API (default: `http://localhost:3333`)
-   - `apiKey`: Your test API key (generate from your tenant)
+   - `apiKey`: Your test API key (from the script output above)
    - `targetWalletId`: Set this to a valid wallet ID for transfer tests
    - `walletId`: Auto-populated after creating a wallet
    - `transactionId`: Auto-populated after creating a transaction

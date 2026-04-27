@@ -188,6 +188,69 @@ cd apps/api && npx prisma migrate dev --name <migration-name>
 
 ---
 
+## Running the API
+
+**Development mode:**
+```bash
+npx dotenv-cli -e .env.development -- nx serve api
+```
+
+**Production mode:**
+```bash
+npx dotenv-cli -e .env.production -- nx serve api
+```
+
+The API will be available at `http://localhost:3333`
+
+---
+
+## Testing
+
+**Run all API tests:**
+```bash
+npx dotenv-cli -e .env.test -- npx nx test api --silent
+```
+
+**Run tests in band (sequential execution):**
+```bash
+npx dotenv-cli -e .env.test -- npx nx test api --silent --runInBand
+```
+
+**Limiting Prisma connections for testing:**
+
+To limit Prisma database connections to 3 during testing, add `connection_limit=3` to your `DATABASE_URL` in `.env.test`:
+
+```
+DATABASE_URL="postgresql://user:password@localhost:6543/postgres?pgbouncer=true&connection_limit=3"
+```
+
+Or run with a custom connection limit:
+```bash
+DATABASE_URL="postgresql://user:password@localhost:6543/postgres?pgbouncer=true&connection_limit=3" npx nx test api
+```
+
+---
+
+## Generating API Keys for Testing
+
+To generate API keys for use with Postman or manual testing:
+
+```bash
+# Generate with default tenant name
+npx dotenv-cli -e .env.test -- npx ts-node apps/api/src/scripts/generate-key.ts
+
+# Generate with custom tenant name
+npx dotenv-cli -e .env.test -- npx ts-node apps/api/src/scripts/generate-key.ts "My Tenant"
+```
+
+The script will output:
+- Tenant name
+- Plain API key (use this in Postman or API requests)
+
+The generated key has `read_write` scope and is in sandbox mode.
+
+---
+
 ## Docs
 
 - [Requirements](./docs/Requirements.md) — full feature list with P0/P1/P2 tags

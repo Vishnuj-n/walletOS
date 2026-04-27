@@ -29,6 +29,7 @@ describe('Audit Tests', () => {
       const response = await request(app)
         .post('/api/v1/wallets')
         .set('x-api-key', apiKey.plainKey)
+        .set('Idempotency-Key', `audit_wallet_create_${Date.now()}_${Math.random()}`)
         .send({
           external_user_id: walletUserId,
           currency: 'INR',

@@ -4,7 +4,7 @@
  * Utility functions for setting up test data and making API requests.
  */
 
-import { PrismaClient, KeyScope, Decimal } from '@prisma/client';
+import { PrismaClient, KeyScope } from '@prisma/client';
 import { createHash } from 'crypto';
 
 const prisma = new PrismaClient();

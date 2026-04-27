@@ -224,6 +224,9 @@ describe('Idempotency Tests', () => {
       expect(firstResponse.status).toBe(201);
       const firstDebitTxId = firstResponse.body.debit_transaction.transaction_id;
 
+      // Wait 300ms before second request
+      await new Promise(resolve => setTimeout(resolve, 300));
+
       // Second request with same idempotency key
       const secondResponse = await request(app)
         .post('/api/v1/transactions/transfer')
