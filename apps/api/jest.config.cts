@@ -10,4 +10,7 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.ts'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
   testTimeout: 60000,
+  globals: {
+    'process.env.NODE_ENV': 'test',
+  },
 };

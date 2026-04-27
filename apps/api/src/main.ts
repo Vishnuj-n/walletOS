@@ -35,9 +35,13 @@ app.get('/api', (req, res) => {
 app.use(errorHandlerMiddleware);
 
 const port = process.env.PORT || 3333;
-const server = app.listen(port, () => {
-  console.log(`Listening at http://localhost:${port}/api`);
-});
-server.on('error', console.error);
+
+// Only start the server if not in test environment (supertest handles its own server)
+if (process.env.NODE_ENV !== 'test') {
+  const server = app.listen(port, () => {
+    console.log(`Listening at http://localhost:${port}/api`);
+  });
+  server.on('error', console.error);
+}
 
 export { app };

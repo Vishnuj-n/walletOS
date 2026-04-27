@@ -29,9 +29,10 @@ describe('Admin API Endpoints', () => {
   let testTransactionId: string;
 
   beforeAll(async () => {
-    // Create test tenant
+    // Create test tenant with ID 'default' to match the mock Supabase user's app_metadata.tenantId
     const tenant = await prisma.tenant.create({
       data: {
+        id: 'default',
         name: 'Test Admin Tenant',
         contactEmail: 'admin-test@example.com',
       },
@@ -79,8 +80,7 @@ describe('Admin API Endpoints', () => {
     await prisma.auditLog.deleteMany({ where: { tenantId: testTenantId } });
     await prisma.transaction.deleteMany({ where: { tenantId: testTenantId } });
     await prisma.wallet.deleteMany({ where: { tenantId: testTenantId } });
-    await prisma.adminUser.deleteMany({ where: { tenantId: testTenantId } });
-    await prisma.adminUser.deleteMany({ where: { tenantId: 'default', supabaseUid: 'test-admin-uuid' } });
+    await prisma.adminUser.deleteMany({ where: { tenantId: testTenantId, supabaseUid: 'test-admin-uuid' } });
     await prisma.tenant.delete({ where: { id: testTenantId } });
   });
 
