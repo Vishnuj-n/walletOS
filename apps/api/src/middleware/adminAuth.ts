@@ -81,6 +81,7 @@ export async function adminAuthMiddleware(
 
     next();
   } catch (error) {
+    console.error('Authentication error:', error);
     return next(new AppError(500, ErrorCode.INTERNAL_ERROR, 'Authentication error'));
   }
 }

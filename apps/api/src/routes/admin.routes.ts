@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Decimal } from '@prisma/client/runtime/library';
 import { adminAuthMiddleware, requireAdminRole } from '../middleware/adminAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
@@ -32,7 +33,8 @@ router.get(
       ];
     }
 
-    const cappedLimit = Number(limit) > 100 ? 100 : Number(limit);
+    const parsedLimit = Number(limit);
+    const cappedLimit = (!Number.isFinite(parsedLimit) || parsedLimit <= 0) ? 10 : Math.min(Math.floor(parsedLimit), 100);
     const wallets = await prisma.wallet.findMany({
       where,
       take: cappedLimit,
@@ -109,9 +111,9 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Missing required fields: wallet_id, amount, description, reason');
     }
 
-    // Validate amount is a positive finite number
-    const numericAmount = Number(amount);
-    if (!isFinite(numericAmount) || numericAmount <= 0) {
+    // Validate amount is a positive finite number using Decimal
+    const decimalAmount = new Decimal(amount);
+    if (!decimalAmount.isFinite() || decimalAmount.lte(0)) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Amount must be a positive number');
     }
 
@@ -127,32 +129,27 @@ router.post(
       throw new AppError(409, ErrorCode.WALLET_FROZEN, 'Wallet is not active');
     }
 
-    // Check for existing transaction with same idempotency key
-    if (idempotencyKey) {
-      const existingTx = await prisma.transaction.findFirst({
-        where: {
-          tenantId,
-          idempotencyKey,
-        },
-      });
-
-      if (existingTx) {
-        return res.status(200).json({
-          transaction_id: existingTx.id,
-          wallet_id: existingTx.walletId,
-          type: existingTx.type,
-          amount: existingTx.amount.toFixed(4),
-          balance_before: existingTx.balanceBefore.toFixed(4),
-          balance_after: existingTx.balanceAfter.toFixed(4),
-          reference_id: existingTx.referenceId,
-          is_sandbox: wallet.isSandbox,
-          metadata: existingTx.metadata,
-          created_at: existingTx.createdAt,
-        });
-      }
-    }
-
     const result = await prisma.$transaction(async (tx) => {
+      // Check for existing transaction with same idempotency key inside transaction
+      if (idempotencyKey) {
+        const existingTx = await tx.transaction.findFirst({
+          where: {
+            tenantId,
+            idempotencyKey,
+          },
+        });
+
+        if (existingTx) {
+          // Validate that the existing transaction matches the request parameters
+          if (existingTx.walletId !== wallet_id ||
+              !existingTx.amount.equals(decimalAmount) ||
+              existingTx.type !== 'credit' ||
+              (existingTx.metadata as any)?.description !== `${description} (Admin: ${reason})`) {
+            throw new AppError(409, ErrorCode.IDEMPOTENCY_CONFLICT, 'Idempotency key already used with different parameters');
+          }
+          return existingTx;
+        }
+      }
       // Lock wallet row with SELECT FOR UPDATE
       await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${wallet_id} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
 
@@ -166,7 +163,7 @@ router.post(
       }
 
       const balanceBefore = lockedWallet.balance;
-      const balanceAfter = balanceBefore.plus(numericAmount);
+      const balanceAfter = balanceBefore.plus(decimalAmount);
 
       // Create transaction
       const transaction = await tx.transaction.create({
@@ -174,7 +171,7 @@ router.post(
           tenantId,
           walletId: wallet_id,
           type: 'credit',
-          amount: numericAmount,
+          amount: decimalAmount,
           currency: wallet.currency,
           balanceBefore,
           balanceAfter,
@@ -204,7 +201,7 @@ router.post(
           entityId: wallet_id,
           action: 'admin.credit',
           changes: {
-            amount: numericAmount,
+            amount: decimalAmount,
             reason: reason,
             admin: adminEmail,
           },
@@ -249,9 +246,9 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Missing required fields: wallet_id, amount, description, reason');
     }
 
-    // Validate amount is a positive finite number
-    const numericAmount = Number(amount);
-    if (!isFinite(numericAmount) || numericAmount <= 0) {
+    // Validate amount is a positive finite number using Decimal
+    const decimalAmount = new Decimal(amount);
+    if (!decimalAmount.isFinite() || decimalAmount.lte(0)) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Amount must be a positive number');
     }
 
@@ -267,32 +264,27 @@ router.post(
       throw new AppError(409, ErrorCode.WALLET_FROZEN, 'Wallet is not active');
     }
 
-    // Check for existing transaction with same idempotency key
-    if (idempotencyKey) {
-      const existingTx = await prisma.transaction.findFirst({
-        where: {
-          tenantId,
-          idempotencyKey,
-        },
-      });
-
-      if (existingTx) {
-        return res.status(200).json({
-          transaction_id: existingTx.id,
-          wallet_id: existingTx.walletId,
-          type: existingTx.type,
-          amount: existingTx.amount.toFixed(4),
-          balance_before: existingTx.balanceBefore.toFixed(4),
-          balance_after: existingTx.balanceAfter.toFixed(4),
-          reference_id: existingTx.referenceId,
-          is_sandbox: wallet.isSandbox,
-          metadata: existingTx.metadata,
-          created_at: existingTx.createdAt,
-        });
-      }
-    }
-
     const result = await prisma.$transaction(async (tx) => {
+      // Check for existing transaction with same idempotency key inside transaction
+      if (idempotencyKey) {
+        const existingTx = await tx.transaction.findFirst({
+          where: {
+            tenantId,
+            idempotencyKey,
+          },
+        });
+
+        if (existingTx) {
+          // Validate that the existing transaction matches the request parameters
+          if (existingTx.walletId !== wallet_id ||
+              !existingTx.amount.equals(decimalAmount) ||
+              existingTx.type !== 'debit' ||
+              (existingTx.metadata as any)?.description !== `${description} (Admin: ${reason})`) {
+            throw new AppError(409, ErrorCode.IDEMPOTENCY_CONFLICT, 'Idempotency key already used with different parameters');
+          }
+          return existingTx;
+        }
+      }
       // Lock wallet row with SELECT FOR UPDATE
       await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${wallet_id} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
 
@@ -306,7 +298,7 @@ router.post(
       }
 
       const balanceBefore = lockedWallet.balance;
-      const balanceAfter = balanceBefore.minus(numericAmount);
+      const balanceAfter = balanceBefore.minus(decimalAmount);
 
       if (balanceAfter.isNegative()) {
         throw new AppError(422, ErrorCode.INSUFFICIENT_BALANCE, 'Insufficient balance');
@@ -318,7 +310,7 @@ router.post(
           tenantId,
           walletId: wallet_id,
           type: 'debit',
-          amount: numericAmount,
+          amount: decimalAmount,
           currency: wallet.currency,
           balanceBefore,
           balanceAfter,
@@ -347,7 +339,7 @@ router.post(
           entityId: wallet_id,
           action: 'admin.debit',
           changes: {
-            amount: numericAmount,
+            amount: decimalAmount,
             reason: reason,
             admin: adminEmail,
           },
@@ -401,16 +393,22 @@ router.post(
       throw new AppError(404, ErrorCode.NOT_FOUND, 'Transaction not found');
     }
 
-    if (originalTx.type === 'reversal') {
-      throw new AppError(409, ErrorCode.CANNOT_REVERSE_REVERSAL, 'Cannot reverse a reversal');
-    }
-
+    // Load wallet and validate sandbox status immediately to prevent info leakage
     const wallet = await prisma.wallet.findFirst({
-      where: { id: originalTx.walletId, tenantId, isSandbox },
+      where: { id: originalTx.walletId, tenantId },
     });
 
     if (!wallet) {
       throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
+    }
+
+    // Validate sandbox environment matches before proceeding
+    if (wallet.isSandbox !== isSandbox) {
+      throw new AppError(403, ErrorCode.FORBIDDEN, 'Wallet environment mismatch');
+    }
+
+    if (originalTx.type === 'reversal') {
+      throw new AppError(409, ErrorCode.CANNOT_REVERSE_REVERSAL, 'Cannot reverse a reversal');
     }
 
     if (wallet.status !== 'active') {
@@ -812,7 +810,8 @@ router.get(
       if (to) where.timestamp.lte = new Date(to as string);
     }
 
-    const cappedLimit = Number(limit) > 100 ? 100 : Number(limit);
+    const parsedLimit = Number(limit);
+    const cappedLimit = (!Number.isFinite(parsedLimit) || parsedLimit <= 0) ? 10 : Math.min(Math.floor(parsedLimit), 100);
 
     // Parse cursor to extract timestamp and id for stable pagination
     if (after) {

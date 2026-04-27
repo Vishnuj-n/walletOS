@@ -3,13 +3,20 @@
 import { useState } from 'react';
 import { supabase, API_BASE_URL } from '../../../lib/supabase';
 
+interface Tenant {
+  live_key: string;
+  test_key: string;
+  tenant_id: string;
+  created_at: string;
+}
+
 export default function TenantsPage() {
   const [name, setName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [createdTenant, setCreatedTenant] = useState<Record<string, unknown> | null>(null);
+  const [createdTenant, setCreatedTenant] = useState<Tenant | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -194,7 +201,7 @@ export default function TenantsPage() {
         <ul className="text-sm text-blue-700 list-disc list-inside space-y-1">
           <li>Each tenant gets a live and test API key</li>
           <li>Test keys operate in sandbox mode and cannot affect live data</li>
-          <li>API keys are hashed using bcrypt before storage</li>
+          <li>API keys are hashed using SHA-256 before storage</li>
           <li>Tenant creation is logged with your email for audit purposes</li>
         </ul>
       </div>

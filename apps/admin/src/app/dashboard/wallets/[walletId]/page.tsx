@@ -74,7 +74,8 @@ export default function WalletDetailPage() {
       );
 
       if (!response.ok) {
-        throw new Error('Failed to freeze wallet');
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to freeze wallet');
       }
 
       fetchWallet();
@@ -104,7 +105,8 @@ export default function WalletDetailPage() {
       );
 
       if (!response.ok) {
-        throw new Error('Failed to unfreeze wallet');
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to unfreeze wallet');
       }
 
       fetchWallet();

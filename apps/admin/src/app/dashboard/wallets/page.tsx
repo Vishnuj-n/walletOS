@@ -20,10 +20,18 @@ export default function WalletsPage() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [search]);
 
   useEffect(() => {
     fetchWallets();
-  }, [search, statusFilter]);
+  }, [debouncedSearch, statusFilter]);
 
   const fetchWallets = async () => {
     try {
@@ -31,7 +39,7 @@ export default function WalletsPage() {
       if (!session) return;
 
       const params = new URLSearchParams();
-      if (search) params.append('search', search);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       if (statusFilter) params.append('status', statusFilter);
 
       const response = await fetch(
