@@ -4,15 +4,16 @@
     "rootDir": ".",
     "sourceMap": true,
     "declaration": false,
-    "moduleResolution": "node",
+    "moduleResolution": "node16",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "importHelpers": true,
     "target": "es2015",
-    "module": "esnext",
+    "module": "Node16",
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
+    "isolatedModules": true,
     "paths": {}
   },
   "exclude": ["node_modules", "tmp"]

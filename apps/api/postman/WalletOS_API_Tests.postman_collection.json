@@ -1,0 +1,697 @@
+{
+  "info": {
+    "name": "WalletOS API Tests",
+    "description": "Postman collection for manual regression testing of WalletOS API endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3333",
+      "type": "string"
+    },
+    {
+      "key": "apiKey",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "walletId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "transactionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "externalUserId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "targetWalletId",
+      "value": "TARGET_WALLET_ID",
+      "type": "string"
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "{{$randomUUID}}",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Wallet Operations",
+      "item": [
+        {
+          "name": "Create Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_user_id\": \"user_test_{{$timestamp}}\",\n  \"currency\": \"INR\",\n  \"label\": \"Test Wallet\",\n  \"metadata\": {}\n}"
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (pm.response.code === 201) {",
+                    "    const response = pm.response.json();",
+                    "    pm.collectionVariables.set('walletId', response.wallet_id);",
+                    "    pm.collectionVariables.set('externalUserId', response.external_user_id);",
+                    "    console.log('Set walletId:', response.wallet_id);",
+                    "    console.log('Set externalUserId:', response.external_user_id);",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallets"]
+            },
+            "description": "Create a new wallet for a user"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Wallet by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallets/{{walletId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallets", "{{walletId}}"]
+            },
+            "description": "Fetch wallet by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Wallet by External User ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallets/user/{{externalUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallets", "user", "{{externalUserId}}"]
+            },
+            "description": "Fetch wallet by external user ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Wallet",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Updated Label\",\n  \"metadata\": { \"program\": \"loyalty_v2\" }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallets/{{walletId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallets", "{{walletId}}"]
+            },
+            "description": "Update wallet label or metadata"
+          },
+          "response": []
+        },
+        {
+          "name": "Freeze Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Suspected fraudulent activity\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallets/{{walletId}}/freeze",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallets", "{{walletId}}", "freeze"]
+            },
+            "description": "Freeze a wallet"
+          },
+          "response": []
+        },
+        {
+          "name": "Unfreeze Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Investigation concluded, no fraud found\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallets/{{walletId}}/unfreeze",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallets", "{{walletId}}", "unfreeze"]
+            },
+            "description": "Unfreeze a wallet"
+          },
+          "response": []
+        },
+        {
+          "name": "Close Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"User requested account closure\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallets/{{walletId}}/close",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallets", "{{walletId}}", "close"]
+            },
+            "description": "Close a wallet (only when balance is zero)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Transaction Operations",
+      "item": [
+        {
+          "name": "Credit Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "credit_test_{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"wallet_id\": \"{{walletId}}\",\n  \"amount\": 250.00,\n  \"description\": \"Cashback for order #789\",\n  \"reference_id\": \"order_789\",\n  \"metadata\": { \"order_total\": \"2500.00\" }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/credit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions", "credit"]
+            },
+            "description": "Credit a wallet",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (pm.response.code === 201) {",
+                    "    const response = pm.response.json();",
+                    "    pm.collectionVariables.set('transactionId', response.transaction_id);",
+                    "    console.log('Set transactionId:', response.transaction_id);",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          "response": []
+        },
+        {
+          "name": "Debit Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "debit_test_{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"wallet_id\": \"{{walletId}}\",\n  \"amount\": 500.00,\n  \"description\": \"Purchase at checkout #456\",\n  \"reference_id\": \"checkout_456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/debit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions", "debit"]
+            },
+            "description": "Debit a wallet"
+          },
+          "response": []
+        },
+        {
+          "name": "Transfer Between Wallets",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "transfer_test_{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from_wallet_id\": \"{{walletId}}\",\n  \"to_wallet_id\": \"{{targetWalletId}}\",\n  \"amount\": 100.00,\n  \"description\": \"Reward transfer\",\n  \"reference_id\": \"transfer_ref_001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/transfer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions", "transfer"]
+            },
+            "description": "Transfer between two wallets in the same tenant"
+          },
+          "response": []
+        },
+        {
+          "name": "Reverse Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "reverse_test_{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Customer reported incorrect charge\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/{{transactionId}}/reverse",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions", "{{transactionId}}", "reverse"]
+            },
+            "description": "Reverse a credit or debit transaction"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transaction by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/{{transactionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions", "{{transactionId}}"]
+            },
+            "description": "Fetch a single transaction"
+          },
+          "response": []
+        },
+        {
+          "name": "List Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions?wallet_id={{walletId}}&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions"],
+              "query": [
+                {
+                  "key": "wallet_id",
+                  "value": "{{walletId}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "List transactions for a wallet with pagination"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Test Scenarios",
+      "item": [
+        {
+          "name": "Duplicate Wallet Rejection",
+          "item": [
+            {
+              "name": "Create Wallet First Time",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"external_user_id\": \"user_duplicate_test\",\n  \"currency\": \"INR\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wallets",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wallets"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Wallet Second Time (Should Fail)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"external_user_id\": \"user_duplicate_test\",\n  \"currency\": \"INR\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wallets",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wallets"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Insufficient Funds Test",
+          "item": [
+            {
+              "name": "Credit Wallet with Small Amount",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "insufficient_setup_{{$timestamp}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"wallet_id\": \"{{walletId}}\",\n  \"amount\": 100,\n  \"description\": \"Setup credit\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/transactions/credit",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "transactions", "credit"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Debit Larger Amount (Should Fail)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "insufficient_test_{{$timestamp}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"wallet_id\": \"{{walletId}}\",\n  \"amount\": 200,\n  \"description\": \"Test debit\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/transactions/debit",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "transactions", "debit"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Idempotency Test",
+          "item": [
+            {
+              "name": "Credit First Request",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "idempotency_test_key_12345"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"wallet_id\": \"{{walletId}}\",\n  \"amount\": 100,\n  \"description\": \"Idempotency test\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/transactions/credit",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "transactions", "credit"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Credit Second Request Same Key (Should Return Original)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "idempotency_test_key_12345"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"wallet_id\": \"{{walletId}}\",\n  \"amount\": 100,\n  \"description\": \"Idempotency test\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/transactions/credit",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "transactions", "credit"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Frozen Wallet Test",
+          "item": [
+            {
+              "name": "Freeze Wallet",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"Test freeze\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wallets/{{walletId}}/freeze",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wallets", "{{walletId}}", "freeze"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Try Credit to Frozen Wallet (Should Fail)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "frozen_test_{{$timestamp}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"wallet_id\": \"{{walletId}}\",\n  \"amount\": 100,\n  \"description\": \"Test credit\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/transactions/credit",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "transactions", "credit"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Unfreeze Wallet",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"Test unfreeze\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wallets/{{walletId}}/unfreeze",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wallets", "{{walletId}}", "unfreeze"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Invalid Amount Test",
+          "item": [
+            {
+              "name": "Credit with Zero Amount (Should Fail)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "invalid_zero_{{$timestamp}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"wallet_id\": \"{{walletId}}\",\n  \"amount\": 0,\n  \"description\": \"Test credit\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/transactions/credit",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "transactions", "credit"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Credit with Negative Amount (Should Fail)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "invalid_negative_{{$timestamp}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"wallet_id\": \"{{walletId}}\",\n  \"amount\": -100,\n  \"description\": \"Test credit\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/transactions/credit",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "transactions", "credit"]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

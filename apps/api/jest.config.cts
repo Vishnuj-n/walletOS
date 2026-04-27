@@ -7,4 +7,7 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/apps/api',
+  testMatch: ['**/__tests__/**/*.test.ts'],
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
+  testTimeout: 60000,
 };

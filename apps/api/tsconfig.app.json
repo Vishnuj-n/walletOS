@@ -2,10 +2,10 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
-    "module": "commonjs",
+    "module": "Node16",
     "types": ["node", "express"]
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/types/**/*.d.ts"],
   "exclude": [
     "jest.config.ts",
     "jest.config.cts",
