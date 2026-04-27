@@ -3,11 +3,10 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "db:migrate:dev": "dotenv -e .env.development -- npx prisma migrate dev",
+    "db:migrate:dev": "dotenv -e .env -- npx prisma migrate dev",
     "db:migrate:test": "dotenv -e .env.test -- npx prisma migrate dev",
-    "db:migrate:prod": "dotenv -e .env.production -- npx prisma migrate deploy",
-    "api:dev": "dotenv -e .env.development -- nx serve api",
-    "api:prod": "dotenv -e .env.production -- nx serve api",
+    "db:migrate:prod": "npx prisma migrate deploy",
+    "api:dev": "dotenv -e .env -- nx serve api",
     "test:api": "dotenv -e .env.test -- nx test api"
   },
   "private": true,

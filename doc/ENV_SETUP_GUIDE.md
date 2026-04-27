@@ -4,17 +4,13 @@ This guide explains the simplified .env configuration for WalletOS and how to pr
 
 ## Simplified Structure
 
-After simplification, you now have only **3 root-level .env files**:
+WalletOS uses **2 root-level .env files**:
 
-- **`.env`** - Development environment (uses remote Supabase)
-- **`.env.test`** - Testing environment (uses remote Supabase)
-- **`.env.production`** - Production environment (uses remote Supabase)
+- **`.env`** - Development and production environment (uses remote Supabase for both database and auth)
+- **`.env.test`** - Testing environment (uses local Docker database + remote Supabase auth)
 - **`.env.example`** - Template with instructions
 
-**Deleted files** (removed to eliminate confusion):
-- `.env.development` (duplicate of .env)
-- `apps/api/.env.example` (app-specific, conflicts with root)
-- `apps/api/.env.test` (app-specific, conflicts with root)
+**Development/production** connects directly to Supabase for everything. **Testing** uses local Docker for fast database operations while still using Supabase for authentication.
 
 ## How to Configure
 
@@ -32,7 +28,7 @@ After simplification, you now have only **3 root-level .env files**:
 
 ### Step 2: Update .env Files
 
-Edit `.env` for development:
+Edit `.env` for development/production:
 
 ```env
 # Database Connection (Remote Supabase)
@@ -51,12 +47,21 @@ NEXT_PUBLIC_API_URL="http://localhost:3333/api/v1"
 NODE_ENV="development"
 ```
 
-Edit `.env.test` for testing (same as development, but with `NODE_ENV="test"`):
+Edit `.env.test` for testing (uses local Docker database + remote Supabase auth):
 
 ```env
-# Same DATABASE_URL, DIRECT_URL, and Supabase credentials as .env
+# Database Connection (Local Docker - port 6543 for test)
+DATABASE_URL="postgresql://postgres:password@localhost:6543/walletos_test"
+DIRECT_URL="postgresql://postgres:password@localhost:6543/walletos_test"
+
+# Supabase Auth (for API admin authentication in tests)
+SUPABASE_URL="https://[YOUR-PROJECT-REF].supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="[YOUR-SERVICE-ROLE-KEY]"
+
 NODE_ENV="test"
 ```
+
+**Note:** For production deployment, use CI/CD environment variables instead of committing `.env` files.
 
 ### Step 3: Run Database Migrations
 
@@ -157,7 +162,7 @@ npx prisma migrate deploy
 
 ⚠️ **IMPORTANT:**
 
-- Never commit `.env` files to git (already in .gitignore)
+- Foreit `.env` idepsoym nt,tiea .gitignore)istead fing `.env` fils
 - Never commit real credentials to `.env.example`
 - The `.env.production` file should be set via CI/CD environment variables, not committed
 - `SUPABASE_SERVICE_ROLE_KEY` has full admin access - keep it secret
