@@ -9,7 +9,7 @@ export default function TenantsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [createdTenant, setCreatedTenant] = useState<any>(null);
+  const [createdTenant, setCreatedTenant] = useState<Record<string, unknown> | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +24,7 @@ export default function TenantsPage() {
         throw new Error('Not authenticated');
       }
 
-      const response = await fetch(`${API_BASE_URL}/admin/tenants`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/admin/tenants`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -48,8 +48,8 @@ export default function TenantsPage() {
       // Clear form
       setName('');
       setContactEmail('');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create tenant');
     } finally {
       setLoading(false);
     }

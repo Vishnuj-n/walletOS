@@ -9,7 +9,7 @@ interface AuditLog {
   wallet_id: string;
   action: string;
   actor: string;
-  changes: any;
+  changes: Record<string, unknown>;
   timestamp: string;
 }
 
@@ -50,7 +50,7 @@ export default function AuditLogPage() {
       if (debouncedActionFilter) params.append('action', debouncedActionFilter);
 
       const response = await fetch(
-        `${API_BASE_URL}/admin/audit?${params.toString()}`,
+        `${API_BASE_URL}/api/v1/admin/audit?${params.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -64,8 +64,8 @@ export default function AuditLogPage() {
 
       const data = await response.json();
       setLogs(data.data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
       setLoading(false);
     }

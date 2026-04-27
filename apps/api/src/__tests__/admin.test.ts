@@ -44,7 +44,7 @@ describe('Admin API Endpoints', () => {
         tenantId: testTenantId,
         externalUserId: 'admin-test-user',
         currency: 'USD',
-        balance: 1000.00,
+        balance: "1000.00",
         status: 'active',
         isSandbox: false,
       },
@@ -180,7 +180,7 @@ describe('Admin API Endpoints', () => {
       // Ensure wallet is active and has balance
       await prisma.wallet.update({
         where: { id: testWalletId },
-        data: { status: 'active', balance: 1000.00 },
+        data: { status: 'active', balance: "1000.00" },
       });
 
       // Create a test transaction to reverse
@@ -189,10 +189,10 @@ describe('Admin API Endpoints', () => {
           tenantId: testTenantId,
           walletId: testWalletId,
           type: 'credit',
-          amount: 100.00,
+          amount: "100.00",
           currency: 'USD',
-          balanceBefore: 900.00,
-          balanceAfter: 1000.00,
+          balanceBefore: "900.00",
+          balanceAfter: "1000.00",
           metadata: { description: 'Test credit' },
         },
       });
@@ -236,10 +236,10 @@ describe('Admin API Endpoints', () => {
           tenantId: testTenantId,
           walletId: testWalletId,
           type: 'reversal',
-          amount: 100.00,
+          amount: "100.00",
           currency: 'USD',
-          balanceBefore: 1000.00,
-          balanceAfter: 900.00,
+          balanceBefore: "1000.00",
+          balanceAfter: "900.00",
           metadata: { original_tx_id: testTransactionId },
         },
       });
@@ -322,7 +322,7 @@ describe('Admin API Endpoints', () => {
       // Ensure wallet is active
       await prisma.wallet.update({
         where: { id: testWalletId },
-        data: { status: 'active', balance: 1000.00 },
+        data: { status: 'active', balance: "1000.00" },
       });
 
       const response = await request(app)

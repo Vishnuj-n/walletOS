@@ -43,11 +43,17 @@ export async function adminAuthMiddleware(
       return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Invalid or expired token'));
     }
 
+    // Extract tenantId from JWT metadata - explicitly reject if missing
+    const tenantId = user.app_metadata?.tenantId;
+    if (!tenantId) {
+      return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Missing tenantId in JWT'));
+    }
+
     // Look up admin user in database
     const adminUser = await prisma.adminUser.findUnique({
       where: {
         tenantId_supabaseUid: {
-          tenantId: user.app_metadata?.tenantId || 'default',
+          tenantId,
           supabaseUid: user.id,
         },
       },
@@ -69,6 +75,9 @@ export async function adminAuthMiddleware(
       role: adminUser.role,
     };
     req.tenantId = adminUser.tenantId;
+    
+    // Set isSandbox from query parameter (for admin routes to filter by environment)
+    req.isSandbox = req.query.sandbox === 'true';
 
     next();
   } catch (error) {
@@ -91,6 +100,11 @@ export function requireAdminRole(minRole: 'support' | 'finance' | 'superadmin') 
 
     const userRoleRank = roleRank[req.adminUser.role];
     const requiredRank = roleRank[minRole];
+
+    // Explicitly reject unknown roles
+    if (userRoleRank === undefined) {
+      return next(new AppError(403, ErrorCode.FORBIDDEN, 'Insufficient permissions'));
+    }
 
     if (userRoleRank < requiredRank) {
       return next(new AppError(403, ErrorCode.FORBIDDEN, 'Insufficient permissions'));

@@ -12,7 +12,7 @@ interface Wallet {
   currency: string;
   status: string;
   is_sandbox: boolean;
-  metadata: any;
+  metadata: Record<string, unknown>;
 }
 
 export default function WalletDetailPage() {
@@ -32,7 +32,7 @@ export default function WalletDetailPage() {
       if (!session) return;
 
       const response = await fetch(
-        `${API_BASE_URL}/admin/wallets/${walletId}`,
+        `${API_BASE_URL}/api/v1/admin/wallets/${walletId}`,
         {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -46,8 +46,8 @@ export default function WalletDetailPage() {
 
       const data = await response.json();
       setWallet(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch wallet');
     } finally {
       setLoading(false);
     }
@@ -62,7 +62,7 @@ export default function WalletDetailPage() {
       if (!session) return;
 
       const response = await fetch(
-        `${API_BASE_URL}/admin/wallets/${walletId}/freeze`,
+        `${API_BASE_URL}/api/v1/admin/wallets/${walletId}/freeze`,
         {
           method: 'POST',
           headers: {
@@ -78,8 +78,8 @@ export default function WalletDetailPage() {
       }
 
       fetchWallet();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to freeze wallet');
     }
   };
 
@@ -92,7 +92,7 @@ export default function WalletDetailPage() {
       if (!session) return;
 
       const response = await fetch(
-        `${API_BASE_URL}/admin/wallets/${walletId}/unfreeze`,
+        `${API_BASE_URL}/api/v1/admin/wallets/${walletId}/unfreeze`,
         {
           method: 'POST',
           headers: {
@@ -108,8 +108,8 @@ export default function WalletDetailPage() {
       }
 
       fetchWallet();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to unfreeze wallet');
     }
   };
 

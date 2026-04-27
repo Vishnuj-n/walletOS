@@ -56,7 +56,7 @@ Create a wallet for a user. Requires `read_write` scope.
 | `label` | string | No | Human-readable label for the wallet |
 | `metadata` | object | No | Arbitrary JSON metadata for the wallet |
 
-`currency` defaults to `INR` if omitted. `label` and `metadata` are optional.
+`currency` is required. `label` and `metadata` are optional.
 
 **Response 201**
 ```json

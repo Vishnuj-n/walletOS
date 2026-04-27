@@ -4,6 +4,14 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase, API_BASE_URL } from '../../../lib/supabase';
 
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export default function ManualActionsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -30,10 +38,10 @@ export default function ManualActionsPage() {
       }
 
       let endpoint = '';
-      let body: any = {};
+      let body: Record<string, unknown> = {};
 
       if (actionType === 'credit') {
-        endpoint = `${API_BASE_URL}/admin/transactions/credit`;
+        endpoint = `${API_BASE_URL}/api/v1/admin/transactions/credit`;
         body = {
           wallet_id: walletId,
           amount: amount,
@@ -42,7 +50,7 @@ export default function ManualActionsPage() {
           reason,
         };
       } else if (actionType === 'debit') {
-        endpoint = `${API_BASE_URL}/admin/transactions/debit`;
+        endpoint = `${API_BASE_URL}/api/v1/admin/transactions/debit`;
         body = {
           wallet_id: walletId,
           amount: amount,
@@ -51,7 +59,7 @@ export default function ManualActionsPage() {
           reason,
         };
       } else if (actionType === 'reversal') {
-        endpoint = `${API_BASE_URL}/admin/transactions/${walletId}/reverse`;
+        endpoint = `${API_BASE_URL}/api/v1/admin/transactions/${walletId}/reverse`;
         body = { reason };
       }
 
@@ -60,6 +68,7 @@ export default function ManualActionsPage() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
+          'Idempotency-Key': generateUUID(),
         },
         body: JSON.stringify(body),
       });
@@ -77,8 +86,8 @@ export default function ManualActionsPage() {
       setDescription('');
       setReferenceId('');
       setReason('');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Action failed');
     } finally {
       setLoading(false);
     }

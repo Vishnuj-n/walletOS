@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { supabase, API_BASE_URL } from '../../../lib/supabase';
 import Link from 'next/link';
 
 interface Wallet {
@@ -35,7 +35,7 @@ export default function WalletsPage() {
       if (statusFilter) params.append('status', statusFilter);
 
       const response = await fetch(
-        `http://localhost:3333/api/v1/admin/wallets?${params.toString()}`,
+        `${API_BASE_URL}/api/v1/admin/wallets?${params.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -49,8 +49,8 @@ export default function WalletsPage() {
 
       const data = await response.json();
       setWallets(data.data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch wallets');
     } finally {
       setLoading(false);
     }
@@ -65,7 +65,7 @@ export default function WalletsPage() {
       if (!session) return;
 
       const response = await fetch(
-        `http://localhost:3333/api/v1/admin/wallets/${walletId}/freeze`,
+        `${API_BASE_URL}/api/v1/admin/wallets/${walletId}/freeze`,
         {
           method: 'POST',
           headers: {
@@ -81,8 +81,8 @@ export default function WalletsPage() {
       }
 
       fetchWallets();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to freeze wallet');
     }
   };
 
@@ -95,7 +95,7 @@ export default function WalletsPage() {
       if (!session) return;
 
       const response = await fetch(
-        `http://localhost:3333/api/v1/admin/wallets/${walletId}/unfreeze`,
+        `${API_BASE_URL}/api/v1/admin/wallets/${walletId}/unfreeze`,
         {
           method: 'POST',
           headers: {
@@ -111,8 +111,8 @@ export default function WalletsPage() {
       }
 
       fetchWallets();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to unfreeze wallet');
     }
   };
 
