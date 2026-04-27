@@ -149,6 +149,7 @@ export async function createTestSetup(
  */
 export async function cleanupTestData(tenantId: string) {
   await prisma.$transaction([
+    prisma.sessionToken.deleteMany({ where: { tenantId } }),
     prisma.auditLog.deleteMany({ where: { tenantId } }),
     prisma.transaction.deleteMany({ where: { tenantId } }),
     prisma.wallet.deleteMany({ where: { tenantId } }),

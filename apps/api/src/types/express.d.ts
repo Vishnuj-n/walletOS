@@ -7,6 +7,7 @@ declare global {
       tenantId?: string;
       apiKeyScope?: string;
       isSandbox?: boolean;
+      sessionWalletId?: string;
       idempotencyKey?: string;
       requestFingerprint?: string;
       cachedResponse?: { status: number; body: unknown };

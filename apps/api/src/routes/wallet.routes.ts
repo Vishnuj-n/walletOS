@@ -9,11 +9,20 @@ import {
   closeWallet,
 } from '../services/wallet.service';
 import { apiKeyAuthMiddleware } from '../middleware/auth';
+import { userSessionAuthMiddleware } from '../middleware/userSessionAuth';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
 
 const router = Router();
+
+function walletReadAuth(req: Request, res: Response, next: any): void {
+  if (req.headers.authorization?.startsWith('Bearer ')) {
+    void userSessionAuthMiddleware(req, res, next);
+    return;
+  }
+  void apiKeyAuthMiddleware(req, res, next);
+}
 
 /**
  * Serialize wallet data for API responses
@@ -64,9 +73,12 @@ router.post(
  */
 router.get(
   '/wallets/:walletId',
-  apiKeyAuthMiddleware,
+  walletReadAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { walletId } = req.params;
+    if (req.sessionWalletId && req.sessionWalletId !== walletId) {
+      throw new AppError(403, ErrorCode.FORBIDDEN, 'Session token is not valid for this wallet');
+    }
 
     const wallet = await getWalletById(walletId, req.tenantId!, req.isSandbox || false);
 

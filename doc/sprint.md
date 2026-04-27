@@ -55,7 +55,7 @@
 
 ---
 
-### Sprint 3: Administrative Control [CURRENT]
+### Sprint 3: Administrative Control [DONE]
 **Goal:** Deliver internal tools for support and operations staff.
 
 **Tasks:**
@@ -72,46 +72,46 @@
 
 ---
 
-### Sprint 4: Webhooks & System Resilience
-**Goal:** Implement asynchronous event processing and system reliability.
+### Sprint 4: The Wednesday Demo [CURRENT]
+**Goal:** Build frontend visibility and secure user access for the presentation.
 
 **Tasks:**
-* **Webhook Dispatcher:** Build the worker with exponential backoff (up to 5 attempts) and HMAC-SHA256 signing.
-* **Circuit Breaker:** Mark failing endpoints as `degraded` and pause dispatch after 10 consecutive failures.
-* **Rate Limiting:** Implement per-API key limits for read and write operations.
-* Add retry, failure, and rate-limit tests for resilience logic.
+* Build the `/auth/session` server-to-server endpoint to exchange API keys for 1-hour scoped UI tokens.
+* Initialize the React application shell using Tailwind CSS.
+* Build a real-time component that fetches and displays the current ledger balance.
+* Implement a data table to display recent ledger activities including credits, debits, and reversals.
+* Create integration logic to simulate user login and wallet mounting.
 
-**Agent to Use:** `root AGENTS.md` + `apps/api/AGENTS.md`
-**Skills to Use:** `design`, `hunt`, `check`
-**Docs / Context:** `Architecture.md`, `Data API.md`, `Plan Scope.md`
+**Agent to Use:** `apps/web/AGENTS.md` + `apps/api/AGENTS.md`
+**Skills to Use:** `design`, `write`, `check`
+**Docs / Context:** `APP FLOW.md`, `README.md`
 
 ---
 
-### Sprint 5: Embedded User UI
-**Goal:** Deliver the end-user wallet experience and embeddable components.
+### Sprint 4.5: System Resilience
+**Goal:** Implement asynchronous event processing and system reliability.
 
 **Tasks:**
-* **Session Tokens:** Build the server-to-server endpoint for 1-hour scoped UI tokens.
-* **Core Components:** Create the balance card and transaction list in the shared UI library.
-* **Iframe Integration:** Build the embeddable script for non-React projects.
-* **Advanced Features:** Add transaction filters and the slide-up detail panel.
-* **Branding:** Implement theme support for tenant-specific colors and fonts.
-* **Responsive UI:** Ensure clean layouts for mobile, tablet, and desktop.
-* Add component and end-to-end tests for wallet views and transaction history.
+* Build the webhook dispatcher with exponential backoff and HMAC-SHA256 signing.
+* Implement per-API key limits for read and write operations.
+* Monitor external tenant endpoints and mark them as `degraded` to pause dispatch after consecutive failures.
+* Write chaos tests to simulate network drops and high database latency.
+
+**Agent to Use:** `root AGENTS.md` + `apps/api/AGENTS.md`
+**Skills to Use:** `design`, `hunt`, `check`
+**Docs / Context:** `Architecture.md`, `Data API.md`
+
+---
+
+### Sprint 5: The Embeddable Product
+**Goal:** Deliver the embeddable component and advanced UI customization.
+
+**Tasks:**
+* Develop the client-side `embed.js` script to allow third-party developers to embed the wallet widget.
+* Implement database-driven theming to let tenants customize colors, logos, and fonts.
+* Add transaction search, date-range filtering, and slide-up panels for individual receipts.
+* Optimize layouts across mobile, tablet, and desktop viewports.
 
 **Agent to Use:** `apps/web/AGENTS.md`
 **Skills to Use:** `design`, `write`, `check`
-**Docs / Context:** `APP FLOW.md`, `README.md`, `Requirements.md`
-
-***
-
-### Scoring
-
-| Dimension | Score | Rationale |
-| :--- | :--- | :--- |
-| Directness | 9/10 | Statements provide clear, executable tasks. |
-| Rhythm | 8/10 | Varies task length and complexity appropriately. |
-| Trust | 10/10 | Strictly adheres to the corrected architecture and `AGENTS.md` paths. |
-| Authenticity | 9/10 | Professional project management tone. |
-| Density | 9/10 | High information density per line. |
-| **Total** | **45/50** | Passes. |
+**Docs / Context:** `APP FLOW.md`, `Requirements.md`

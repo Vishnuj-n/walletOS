@@ -8,12 +8,21 @@ import {
   listTransactions,
 } from '../services/transaction.service';
 import { apiKeyAuthMiddleware } from '../middleware/auth';
+import { userSessionAuthMiddleware } from '../middleware/userSessionAuth';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { TransactionMetadata, TransactionResponse, ListTransactionsQuery } from '../types/transaction';
 
 const router = Router();
+
+function transactionReadAuth(req: Request, res: Response, next: any): void {
+  if (req.headers.authorization?.startsWith('Bearer ')) {
+    void userSessionAuthMiddleware(req, res, next);
+    return;
+  }
+  void apiKeyAuthMiddleware(req, res, next);
+}
 
 /**
  * POST /transactions/credit
@@ -266,7 +275,7 @@ router.post(
  */
 router.get(
   '/transactions/:txId',
-  apiKeyAuthMiddleware,
+  transactionReadAuth,
   asyncHandler(async (req: Request, res: Response, next: any): Promise<void> => {
     const { txId } = req.params;
 
@@ -275,6 +284,9 @@ router.get(
     }
 
     const transaction = await getTransactionById(txId, req.tenantId);
+    if (req.sessionWalletId && transaction.walletId !== req.sessionWalletId) {
+      throw new AppError(403, ErrorCode.FORBIDDEN, 'Session token is not valid for this transaction');
+    }
 
     const metadata = transaction.metadata as TransactionMetadata;
     res.json({
@@ -299,7 +311,7 @@ router.get(
  */
 router.get(
   '/transactions',
-  apiKeyAuthMiddleware,
+  transactionReadAuth,
   asyncHandler(async (req: Request, res: Response, next: any): Promise<void> => {
     const query = req.query as ListTransactionsQuery;
     const {
@@ -313,6 +325,14 @@ router.get(
       limit,
       after,
     } = query;
+
+    if (req.sessionWalletId && wallet_id !== req.sessionWalletId) {
+      throw new AppError(
+        403,
+        ErrorCode.FORBIDDEN,
+        'Session token is not valid for the requested wallet transactions'
+      );
+    }
 
     // Parse and validate query parameters
     const parsedLimit = limit ? Number(limit) : undefined;

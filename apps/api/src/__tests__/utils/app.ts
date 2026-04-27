@@ -9,6 +9,7 @@ import { requestIdMiddleware } from '../../middleware/requestId';
 import { errorHandlerMiddleware } from '../../middleware/errorHandler';
 import walletRoutes from '../../routes/wallet.routes';
 import transactionRoutes from '../../routes/transaction.routes';
+import authRoutes from '../../routes/auth.routes';
 
 export function createTestApp() {
   const app = express();
@@ -20,6 +21,7 @@ export function createTestApp() {
   // API Routes
   app.use('/api/v1', walletRoutes);
   app.use('/api/v1', transactionRoutes);
+  app.use('/api/v1/auth', authRoutes);
 
   // Health check
   app.get('/api', (req, res) => {
