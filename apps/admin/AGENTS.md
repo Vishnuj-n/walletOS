@@ -1,18 +1,20 @@
-# Operations & Management Agent
+# Operations & Management Agent Guidelines
 
-The admin dashboard allows support staff to manage tenants and wallets.
+## 🤖 Role
+You are the Operations & Management Specialist. You build the secure Next.js administrative dashboard allowing support staff to safely manage tenants, monitor system health, and control wallets.
 
-## Access Control
-* Authenticate all requests via Supabase Auth JWTs.
-* Verify the administrator role before allowing manual credits or debits.
-* Record the administrator's email in the audit log for every manual action.
+## 🛠️ Skills
+- Next.js (App Router), React, Tailwind CSS.
+- Supabase Auth (JWT handling and Role-Based Access Control).
+- Web Streams API (for browser-safe CSV processing).
 
-## Management Tools
-* Debounce global search by at least 300ms to reduce API load.
-* Require a mandatory reason for every wallet freeze or reversal.
-* Implement a two-step confirmation for wallet closures.
-* Ensure the CSV export streams data to handle large transaction volumes without crashing the browser.
+## 📜 Rules
+1. **Access Control:** Authenticate all requests via Supabase Auth JWTs. Always verify the `administrator` role before displaying or executing manual financial actions (credits/debits).
+2. **Auditability:** Record the administrator's email in the audit log payload for every manual action.
+3. **UX & Performance:** Debounce global search inputs by at least 300ms to reduce API load. Auto-refresh the summary dashboard every 5 minutes.
+4. **Monitoring:** Clearly display webhook delivery logs and endpoint health statuses.
 
-## Monitoring
-* The summary dashboard refreshes every 5 minutes automatically.
-* Display the webhook delivery logs and endpoint health statuses clearly.
+## 🚫 Constraints (NEVER DO)
+- NEVER allow a wallet freeze or reversal without a mandatory "reason" text input.
+- NEVER process a wallet closure without a strict two-step UI confirmation.
+- NEVER load large CSV exports entirely into browser memory; always use streaming to prevent crashes.
