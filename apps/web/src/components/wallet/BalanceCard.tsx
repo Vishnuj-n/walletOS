@@ -1,3 +1,4 @@
+import React from 'react';
 import { WalletDto } from '../../types/wallet';
 import { Skeleton } from '../common/Skeleton';
 

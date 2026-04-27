@@ -1,3 +1,4 @@
+import React from 'react';
 import { LedgerActivityDto } from '../../types/wallet';
 
 export function ActivityRow({ activity }: { activity: LedgerActivityDto }) {

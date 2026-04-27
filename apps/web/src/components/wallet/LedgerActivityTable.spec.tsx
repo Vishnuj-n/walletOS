@@ -1,20 +1,16 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { LedgerActivityTable } from './LedgerActivityTable';
+import { LedgerActivityDto } from '../../types/wallet';
 
 describe('LedgerActivityTable', () => {
-  const mockActivities = [
+  const mockActivities: LedgerActivityDto[] = [
     {
       transaction_id: 'tx_1',
       wallet_id: 'wallet_123',
       type: 'credit',
       amount: '100.0000',
-      balance_before: '0.0000',
-      balance_after: '100.0000',
       description: 'Test credit',
-      reference_id: 'ref_1',
-      idempotency_key: 'idem_1',
-      metadata: {},
       created_at: new Date('2024-01-01T00:00:00Z').toISOString(),
     },
     {
@@ -22,12 +18,7 @@ describe('LedgerActivityTable', () => {
       wallet_id: 'wallet_123',
       type: 'debit',
       amount: '50.0000',
-      balance_before: '100.0000',
-      balance_after: '50.0000',
       description: 'Test debit',
-      reference_id: 'ref_2',
-      idempotency_key: 'idem_2',
-      metadata: {},
       created_at: new Date('2024-01-02T00:00:00Z').toISOString(),
     },
   ];

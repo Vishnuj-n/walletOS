@@ -1,3 +1,4 @@
+import React from 'react';
 import { LedgerActivityDto } from '../../types/wallet';
 import { Skeleton } from '../common/Skeleton';
 import { ActivityRow } from './ActivityRow';

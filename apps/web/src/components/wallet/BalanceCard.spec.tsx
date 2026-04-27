@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { BalanceCard } from './BalanceCard';
+import { WalletDto } from '../../types/wallet';
 
 describe('BalanceCard', () => {
   it('should render loading state', () => {
@@ -10,7 +11,7 @@ describe('BalanceCard', () => {
   });
 
   it('should render wallet balance when data is available', () => {
-    const mockWallet = {
+    const mockWallet: WalletDto = {
       wallet_id: 'wallet_123',
       external_user_id: 'user_123',
       label: 'Test Wallet',
@@ -35,7 +36,7 @@ describe('BalanceCard', () => {
   });
 
   it('should display currency and balance correctly', () => {
-    const mockWallet = {
+    const mockWallet: WalletDto = {
       wallet_id: 'wallet_123',
       external_user_id: 'user_123',
       label: 'Test Wallet',
@@ -52,7 +53,7 @@ describe('BalanceCard', () => {
   });
 
   it('should display wallet status correctly', () => {
-    const mockWallet = {
+    const mockWallet: WalletDto = {
       wallet_id: 'wallet_123',
       external_user_id: 'user_123',
       label: 'Test Wallet',
