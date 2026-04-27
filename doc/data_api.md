@@ -198,7 +198,7 @@ List all wallets for the tenant. Admin-only endpoint (requires Supabase admin au
 
 ---
 
-### POST /wallets/session-token
+### POST /api/v1/auth/session
 
 Issue a short-lived session token for the user-facing UI. Server-to-server only. Requires `read_write` scope.
 

@@ -156,7 +156,7 @@ Use `wlt_test_xxx` to work in the sandbox. Sandbox data never mixes with live da
 
 **Audit log** — every wallet and transaction change writes an audit entry automatically. The database user the API connects with cannot delete or update audit records.
 
-**Session tokens** — the live API key never reaches the browser. Your backend calls `POST /wallets/session-token` server-to-server and sends the resulting short-lived token (1 hour, scoped to one wallet) to your frontend.
+**Session tokens** — the live API key never reaches the browser. Your backend calls `POST /api/v1/auth/session` server-to-server and sends the resulting short-lived token (1 hour, scoped to one wallet) to your frontend.
 
 ---
 
