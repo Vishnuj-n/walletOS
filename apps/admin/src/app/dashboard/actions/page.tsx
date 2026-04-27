@@ -41,7 +41,7 @@ export default function ManualActionsPage() {
       let body: Record<string, unknown> = {};
 
       if (actionType === 'credit') {
-        endpoint = `${API_BASE_URL}/api/v1/admin/transactions/credit`;
+        endpoint = `${API_BASE_URL}/admin/transactions/credit`;
         body = {
           wallet_id: walletId,
           amount: amount,
@@ -50,7 +50,7 @@ export default function ManualActionsPage() {
           reason,
         };
       } else if (actionType === 'debit') {
-        endpoint = `${API_BASE_URL}/api/v1/admin/transactions/debit`;
+        endpoint = `${API_BASE_URL}/admin/transactions/debit`;
         body = {
           wallet_id: walletId,
           amount: amount,
@@ -59,7 +59,7 @@ export default function ManualActionsPage() {
           reason,
         };
       } else if (actionType === 'reversal') {
-        endpoint = `${API_BASE_URL}/api/v1/admin/transactions/${walletId}/reverse`;
+        endpoint = `${API_BASE_URL}/admin/transactions/${walletId}/reverse`;
         body = { reason };
       }
 

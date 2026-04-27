@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://postgres:password@localhost:5432/walletos_test
+      DIRECT_URL: postgresql://postgres:password@localhost:5432/walletos_test
     services:
       postgres:
         image: postgres:16

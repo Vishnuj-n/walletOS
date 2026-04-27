@@ -18,6 +18,12 @@ interface Wallet {
 export default function WalletDetailPage() {
   const { walletId } = useParams();
   const router = useRouter();
+  
+  // Validate walletId is a string
+  if (typeof walletId !== 'string') {
+    return <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">Invalid wallet ID</div>;
+  }
+  
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -29,10 +35,14 @@ export default function WalletDetailPage() {
   const fetchWallet = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        setError('Session expired, please re-login');
+        setLoading(false);
+        return;
+      }
 
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/admin/wallets/${walletId}`,
+        `${API_BASE_URL}/admin/wallets/${walletId}`,
         {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -59,15 +69,21 @@ export default function WalletDetailPage() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        setError('Session expired, please re-login');
+        return;
+      }
+      
+      const idempotencyKey = crypto.randomUUID();
 
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/admin/wallets/${walletId}/freeze`,
+        `${API_BASE_URL}/admin/wallets/${walletId}/freeze`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session.access_token}`,
+            'Idempotency-Key': idempotencyKey,
           },
           body: JSON.stringify({ reason }),
         }
@@ -90,15 +106,21 @@ export default function WalletDetailPage() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        setError('Session expired, please re-login');
+        return;
+      }
+      
+      const idempotencyKey = crypto.randomUUID();
 
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/admin/wallets/${walletId}/unfreeze`,
+        `${API_BASE_URL}/admin/wallets/${walletId}/unfreeze`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session.access_token}`,
+            'Idempotency-Key': idempotencyKey,
           },
           body: JSON.stringify({ reason }),
         }

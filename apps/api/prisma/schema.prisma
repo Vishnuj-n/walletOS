@@ -31,7 +31,7 @@ model ApiKey {
   scope     KeyScope
   isSandbox Boolean  @default(false)
   isActive  Boolean  @default(true)
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId])
 }
@@ -43,7 +43,7 @@ model AdminUser {
   email       String
   role        AdminRole
   isActive    Boolean   @default(true)
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, supabaseUid])
   @@index([tenantId])
@@ -61,7 +61,7 @@ model Wallet {
   metadata           Json?
   closureScheduledAt DateTime?
   transactions       Transaction[]
-  tenant             Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant             Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, externalUserId, isSandbox])
   @@index([tenantId])
@@ -81,8 +81,8 @@ model Transaction {
   idempotencyKey String?
   metadata       Json?
   createdAt      DateTime        @default(now())
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  wallet         Wallet          @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  wallet         Wallet          @relation(fields: [walletId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId])
@@ -100,11 +100,13 @@ model AuditLog {
   actorId    String?
   actorType  String?
   timestamp  DateTime @default(now())
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  isSandbox  Boolean  @default(false)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId])
   @@index([entityType, entityId])
   @@index([timestamp])
+  @@index([isSandbox])
 }
 
 model Webhook {
@@ -119,7 +121,7 @@ model Webhook {
   status       String    @default("active")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId])
 }

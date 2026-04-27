@@ -22,7 +22,7 @@ router.get(
     const tenantId = req.adminUser!.tenantId;
     const isSandbox = req.isSandbox || false;
 
-    const where: any = { tenantId, isSandbox };
+    const where: Prisma.WalletWhereInput = { tenantId, isSandbox };
 
     if (status) where.status = status;
     if (currency) where.currency = currency;
@@ -153,13 +153,18 @@ router.post(
       // Lock wallet row with SELECT FOR UPDATE
       await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${wallet_id} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
 
-      const lockedWallet = await tx.wallet.findUnique({
-        where: { id: wallet_id },
-        select: { balance: true },
-      });
+      // Extract locked balance from the locked row instead of separate query
+      const lockedWalletResult = await tx.$queryRaw<{ balance: Decimal }[]>`SELECT "balance" FROM "Wallet" WHERE id = ${wallet_id} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox}`;
+      const lockedWallet = lockedWalletResult[0];
 
       if (!lockedWallet) {
         throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
+      }
+
+      // Re-check wallet status inside transaction after lock
+      const walletStatus = await tx.$queryRaw<{ status: string }[]>`SELECT "status" FROM "Wallet" WHERE id = ${wallet_id} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox}`;
+      if (walletStatus[0]?.status !== 'active') {
+        throw new AppError(409, ErrorCode.WALLET_FROZEN, 'Wallet is not active');
       }
 
       const balanceBefore = lockedWallet.balance;
@@ -201,12 +206,14 @@ router.post(
           entityId: wallet_id,
           action: 'admin.credit',
           changes: {
-            amount: decimalAmount,
+            amount: decimalAmount.toFixed(4),
             reason: reason,
             admin: adminEmail,
+            idempotency_key: idempotencyKey,
           },
           actorId: adminEmail,
           actorType: 'admin',
+          isSandbox,
         },
       });
 
@@ -271,6 +278,7 @@ router.post(
           where: {
             tenantId,
             idempotencyKey,
+            isSandbox,
           },
         });
 
@@ -288,13 +296,18 @@ router.post(
       // Lock wallet row with SELECT FOR UPDATE
       await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${wallet_id} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
 
-      const lockedWallet = await tx.wallet.findUnique({
-        where: { id: wallet_id },
-        select: { balance: true },
-      });
+      // Extract locked balance from the locked row instead of separate query
+      const lockedWalletResult = await tx.$queryRaw<{ balance: Decimal }[]>`SELECT "balance" FROM "Wallet" WHERE id = ${wallet_id} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox}`;
+      const lockedWallet = lockedWalletResult[0];
 
       if (!lockedWallet) {
         throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
+      }
+
+      // Re-check wallet status inside transaction after lock
+      const walletStatus = await tx.$queryRaw<{ status: string }[]>`SELECT "status" FROM "Wallet" WHERE id = ${wallet_id} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox}`;
+      if (walletStatus[0]?.status !== 'active') {
+        throw new AppError(409, ErrorCode.WALLET_FROZEN, 'Wallet is not active');
       }
 
       const balanceBefore = lockedWallet.balance;
@@ -339,12 +352,14 @@ router.post(
           entityId: wallet_id,
           action: 'admin.debit',
           changes: {
-            amount: decimalAmount,
+            amount: decimalAmount.toFixed(4),
             reason: reason,
             admin: adminEmail,
+            idempotency_key: idempotencyKey,
           },
           actorId: adminEmail,
           actorType: 'admin',
+          isSandbox,
         },
       });
 
@@ -415,39 +430,45 @@ router.post(
       throw new AppError(409, ErrorCode.WALLET_FROZEN, 'Wallet is not active');
     }
 
-    // Check for existing transaction with same idempotency key
-    if (idempotencyKey) {
-      const existingTx = await prisma.transaction.findFirst({
-        where: {
-          tenantId,
-          idempotencyKey,
-        },
-      });
-
-      if (existingTx) {
-        return res.status(200).json({
-          transaction_id: existingTx.id,
-          type: existingTx.type,
-          original_tx_id: originalTx.id,
-          amount: existingTx.amount.toFixed(4),
-          balance_before: existingTx.balanceBefore.toFixed(4),
-          balance_after: existingTx.balanceAfter.toFixed(4),
-          created_at: existingTx.createdAt,
-        });
-      }
-    }
-
     const result = await prisma.$transaction(async (tx) => {
+      // Check for existing transaction with same idempotency key inside transaction
+      if (idempotencyKey) {
+        const existingTx = await tx.transaction.findFirst({
+          where: {
+            tenantId,
+            idempotencyKey,
+            isSandbox,
+          },
+        });
+
+        if (existingTx) {
+          // Validate that the existing reversal matches the request parameters
+          const existingOriginalTxId = (existingTx.metadata as any)?.original_tx_id;
+          if (existingOriginalTxId !== originalTx.id ||
+              existingTx.walletId !== originalTx.walletId ||
+              !existingTx.amount.equals(originalTx.amount)) {
+            throw new AppError(409, ErrorCode.IDEMPOTENCY_CONFLICT, 'Idempotency key already used with different parameters');
+          }
+          // Return a special marker to indicate idempotent response
+          return { existingTx, idempotent: true };
+        }
+      }
+      
       // Lock wallet row with SELECT FOR UPDATE
       await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${originalTx.walletId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
 
-      const lockedWallet = await tx.wallet.findUnique({
-        where: { id: originalTx.walletId },
-        select: { balance: true },
-      });
+      // Extract locked balance from the locked row instead of separate query
+      const lockedWalletResult = await tx.$queryRaw<{ balance: Decimal }[]>`SELECT "balance" FROM "Wallet" WHERE id = ${originalTx.walletId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox}`;
+      const lockedWallet = lockedWalletResult[0];
 
       if (!lockedWallet) {
         throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
+      }
+
+      // Re-check wallet status inside transaction after lock
+      const walletStatus = await tx.$queryRaw<{ status: string }[]>`SELECT "status" FROM "Wallet" WHERE id = ${originalTx.walletId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox}`;
+      if (walletStatus[0]?.status !== 'active') {
+        throw new AppError(409, ErrorCode.WALLET_FROZEN, 'Wallet is not active');
       }
 
       const balanceBefore = lockedWallet.balance;
@@ -494,26 +515,42 @@ router.post(
           entityId: originalTx.id,
           action: 'admin.reverse',
           changes: {
-            amount: originalTx.amount,
+            amount: originalTx.amount.toFixed(4),
             reason: reason,
             admin: adminEmail,
           },
           actorId: adminEmail,
           actorType: 'admin',
+          isSandbox,
         },
       });
 
-      return reversalTx;
+      return { reversalTx, idempotent: false };
     });
 
+    // Handle response based on whether it was idempotent or new
+    if ('existingTx' in result) {
+      return res.status(200).json({
+        transaction_id: result.existingTx.id,
+        wallet_id: result.existingTx.walletId,
+        type: result.existingTx.type,
+        original_tx_id: originalTx.id,
+        amount: result.existingTx.amount.toFixed(4),
+        balance_before: result.existingTx.balanceBefore.toFixed(4),
+        balance_after: result.existingTx.balanceAfter.toFixed(4),
+        created_at: result.existingTx.createdAt,
+      });
+    }
+
     res.status(201).json({
-      transaction_id: result.id,
-      type: result.type,
+      transaction_id: result.reversalTx.id,
+      wallet_id: result.reversalTx.walletId,
+      type: result.reversalTx.type,
       original_tx_id: originalTx.id,
-      amount: result.amount.toFixed(4),
-      balance_before: result.balanceBefore.toFixed(4),
-      balance_after: result.balanceAfter.toFixed(4),
-      created_at: result.createdAt,
+      amount: result.reversalTx.amount.toFixed(4),
+      balance_before: result.reversalTx.balanceBefore.toFixed(4),
+      balance_after: result.reversalTx.balanceAfter.toFixed(4),
+      created_at: result.reversalTx.createdAt,
     });
   })
 );
@@ -553,12 +590,13 @@ router.post(
       throw new AppError(409, ErrorCode.WALLET_ALREADY_CLOSED, 'Cannot freeze a closed wallet');
     }
 
-    // Check for existing audit log with same idempotency key
+    // Check for existing audit log with same idempotency key and isSandbox
     if (idempotencyKey) {
       const existingAudit = await prisma.auditLog.findFirst({
         where: {
           tenantId,
           action: 'wallet.frozen',
+          isSandbox,
           changes: {
             path: ['idempotency_key'],
             equals: idempotencyKey,
@@ -626,12 +664,13 @@ router.post(
       throw new AppError(409, ErrorCode.INVALID_OPERATION, 'Wallet is not frozen');
     }
 
-    // Check for existing audit log with same idempotency key
+    // Check for existing audit log with same idempotency key and isSandbox
     if (idempotencyKey) {
       const existingAudit = await prisma.auditLog.findFirst({
         where: {
           tenantId,
           action: 'wallet.unfrozen',
+          isSandbox,
           changes: {
             path: ['idempotency_key'],
             equals: idempotencyKey,
@@ -684,11 +723,12 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Missing required field: name');
     }
 
-    // Check for existing audit log with same idempotency key
+    // Check for existing audit log with same idempotency key scoped to admin user
     if (idempotencyKey) {
       const existingAudit = await prisma.auditLog.findFirst({
         where: {
           action: 'tenant.created',
+          actorId: adminEmail,
           changes: {
             path: ['idempotency_key'],
             equals: idempotencyKey,
@@ -799,7 +839,7 @@ router.get(
     const tenantId = req.adminUser!.tenantId;
     const isSandbox = req.isSandbox || false;
 
-    const where: any = { tenantId };
+    const where: Prisma.AuditLogWhereInput = { tenantId, isSandbox };
 
     if (wallet_id) where.entityId = wallet_id;
     if (actor) where.actorId = actor;

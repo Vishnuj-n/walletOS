@@ -17,6 +17,7 @@ export default function TenantsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [createdTenant, setCreatedTenant] = useState<Tenant | null>(null);
+  const [copyStatus, setCopyStatus] = useState<string>('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +32,7 @@ export default function TenantsPage() {
         throw new Error('Not authenticated');
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/v1/admin/tenants`, {
+      const response = await fetch(`${API_BASE_URL}/admin/tenants`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -63,11 +64,28 @@ export default function TenantsPage() {
   };
 
   const copyToClipboard = async (text: string) => {
+    setCopyStatus('');
     try {
       await navigator.clipboard.writeText(text);
-      alert('Copied to clipboard!');
+      setCopyStatus('Copied!');
+      setTimeout(() => setCopyStatus(''), 2000);
     } catch (err) {
-      alert('Failed to copy to clipboard. Please copy manually.');
+      // Fallback for older browsers or non-secure contexts
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        setCopyStatus('Copied!');
+        setTimeout(() => setCopyStatus(''), 2000);
+      } catch (fallbackErr) {
+        setCopyStatus('Select & copy manually');
+        setTimeout(() => setCopyStatus(''), 3000);
+      }
     }
   };
 
@@ -87,6 +105,13 @@ export default function TenantsPage() {
         </div>
       )}
 
+      {copyStatus && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-4">
+          {copyStatus}
+        </div>
+      )}
+
+      
       <div className="bg-white shadow rounded-lg p-6 mb-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Tenant</h3>
         <form onSubmit={handleSubmit}>

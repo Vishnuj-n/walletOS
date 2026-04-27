@@ -43,7 +43,7 @@ export default function WalletsPage() {
       if (statusFilter) params.append('status', statusFilter);
 
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/admin/wallets?${params.toString()}`,
+        `${API_BASE_URL}/admin/wallets?${params.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -73,7 +73,7 @@ export default function WalletsPage() {
       if (!session) return;
 
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/admin/wallets/${walletId}/freeze`,
+        `${API_BASE_URL}/admin/wallets/${walletId}/freeze`,
         {
           method: 'POST',
           headers: {
@@ -103,7 +103,7 @@ export default function WalletsPage() {
       if (!session) return;
 
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/admin/wallets/${walletId}/unfreeze`,
+        `${API_BASE_URL}/admin/wallets/${walletId}/unfreeze`,
         {
           method: 'POST',
           headers: {

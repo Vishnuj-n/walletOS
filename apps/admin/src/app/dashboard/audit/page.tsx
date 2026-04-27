@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import { supabase, API_BASE_URL } from '../../../lib/supabase';
 
 interface AuditLog {
   id: string;
   tenant_id: string;
-  wallet_id: string;
+  wallet_id: string | null;
   action: string;
   actor: string;
   changes: Record<string, unknown>;
@@ -21,6 +22,7 @@ export default function AuditLogPage() {
   const [actionFilter, setActionFilter] = useState('');
   const [debouncedWalletFilter, setDebouncedWalletFilter] = useState('');
   const [debouncedActionFilter, setDebouncedActionFilter] = useState('');
+  const abortControllerRef = React.useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetchAuditLogs();
@@ -41,6 +43,16 @@ export default function AuditLogPage() {
   }, [actionFilter]);
 
   const fetchAuditLogs = async () => {
+    // Abort previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    
+    setError('');
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -50,11 +62,12 @@ export default function AuditLogPage() {
       if (debouncedActionFilter) params.append('action', debouncedActionFilter);
 
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/admin/audit?${params.toString()}`,
+        `${API_BASE_URL}/admin/audit?${params.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
           },
+          signal: controller.signal,
         }
       );
 
@@ -65,6 +78,10 @@ export default function AuditLogPage() {
       const data = await response.json();
       setLogs(data.data);
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Ignore aborted requests
+        return;
+      }
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
       setLoading(false);
@@ -144,7 +161,7 @@ export default function AuditLogPage() {
                   {log.actor}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {log.wallet_id.substring(0, 8)}...
+                  {typeof log.wallet_id === 'string' ? log.wallet_id.substring(0, 8) + '...' : '—'}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-500">
                   <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto max-w-xs">

@@ -43,10 +43,10 @@ export async function adminAuthMiddleware(
       return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Invalid or expired token'));
     }
 
-    // Extract tenantId from JWT metadata - explicitly reject if missing
+    // Extract tenantId from JWT metadata - explicitly reject if missing or invalid
     const tenantId = user.app_metadata?.tenantId;
-    if (!tenantId) {
-      return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Missing tenantId in JWT'));
+    if (typeof tenantId !== 'string' || tenantId.trim() === '') {
+      return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Missing or invalid tenantId in JWT'));
     }
 
     // Look up admin user in database
@@ -76,12 +76,21 @@ export async function adminAuthMiddleware(
     };
     req.tenantId = adminUser.tenantId;
     
-    // Set isSandbox from query parameter (for admin routes to filter by environment)
-    req.isSandbox = req.query.sandbox === 'true';
+    // Set isSandbox from X-Sandbox header (case-insensitive), default to false
+    req.isSandbox = req.headers['x-sandbox']?.toLowerCase() === 'true';
 
     next();
   } catch (error) {
-    console.error('Authentication error:', error);
+    // Log sanitized error message without sensitive details
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    // Log only non-sensitive fields
+    processLogger?.error?.('adminAuth authentication error', {
+      name: error instanceof Error ? error.name : 'Error',
+      message: errorMessage.replace(/token|key|password|secret/gi, '[REDACTED]'),
+    }) || console.error('adminAuth authentication error:', {
+      name: error instanceof Error ? error.name : 'Error',
+      message: errorMessage.replace(/token|key|password|secret/gi, '[REDACTED]'),
+    });
     return next(new AppError(500, ErrorCode.INTERNAL_ERROR, 'Authentication error'));
   }
 }

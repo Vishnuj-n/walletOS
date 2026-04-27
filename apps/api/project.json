@@ -92,7 +92,7 @@
     "migrate-test": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "npx prisma migrate dev",
+        "command": "npx prisma migrate deploy",
         "cwd": "{projectRoot}",
         "envFile": "{workspaceRoot}/.env.test"
       }
