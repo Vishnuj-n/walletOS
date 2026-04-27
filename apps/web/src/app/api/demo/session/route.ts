@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 const DEMO_API_KEY = process.env.WALLETOS_DEMO_API_KEY;
+// Hardcoded demo wallet ID to prevent unauthorized session token generation
+const DEMO_WALLET_ID = process.env.WALLETOS_DEMO_WALLET_ID;
 
 export async function GET(request: NextRequest) {
-  const walletId = request.nextUrl.searchParams.get('walletId');
-  if (!walletId) {
-    return NextResponse.json({ error: 'walletId is required' }, { status: 400 });
+  if (!DEMO_WALLET_ID) {
+    return NextResponse.json(
+      { error: 'Server env is missing WALLETOS_DEMO_WALLET_ID' },
+      { status: 500 }
+    );
   }
 
   if (!API_BASE_URL || !DEMO_API_KEY) {
@@ -22,7 +26,7 @@ export async function GET(request: NextRequest) {
       'Content-Type': 'application/json',
       'x-api-key': DEMO_API_KEY,
     },
-    body: JSON.stringify({ wallet_id: walletId }),
+    body: JSON.stringify({ wallet_id: DEMO_WALLET_ID }),
     cache: 'no-store',
   });
 

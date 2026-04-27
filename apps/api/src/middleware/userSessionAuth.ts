@@ -53,7 +53,9 @@ export async function userSessionAuthMiddleware(
     req.isSandbox = parsedScope.isSandbox;
     req.sessionWalletId = parsedScope.walletId;
     return next();
-  } catch (_error) {
+  } catch (error) {
+    // Log the actual error for debugging while returning a generic error to the client
+    console.error('Session authentication error:', error);
     return next(new AppError(500, ErrorCode.INTERNAL_ERROR, 'Session authentication failed'));
   }
 }

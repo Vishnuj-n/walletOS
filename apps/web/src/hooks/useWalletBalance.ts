@@ -9,6 +9,8 @@ export function useWalletBalance(walletId: string, token?: string) {
     queryKey: walletQueryKeys.wallet(walletId),
     queryFn: () => fetchWallet(walletId, token!),
     enabled: Boolean(walletId && token),
+    // TODO: Replace with WebSockets or Server-Sent Events (SSE) for better scalability
+    // Current 10-second polling will degrade database performance under high concurrency
     refetchInterval: 10_000,
   });
 }
