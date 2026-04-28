@@ -21,14 +21,31 @@ router.post(
   '/wallets',
   requireAdminRole('support'),
   asyncHandler(async (req, res) => {
-    const { external_user_id, currency, label, metadata } = req.body;
-    const tenantId = req.adminUser!.tenantId;
+    const { external_user_id, currency, label, metadata, tenant_id } = req.body;
+    const tenantId = tenant_id || req.adminUser!.tenantId;
     const adminEmail = req.adminUser!.email;
     const idempotencyKey = req.headers['idempotency-key'] as string;
     const isSandbox = req.isSandbox || false;
 
     if (!external_user_id || !currency) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'external_user_id and currency are required');
+    }
+
+    // If tenant_id is provided, validate admin has access to this tenant
+    if (tenant_id && tenant_id !== req.adminUser!.tenantId) {
+      // For now, only superadmins can create wallets in other tenants
+      if (req.adminUser!.role !== 'superadmin') {
+        throw new AppError(403, ErrorCode.FORBIDDEN, 'Only superadmins can create wallets in other tenants');
+      }
+      
+      // Verify the target tenant exists
+      const targetTenant = await prisma.tenant.findUnique({
+        where: { id: tenant_id },
+      });
+      
+      if (!targetTenant) {
+        throw new AppError(404, ErrorCode.NOT_FOUND, 'Target tenant not found');
+      }
     }
 
     // Check for existing audit log with same idempotency key
@@ -1184,6 +1201,43 @@ router.get(
         timestamp: log.timestamp,
       })),
       next_cursor: nextCursor,
+    });
+  })
+);
+
+/**
+ * GET /admin/tenants
+ * List all available tenants (superadmin only)
+ */
+router.get(
+  '/tenants',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const tenants = await prisma.tenant.findMany({
+      select: {
+        id: true,
+        name: true,
+        contactEmail: true,
+        createdAt: true,
+        _count: {
+          select: {
+            wallets: true,
+            adminUsers: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    res.json({
+      data: tenants.map(t => ({
+        tenant_id: t.id,
+        name: t.name,
+        contact_email: t.contactEmail,
+        created_at: t.createdAt,
+        wallet_count: t._count.wallets,
+        admin_count: t._count.adminUsers,
+      })),
     });
   })
 );
