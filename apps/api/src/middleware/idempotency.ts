@@ -206,8 +206,14 @@ export async function idempotencyMiddleware(
                   OR: [
                     { idempotencyKey: req.idempotencyKey },
                     { metadata: { path: ['rawIdempotencyKey'], equals: req.idempotencyKey } }
-                  ]
-                }
+                  ],
+                  createdAt: {
+                    gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+                  },
+                },
+                include: {
+                  wallet: true,
+                },
               });
               if (tx) {
                 await prisma.transaction.update({
@@ -223,7 +229,8 @@ export async function idempotencyMiddleware(
                 }
                 // Max retries exceeded - log warning in production
                 if (process.env.NODE_ENV !== 'test') {
-                  console.warn(`[idempotency] Failed to find transaction for metadata update after retries: ${req.idempotencyKey}`);
+                  const hashedKey = createHash('sha256').update(req.idempotencyKey).digest('hex').substring(0, 16);
+                  console.warn(`[idempotency] Failed to find transaction for metadata update after retries: ${hashedKey}`);
                 }
               }
             } catch (e: any) {
@@ -238,7 +245,16 @@ export async function idempotencyMiddleware(
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 return updateMetadata(retryCount + 1);
               }
-              // Log warning in production for other errors after retries exhausted
+              
+              // Log and rethrow non-retriable errors
+              if (!isRecordNotFoundError) {
+                if (process.env.NODE_ENV !== 'test') {
+                  console.warn(`[idempotency] Failed to update metadata: ${e?.message} (code: ${e?.code})`);
+                }
+                throw e;
+              }
+              
+              // Log warning in production for record not found errors after retries exhausted
               if (retryCount >= 5 && process.env.NODE_ENV !== 'test') {
                 console.warn(`[idempotency] Failed to update metadata after retries: ${e?.code || e?.message}`);
               }

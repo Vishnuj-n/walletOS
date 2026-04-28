@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   // Validate walletId query param matches the hardcoded demo wallet
   const { searchParams } = new URL(request.url);
   const walletId = searchParams.get('walletId');
-  if (walletId && walletId !== DEMO_WALLET_ID) {
+  if (walletId !== null && walletId !== DEMO_WALLET_ID) {
     return NextResponse.json(
       { error: 'Invalid wallet ID for demo session' },
       { status: 400 }

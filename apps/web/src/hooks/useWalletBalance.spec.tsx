@@ -1,3 +1,4 @@
+import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useWalletBalance } from './useWalletBalance';
@@ -75,7 +76,7 @@ describe('useWalletBalance', () => {
   });
 
   it('should handle loading state', () => {
-    (fetchWallet as jest.Mock).mockReturnValue(new Promise(() => {}));
+    (fetchWallet as jest.Mock).mockReturnValue(new Promise(() => void 0));
 
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
