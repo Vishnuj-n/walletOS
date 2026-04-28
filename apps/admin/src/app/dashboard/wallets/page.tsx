@@ -21,6 +21,10 @@ export default function WalletsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -124,6 +128,105 @@ export default function WalletsPage() {
     }
   };
 
+  const handleCreateWallet = async (formData: {
+    external_user_id: string;
+    currency: string;
+    label: string;
+  }) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(
+        `${API_BASE_URL}/admin/wallets`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(formData),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create wallet');
+      }
+
+      setShowCreateModal(false);
+      fetchWallets();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to create wallet');
+    }
+  };
+
+  const handleEditWallet = async (formData: {
+    label: string;
+  }) => {
+    if (!selectedWallet) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(
+        `${API_BASE_URL}/admin/wallets/${selectedWallet.wallet_id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(formData),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to update wallet');
+      }
+
+      setShowEditModal(false);
+      setSelectedWallet(null);
+      fetchWallets();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to update wallet');
+    }
+  };
+
+  const handleDeleteWallet = async (reason: string) => {
+    if (!selectedWallet) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(
+        `${API_BASE_URL}/admin/wallets/${selectedWallet.wallet_id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ reason }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to close wallet');
+      }
+
+      setShowDeleteModal(false);
+      setSelectedWallet(null);
+      fetchWallets();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to close wallet');
+    }
+  };
+
   if (loading) return <div className="text-gray-600">Loading...</div>;
 
   return (
@@ -137,24 +240,32 @@ export default function WalletsPage() {
       )}
 
       <div className="bg-white shadow rounded-lg p-6 mb-6">
-        <div className="flex gap-4 mb-4">
-          <input
-            type="text"
-            placeholder="Search by user ID or label..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex gap-4 flex-1">
+            <input
+              type="text"
+              placeholder="Search by user ID or label..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="frozen">Frozen</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="frozen">Frozen</option>
-            <option value="closed">Closed</option>
-          </select>
+            Create Wallet
+          </button>
         </div>
       </div>
 
@@ -218,6 +329,15 @@ export default function WalletsPage() {
                   >
                     View
                   </Link>
+                  <button
+                    onClick={() => {
+                      setSelectedWallet(wallet);
+                      setShowEditModal(true);
+                    }}
+                    className="text-blue-600 hover:text-blue-900"
+                  >
+                    Edit
+                  </button>
                   {wallet.status === 'active' && (
                     <button
                       onClick={() => handleFreeze(wallet.wallet_id)}
@@ -234,6 +354,17 @@ export default function WalletsPage() {
                       Unfreeze
                     </button>
                   )}
+                  {(wallet.status === 'active' || wallet.status === 'frozen') && wallet.balance === '0.0000' && (
+                    <button
+                      onClick={() => {
+                        setSelectedWallet(wallet);
+                        setShowDeleteModal(true);
+                      }}
+                      className="text-red-600 hover:text-red-900"
+                    >
+                      Close
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -245,6 +376,194 @@ export default function WalletsPage() {
           </div>
         )}
       </div>
+
+      {/* Create Wallet Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Create New Wallet</h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                handleCreateWallet({
+                  external_user_id: formData.get('external_user_id') as string,
+                  currency: formData.get('currency') as string,
+                  label: formData.get('label') as string,
+                });
+              }}
+            >
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  External User ID *
+                </label>
+                <input
+                  type="text"
+                  name="external_user_id"
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Currency *
+                </label>
+                <select
+                  name="currency"
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select Currency</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                </select>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Label
+                </label>
+                <input
+                  type="text"
+                  name="label"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                >
+                  Create
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Wallet Modal */}
+      {showEditModal && selectedWallet && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Edit Wallet</h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                handleEditWallet({
+                  label: formData.get('label') as string,
+                });
+              }}
+            >
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Wallet ID
+                </label>
+                <input
+                  type="text"
+                  value={selectedWallet.wallet_id}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Label
+                </label>
+                <input
+                  type="text"
+                  name="label"
+                  defaultValue={selectedWallet.label || ''}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setSelectedWallet(null);
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Update
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Wallet Modal */}
+      {showDeleteModal && selectedWallet && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Close Wallet</h3>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                Are you sure you want to close this wallet? This action cannot be undone.
+              </p>
+              <div className="bg-gray-50 p-3 rounded">
+                <p className="text-sm"><strong>Wallet ID:</strong> {selectedWallet.wallet_id}</p>
+                <p className="text-sm"><strong>User ID:</strong> {selectedWallet.external_user_id}</p>
+                <p className="text-sm"><strong>Balance:</strong> {selectedWallet.currency} {selectedWallet.balance}</p>
+              </div>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                handleDeleteWallet(formData.get('reason') as string);
+              }}
+            >
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Reason for closing *
+                </label>
+                <textarea
+                  name="reason"
+                  required
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Enter reason for closing this wallet..."
+                />
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setSelectedWallet(null);
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                >
+                  Close Wallet
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
