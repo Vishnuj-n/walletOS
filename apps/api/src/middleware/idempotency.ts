@@ -229,7 +229,7 @@ export async function idempotencyMiddleware(
                 }
                 // Max retries exceeded - log warning in production
                 if (process.env.NODE_ENV !== 'test') {
-                  const hashedKey = createHash('sha256').update(req.idempotencyKey).digest('hex').substring(0, 16);
+                  const hashedKey = createHash('sha256').update(req.idempotencyKey!).digest('hex').substring(0, 16);
                   console.warn(`[idempotency] Failed to find transaction for metadata update after retries: ${hashedKey}`);
                 }
               }
