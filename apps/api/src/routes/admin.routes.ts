@@ -91,24 +91,32 @@ router.post(
       isSandbox,
     });
 
-    // Update audit log with admin info
-    await prisma.auditLog.updateMany({
+    // Update audit log with admin metadata while preserving service-generated data
+    const existingAudit = await prisma.auditLog.findFirst({
       where: {
         tenantId,
         entityId: wallet.id,
         action: 'wallet.created',
       },
-      data: {
-        actorId: adminEmail,
-        actorType: 'admin',
-        changes: {
-          externalUserId: external_user_id,
-          currency,
-          isSandbox,
-          idempotency_key: idempotencyKey,
-        },
-      },
     });
+
+    if (existingAudit) {
+      await prisma.auditLog.updateMany({
+        where: {
+          tenantId,
+          entityId: wallet.id,
+          action: 'wallet.created',
+        },
+        data: {
+          actorId: adminEmail,
+          actorType: 'admin',
+          changes: {
+            ...existingAudit.changes as any,
+            idempotency_key: idempotencyKey,
+          },
+        },
+      });
+    }
 
     res.status(201).json({
       wallet_id: wallet.id,
@@ -183,23 +191,32 @@ router.patch(
       { label, metadata }
     );
 
-    // Update audit log with admin info
-    await prisma.auditLog.updateMany({
+    // Update audit log with admin metadata while preserving service-generated data
+    const existingAudit = await prisma.auditLog.findFirst({
       where: {
         tenantId,
         entityId: walletId,
         action: 'wallet.updated',
       },
-      data: {
-        actorId: adminEmail,
-        actorType: 'admin',
-        changes: {
-          before: { label: wallet.label, metadata: wallet.metadata },
-          after: { label, metadata },
-          idempotency_key: idempotencyKey,
-        },
-      },
     });
+
+    if (existingAudit) {
+      await prisma.auditLog.updateMany({
+        where: {
+          tenantId,
+          entityId: walletId,
+          action: 'wallet.updated',
+        },
+        data: {
+          actorId: adminEmail,
+          actorType: 'admin',
+          changes: {
+            ...existingAudit.changes as any,
+            idempotency_key: idempotencyKey,
+          },
+        },
+      });
+    }
 
     res.json({
       wallet_id: wallet.id,
@@ -269,22 +286,33 @@ router.delete(
 
     const wallet = await closeWallet(walletId, tenantId, isSandbox, reason);
 
-    // Update audit log with admin info
-    await prisma.auditLog.updateMany({
+    // Update audit log with admin metadata while preserving service-generated data
+    const existingAudit = await prisma.auditLog.findFirst({
       where: {
         tenantId,
         entityId: walletId,
         action: 'wallet.closed',
       },
-      data: {
-        actorId: adminEmail,
-        actorType: 'admin',
-        changes: {
-          reason,
-          idempotency_key: idempotencyKey,
-        },
-      },
     });
+
+    if (existingAudit) {
+      await prisma.auditLog.updateMany({
+        where: {
+          tenantId,
+          entityId: walletId,
+          action: 'wallet.closed',
+        },
+        data: {
+          actorId: adminEmail,
+          actorType: 'admin',
+          changes: {
+            ...existingAudit.changes as any,
+            reason,
+            idempotency_key: idempotencyKey,
+          },
+        },
+      });
+    }
 
     res.json({
       wallet_id: wallet.id,
@@ -840,7 +868,7 @@ router.post(
     });
 
     // Handle response based on whether it was idempotent or new
-    if ('existingTx' in result) {
+    if ('existingTx' in result && result.existingTx) {
       return res.status(200).json({
         transaction_id: result.existingTx.id,
         wallet_id: result.existingTx.walletId,
@@ -1120,6 +1148,7 @@ router.post(
           },
           actorId: adminEmail,
           actorType: 'admin',
+          isSandbox: true,
         },
       });
 
