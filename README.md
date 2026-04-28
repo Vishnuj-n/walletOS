@@ -12,13 +12,13 @@ walletOS/
 │   ├── api/      Express + Prisma. All REST endpoints and business logic.
 │   ├── web/      Next.js. User-facing wallet UI.
 │   └── admin/    Next.js. Admin dashboard for support and operations teams.
-└── docs/
-    ├── Requirements.md
-    ├── APP FLOW.md
-    ├── Architecture.md
-    ├── Data API.md
-    ├── Plan Scope.md
-    └── Schema.md
+└── doc/
+    ├── requirements.md
+    ├── app_flow.md
+    ├── architecture.md
+    ├── data_api.md
+    ├── phase_flow.md
+    └── schema.md
 ```
 
 ---
@@ -156,7 +156,7 @@ Use `wlt_test_xxx` to work in the sandbox. Sandbox data never mixes with live da
 
 **Audit log** — every wallet and transaction change writes an audit entry automatically. The database user the API connects with cannot delete or update audit records.
 
-**Session tokens** — the live API key never reaches the browser. Your backend calls `POST /wallets/session-token` server-to-server and sends the resulting short-lived token (1 hour, scoped to one wallet) to your frontend.
+**Session tokens** — the live API key never reaches the browser. Your backend calls `POST /api/v1/auth/session` server-to-server and sends the resulting short-lived token (1 hour, scoped to one wallet) to your frontend.
 
 ---
 
@@ -258,9 +258,9 @@ The generated key has `read_write` scope and is in sandbox mode.
 
 ## Docs
 
-- [Requirements](./docs/Requirements.md) — full feature list with P0/P1/P2 tags
-- [App Flow](./docs/APP%20FLOW.md) — request flows for each actor
-- [Architecture](./docs/Architecture.md) — database, auth, middleware, deployment decisions
-- [Data API](./docs/Data%20API.md) — endpoint reference with request/response shapes
-- [Plan Scope](./docs/Plan%20Scope.md) — build order and open questions
-- [Schema](./docs/Schema.md) — Prisma schema reference
+- [Requirements](./doc/requirements.md) — full feature list
+- [App Flow](./doc/app_flow.md) — request flows for each actor
+- [Architecture](./doc/architecture.md) — database, auth, middleware, deployment decisions
+- [Data API](./doc/data_api.md) — endpoint reference with request/response shapes
+- [Phase Flow](./doc/phase_flow.md) — build order and phases
+- [Schema](./doc/schema.md) — Prisma schema reference

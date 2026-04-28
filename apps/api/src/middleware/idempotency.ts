@@ -198,7 +198,7 @@ export async function idempotencyMiddleware(
       // Persist response to transaction metadata when response finishes
       res.on('finish', async () => {
         if ((res.statusCode === 201 || res.statusCode === 200) && req.cachedResponse && req.idempotencyKey) {
-          const updateMetadata = async () => {
+          const updateMetadata = async (retryCount = 0): Promise<void> => {
             try {
               const tx = await prisma.transaction.findFirst({
                 where: {
@@ -206,16 +206,59 @@ export async function idempotencyMiddleware(
                   OR: [
                     { idempotencyKey: req.idempotencyKey },
                     { metadata: { path: ['rawIdempotencyKey'], equals: req.idempotencyKey } }
-                  ]
-                }
+                  ],
+                  createdAt: {
+                    gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+                  },
+                },
+                include: {
+                  wallet: true,
+                },
               });
               if (tx) {
                 await prisma.transaction.update({
                   where: { id: tx.id },
                   data: { metadata: { ...(tx.metadata as any || {}), response: req.cachedResponse } }
                 });
+              } else {
+                // Retry if transaction not found due to visibility delays
+                if (retryCount < 5) {
+                  const backoff = Math.pow(2, retryCount) * 50; // Exponential backoff: 50ms, 100ms, 200ms, 400ms, 800ms
+                  await new Promise(resolve => setTimeout(resolve, backoff));
+                  return updateMetadata(retryCount + 1);
+                }
+                // Max retries exceeded - log warning in production
+                if (process.env.NODE_ENV !== 'test') {
+                  const hashedKey = createHash('sha256').update(req.idempotencyKey).digest('hex').substring(0, 16);
+                  console.warn(`[idempotency] Failed to find transaction for metadata update after retries: ${hashedKey}`);
+                }
               }
-            } catch (e) { /* silent catch for background task */ }
+            } catch (e: any) {
+              // Retry on Prisma record not found errors - handles race conditions with cleanup
+              // in tests where transaction might be deleted before metadata update completes
+              const isRecordNotFoundError = e?.code === 'P2025' || 
+                e?.message?.includes('required but not found') ||
+                e?.message?.includes('No record was found for an update');
+              
+              if (isRecordNotFoundError && retryCount < 5) {
+                const backoff = Math.pow(2, retryCount) * 50;
+                await new Promise(resolve => setTimeout(resolve, backoff));
+                return updateMetadata(retryCount + 1);
+              }
+              
+              // Log and rethrow non-retriable errors
+              if (!isRecordNotFoundError) {
+                if (process.env.NODE_ENV !== 'test') {
+                  console.warn(`[idempotency] Failed to update metadata: ${e?.message} (code: ${e?.code})`);
+                }
+                throw e;
+              }
+              
+              // Log warning in production for record not found errors after retries exhausted
+              if (retryCount >= 5 && process.env.NODE_ENV !== 'test') {
+                console.warn(`[idempotency] Failed to update metadata after retries: ${e?.code || e?.message}`);
+              }
+            }
           };
 
           // In test environment, run immediately to prevent async leaks

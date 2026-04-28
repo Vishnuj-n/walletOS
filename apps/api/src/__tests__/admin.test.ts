@@ -85,7 +85,7 @@ describe('Admin API Endpoints', () => {
         },
       });
       expect(auditLog).toBeDefined();
-      expect(auditLog?.actorId).toBe('admin@example.com');
+      expect(auditLog?.actorId).toBe('admin@test.com');
     });
 
     it('should reject freeze without reason', async () => {
@@ -242,6 +242,7 @@ describe('Admin API Endpoints', () => {
       const response = await request(app)
         .post('/api/v1/admin/tenants')
         .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', 'test-tenant-idempotency-key')
         .send({
           name: 'New Test Tenant',
           contact_email: 'new-tenant@example.com',

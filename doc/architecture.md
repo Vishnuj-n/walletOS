@@ -122,7 +122,7 @@ All errors flow to `middleware/errorHandler.ts`. The handler formats them into t
 
 ## Logging
 
-Pino is the logger. `NODE_ENV=production` → structured JSON to stdout. `NODE_ENV=development` → pino-pretty with colours and timestamps. The logger is a singleton in `utils/logger.ts`. No `console.log` in application code.
+Pino is the logger. `NODE_ENV=development` → pino-pretty with colours and timestamps. `NODE_ENV=test` → structured JSON to stdout for testing. The logger is a singleton in `utils/logger.ts`. No `console.log` in application code.
 
 Every error log includes the `request_id` so a single log line can be correlated to the API response the caller received.
 

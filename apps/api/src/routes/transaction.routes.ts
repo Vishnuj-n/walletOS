@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import {
   creditWallet,
   debitWallet,
@@ -16,12 +16,16 @@ import { TransactionMetadata, TransactionResponse, ListTransactionsQuery } from 
 
 const router = Router();
 
-function transactionReadAuth(req: Request, res: Response, next: any): void {
-  if (req.headers.authorization?.startsWith('Bearer ')) {
-    void userSessionAuthMiddleware(req, res, next);
-    return;
+async function transactionReadAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (req.headers.authorization?.startsWith('Bearer ')) {
+      await userSessionAuthMiddleware(req, res, next);
+      return;
+    }
+    await apiKeyAuthMiddleware(req, res, next);
+  } catch (error) {
+    next(error);
   }
-  void apiKeyAuthMiddleware(req, res, next);
 }
 
 /**
