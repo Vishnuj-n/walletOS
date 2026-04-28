@@ -6,12 +6,310 @@ import { adminAuthMiddleware, requireAdminRole } from '../middleware/adminAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
-import { freezeWallet, unfreezeWallet } from '../services/wallet.service';
+import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet } from '../services/wallet.service';
 
 const router = Router();
 
 // Apply admin auth to all routes
 router.use(adminAuthMiddleware);
+
+/**
+ * POST /admin/wallets
+ * Create a new wallet
+ */
+router.post(
+  '/wallets',
+  requireAdminRole('support'),
+  asyncHandler(async (req, res) => {
+    const { external_user_id, currency, label, metadata, tenant_id } = req.body;
+    const tenantId = tenant_id || req.adminUser!.tenantId;
+    const adminEmail = req.adminUser!.email;
+    const idempotencyKey = req.headers['idempotency-key'] as string;
+    const isSandbox = req.isSandbox || false;
+
+    if (!external_user_id || !currency) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'external_user_id and currency are required');
+    }
+
+    if (!idempotencyKey) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'idempotency-key header is required');
+    }
+
+    // If tenant_id is provided, validate admin has access to this tenant
+    if (tenant_id && tenant_id !== req.adminUser!.tenantId) {
+      // For now, only superadmins can create wallets in other tenants
+      if (req.adminUser!.role !== 'superadmin') {
+        throw new AppError(403, ErrorCode.FORBIDDEN, 'Only superadmins can create wallets in other tenants');
+      }
+      
+      // Verify the target tenant exists
+      const targetTenant = await prisma.tenant.findUnique({
+        where: { id: tenant_id },
+      });
+      
+      if (!targetTenant) {
+        throw new AppError(404, ErrorCode.NOT_FOUND, 'Target tenant not found');
+      }
+    }
+
+    // Atomic wallet creation with idempotency reservation
+    const result = await prisma.$transaction(async (tx) => {
+      // Create audit log reservation first
+      const auditReservation = await tx.auditLog.create({
+        data: {
+          tenantId: tenantId as string,
+          entityType: 'wallet',
+          entityId: '', // Will be updated after wallet creation
+          action: 'wallet.created',
+          changes: {
+            idempotency_key: idempotencyKey,
+          } as Prisma.InputJsonValue,
+        },
+      });
+
+      // Create the wallet
+      const wallet = await createWallet({
+        tenantId,
+        externalUserId: external_user_id,
+        currency,
+        label,
+        metadata,
+        isSandbox,
+      });
+
+      // Update audit log with complete information
+      await tx.auditLog.update({
+        where: { id: auditReservation.id },
+        data: {
+          entityId: wallet.id,
+          actorId: adminEmail,
+          actorType: 'admin',
+          changes: {
+            idempotency_key: idempotencyKey,
+            external_user_id,
+            currency,
+            label,
+            metadata,
+          } as Prisma.InputJsonValue,
+        },
+      });
+
+      return wallet;
+    });
+
+    res.status(201).json({
+      wallet_id: result.id,
+      external_user_id: result.externalUserId,
+      label: result.label,
+      balance: result.balance.toFixed(4),
+      currency: result.currency,
+      status: result.status,
+      is_sandbox: result.isSandbox,
+      metadata: result.metadata,
+    });
+  })
+);
+
+/**
+ * PATCH /admin/wallets/:walletId
+ * Update wallet label or metadata
+ */
+router.patch(
+  '/wallets/:walletId',
+  requireAdminRole('support'),
+  asyncHandler(async (req, res) => {
+    const { walletId } = req.params;
+    const { label, metadata } = req.body;
+    const tenantId = req.adminUser!.tenantId;
+    const adminEmail = req.adminUser!.email;
+    const idempotencyKey = req.headers['idempotency-key'] as string;
+    const isSandbox = req.isSandbox || false;
+
+    if (label === undefined && metadata === undefined) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'label or metadata must be provided');
+    }
+
+    // Check for existing audit log with same idempotency key
+    if (idempotencyKey) {
+      const existingAudit = await prisma.auditLog.findFirst({
+        where: {
+          tenantId,
+          action: 'wallet.updated',
+          isSandbox,
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+      });
+
+      if (existingAudit) {
+        const existingWallet = await prisma.wallet.findUnique({
+          where: { id: existingAudit.entityId },
+        });
+
+        if (existingWallet) {
+          return res.status(200).json({
+            wallet_id: existingWallet.id,
+            external_user_id: existingWallet.externalUserId,
+            label: existingWallet.label,
+            balance: existingWallet.balance.toFixed(4),
+            currency: existingWallet.currency,
+            status: existingWallet.status,
+            is_sandbox: existingWallet.isSandbox,
+            metadata: existingWallet.metadata,
+          });
+        }
+      }
+    }
+
+    // Capture pre-update state for audit log
+    const prevWallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+    });
+
+    if (!prevWallet) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
+    }
+
+    const wallet = await updateWallet(
+      walletId,
+      tenantId,
+      isSandbox,
+      { label, metadata }
+    );
+
+    // Create new audit log entry (append-only)
+    await prisma.auditLog.create({
+      data: {
+        tenantId: tenantId as string,
+        entityType: 'wallet',
+        entityId: walletId,
+        action: 'wallet.updated',
+        actorId: adminEmail,
+        actorType: 'admin',
+        changes: {
+          before: {
+            label: prevWallet.label,
+            metadata: prevWallet.metadata,
+          },
+          after: {
+            label,
+            metadata,
+          },
+          idempotency_key: idempotencyKey,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    res.json({
+      wallet_id: wallet.id,
+      external_user_id: wallet.externalUserId,
+      label: wallet.label,
+      balance: wallet.balance.toFixed(4),
+      currency: wallet.currency,
+      status: wallet.status,
+      is_sandbox: wallet.isSandbox,
+      metadata: wallet.metadata,
+    });
+  })
+);
+
+/**
+ * DELETE /admin/wallets/:walletId
+ * Close a wallet (admin version with reason)
+ */
+router.delete(
+  '/wallets/:walletId',
+  requireAdminRole('support'),
+  asyncHandler(async (req, res) => {
+    const { walletId } = req.params;
+    const { reason } = req.body;
+    const tenantId = req.adminUser!.tenantId;
+    const adminEmail = req.adminUser!.email;
+    const idempotencyKey = req.headers['idempotency-key'] as string;
+    const isSandbox = req.isSandbox || false;
+
+    if (!reason) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Missing required field: reason');
+    }
+
+    // Check for existing audit log with same idempotency key
+    if (idempotencyKey) {
+      const existingAudit = await prisma.auditLog.findFirst({
+        where: {
+          tenantId,
+          action: 'wallet.closed',
+          isSandbox,
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+      });
+
+      if (existingAudit) {
+        const existingWallet = await prisma.wallet.findUnique({
+          where: { id: existingAudit.entityId },
+        });
+
+        if (existingWallet) {
+          return res.status(200).json({
+            wallet_id: existingWallet.id,
+            external_user_id: existingWallet.externalUserId,
+            label: existingWallet.label,
+            balance: existingWallet.balance.toFixed(4),
+            currency: existingWallet.currency,
+            status: 'closed',
+            is_sandbox: existingWallet.isSandbox,
+            metadata: existingWallet.metadata,
+          });
+        }
+      }
+    }
+
+    const wallet = await closeWallet(walletId, tenantId, isSandbox, reason);
+
+    // Update audit log with admin metadata while preserving service-generated data
+    const existingAudit = await prisma.auditLog.findFirst({
+      where: {
+        tenantId,
+        entityId: walletId,
+        action: 'wallet.closed',
+      },
+    });
+
+    if (existingAudit) {
+      await prisma.auditLog.updateMany({
+        where: {
+          tenantId,
+          entityId: walletId,
+          action: 'wallet.closed',
+        },
+        data: {
+          actorId: adminEmail,
+          actorType: 'admin',
+          changes: {
+            ...existingAudit.changes as any,
+            reason,
+            idempotency_key: idempotencyKey,
+          },
+        },
+      });
+    }
+
+    res.json({
+      wallet_id: wallet.id,
+      external_user_id: wallet.externalUserId,
+      label: wallet.label,
+      balance: wallet.balance.toFixed(4),
+      currency: wallet.currency,
+      status: wallet.status,
+      is_sandbox: wallet.isSandbox,
+      metadata: wallet.metadata,
+    });
+  })
+);
 
 /**
  * GET /admin/wallets
@@ -554,7 +852,7 @@ router.post(
     });
 
     // Handle response based on whether it was idempotent or new
-    if ('existingTx' in result) {
+    if ('existingTx' in result && result.existingTx) {
       return res.status(200).json({
         transaction_id: result.existingTx.id,
         wallet_id: result.existingTx.walletId,
@@ -834,6 +1132,7 @@ router.post(
           },
           actorId: adminEmail,
           actorType: 'admin',
+          isSandbox: true,
         },
       });
 
@@ -915,6 +1214,43 @@ router.get(
         timestamp: log.timestamp,
       })),
       next_cursor: nextCursor,
+    });
+  })
+);
+
+/**
+ * GET /admin/tenants
+ * List all available tenants (superadmin only)
+ */
+router.get(
+  '/tenants',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const tenants = await prisma.tenant.findMany({
+      select: {
+        id: true,
+        name: true,
+        contactEmail: true,
+        createdAt: true,
+        _count: {
+          select: {
+            wallets: true,
+            adminUsers: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    res.json({
+      data: tenants.map(t => ({
+        tenant_id: t.id,
+        name: t.name,
+        contact_email: t.contactEmail,
+        created_at: t.createdAt,
+        wallet_count: t._count.wallets,
+        admin_count: t._count.adminUsers,
+      })),
     });
   })
 );

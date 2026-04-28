@@ -69,6 +69,7 @@ export async function createWallet(params: CreateWalletParams) {
             currency: params.currency,
             isSandbox: params.isSandbox,
           },
+          isSandbox: params.isSandbox,
         },
       });
 
@@ -168,6 +169,7 @@ export async function updateWallet(
           before: { label: wallet.label, metadata: wallet.metadata },
           after: { label: params.label, metadata: params.metadata },
         },
+        isSandbox,
       },
     });
 
@@ -352,6 +354,7 @@ export async function closeWallet(
           before: { status: wallet.status },
           after: { status: 'closed' },
         },
+        isSandbox,
       },
     });
 

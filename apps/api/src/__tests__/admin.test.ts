@@ -347,4 +347,297 @@ describe('Admin API Endpoints', () => {
       expect(response.body.error.code).toBe('VALIDATION_ERROR');
     });
   });
+
+  describe('POST /admin/wallets', () => {
+    it('should create a wallet with admin metadata', async () => {
+      const response = await request(app)
+        .post('/api/v1/admin/wallets')
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', 'test-create-wallet-idempotency')
+        .send({
+          external_user_id: 'admin-created-user',
+          currency: 'USD',
+          label: 'Admin Created Wallet',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.external_user_id).toBe('admin-created-user');
+      expect(response.body.currency).toBe('USD');
+      expect(response.body.label).toBe('Admin Created Wallet');
+      
+      // Verify audit log was created with admin metadata
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: testTenantId,
+          action: 'wallet.created',
+        },
+      });
+      expect(auditLog).toBeDefined();
+      expect(auditLog?.actorId).toBe('admin@test.com');
+      expect(auditLog?.actorType).toBe('admin');
+    });
+
+    it('should handle idempotency for wallet creation', async () => {
+      const response1 = await request(app)
+        .post('/api/v1/admin/wallets')
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', 'test-idempotency-create')
+        .send({
+          external_user_id: 'idempotent-user',
+          currency: 'USD',
+        });
+
+      expect(response1.status).toBe(201);
+
+      const response2 = await request(app)
+        .post('/api/v1/admin/wallets')
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', 'test-idempotency-create')
+        .send({
+          external_user_id: 'idempotent-user',
+          currency: 'USD',
+        });
+
+      expect(response2.status).toBe(200);
+      expect(response1.body.wallet_id).toBe(response2.body.wallet_id);
+    });
+  });
+
+  describe('PATCH /admin/wallets/:walletId', () => {
+    it('should update wallet label and metadata', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/admin/wallets/${testWalletId}`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', 'test-update-wallet')
+        .send({
+          label: 'Updated Admin Wallet',
+          metadata: { updated_by: 'admin' },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.label).toBe('Updated Admin Wallet');
+      expect(response.body.metadata).toEqual({ updated_by: 'admin' });
+      
+      // Verify audit log preserves before/after data
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: testTenantId,
+          action: 'wallet.updated',
+        },
+      });
+      expect(auditLog).toBeDefined();
+      expect(auditLog?.actorId).toBe('admin@test.com');
+    });
+
+    it('should handle idempotency for wallet updates', async () => {
+      const response1 = await request(app)
+        .patch(`/api/v1/admin/wallets/${testWalletId}`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', 'test-update-idempotency')
+        .send({
+          label: 'Idempotent Update',
+        });
+
+      expect(response1.status).toBe(200);
+
+      const response2 = await request(app)
+        .patch(`/api/v1/admin/wallets/${testWalletId}`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', 'test-update-idempotency')
+        .send({
+          label: 'Idempotent Update',
+        });
+
+      expect(response2.status).toBe(200);
+      expect(response1.body.wallet_id).toBe(response2.body.wallet_id);
+    });
+  });
+
+  describe('DELETE /admin/wallets/:walletId', () => {
+    beforeEach(async () => {
+      // Ensure wallet has zero balance for closure
+      await prisma.wallet.update({
+        where: { id: testWalletId },
+        data: { balance: "0.00", status: 'active' },
+      });
+    });
+
+    it('should close a wallet with reason', async () => {
+      const response = await request(app)
+        .delete(`/api/v1/admin/wallets/${testWalletId}`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', 'test-close-wallet')
+        .send({
+          reason: 'Admin requested closure',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('closed');
+      
+      // Verify audit log was created with reason
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: testTenantId,
+          action: 'wallet.closed',
+        },
+      });
+      expect(auditLog).toBeDefined();
+      expect(auditLog?.actorId).toBe('admin@test.com');
+    });
+
+    it('should handle idempotency for wallet closure', async () => {
+      // Reset wallet for idempotency test
+      await prisma.wallet.update({
+        where: { id: testWalletId },
+        data: { status: 'active', balance: "0.00" },
+      });
+
+      const response1 = await request(app)
+        .delete(`/api/v1/admin/wallets/${testWalletId}`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', 'test-close-idempotency')
+        .send({
+          reason: 'Idempotent closure',
+        });
+
+      expect(response1.status).toBe(200);
+
+      const response2 = await request(app)
+        .delete(`/api/v1/admin/wallets/${testWalletId}`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', 'test-close-idempotency')
+        .send({
+          reason: 'Idempotent closure',
+        });
+
+      expect(response2.status).toBe(200);
+      expect(response1.body.wallet_id).toBe(response2.body.wallet_id);
+    });
+  });
+
+  describe('GET /admin/tenants', () => {
+    it('should list tenants for superadmin', async () => {
+      // Create a superadmin user for this test
+      await prisma.adminUser.upsert({
+        where: {
+          tenantId_supabaseUid: {
+            tenantId: 'default',
+            supabaseUid: 'superadmin-uuid',
+          },
+        },
+        update: {},
+        create: {
+          tenantId: 'default',
+          supabaseUid: 'superadmin-uuid',
+          email: 'superadmin@test.com',
+          role: 'superadmin',
+          isActive: true,
+        },
+      });
+
+      const superadminToken = 'Bearer mock-superadmin-jwt-token';
+
+      const response = await request(app)
+        .get('/api/v1/admin/tenants')
+        .set('Authorization', superadminToken);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toBeDefined();
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body.data.length).toBeGreaterThan(0);
+      expect(response.body.data[0]).toHaveProperty('tenant_id');
+      expect(response.body.data[0]).toHaveProperty('name');
+      expect(response.body.data[0]).toHaveProperty('wallet_count');
+      expect(response.body.data[0]).toHaveProperty('admin_count');
+    });
+
+    it('should reject tenant listing for non-superadmin', async () => {
+      const response = await request(app)
+        .get('/api/v1/admin/tenants')
+        .set('Authorization', adminAuthToken);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error.code).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('Sandbox Mode Behavior', () => {
+    it('should handle sandbox wallet operations correctly', async () => {
+      // Create a sandbox wallet
+      const sandboxWallet = await prisma.wallet.create({
+        data: {
+          tenantId: testTenantId,
+          externalUserId: 'sandbox-user',
+          currency: 'USD',
+          balance: "100.00",
+          status: 'active',
+          isSandbox: true,
+        },
+      });
+
+      const response = await request(app)
+        .post(`/api/v1/admin/wallets/${sandboxWallet.id}/freeze`)
+        .set('Authorization', adminAuthToken)
+        .set('X-Sandbox', 'true')
+        .send({ reason: 'Sandbox test freeze' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.is_sandbox).toBe(true);
+      
+      // Verify audit log is marked as sandbox
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: testTenantId,
+          action: 'wallet.frozen',
+        },
+      });
+      expect(auditLog?.isSandbox).toBe(true);
+
+      // Cleanup
+      await prisma.wallet.delete({ where: { id: sandboxWallet.id } });
+    });
+  });
+
+  describe('CORS Preflight', () => {
+    it('should handle OPTIONS preflight for PATCH with custom headers', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/admin/wallets/${testWalletId}`)
+        .set('Origin', 'http://localhost:3000')
+        .set('Access-Control-Request-Method', 'PATCH')
+        .set('Access-Control-Request-Headers', 'Content-Type, Authorization, Idempotency-Key');
+
+      expect(response.status).toBe(204);
+      expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+      expect(response.headers['access-control-allow-methods']).toContain('PATCH');
+      expect(response.headers['access-control-allow-headers']).toContain('Idempotency-Key');
+    });
+  });
+
+  describe('Audit Log Actor Metadata', () => {
+    it('should preserve admin actor metadata in audit logs', async () => {
+      const response = await request(app)
+        .post('/api/v1/admin/transactions/credit')
+        .set('Authorization', adminAuthToken)
+        .send({
+          wallet_id: testWalletId,
+          amount: '25.00',
+          description: 'Test audit metadata',
+          reason: 'Audit metadata test',
+        });
+
+      expect(response.status).toBe(201);
+
+      // Verify audit log contains proper actor metadata
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: testTenantId,
+          action: 'admin.credit',
+        },
+      });
+      expect(auditLog).toBeDefined();
+      expect(auditLog?.actorId).toBe('admin@test.com');
+      expect(auditLog?.actorType).toBe('admin');
+      expect(auditLog?.isSandbox).toBe(false);
+    });
+  });
 });

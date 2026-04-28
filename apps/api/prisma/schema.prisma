@@ -3,9 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Tenant {
@@ -31,7 +30,7 @@ model ApiKey {
   scope     KeyScope
   isSandbox Boolean  @default(false)
   isActive  Boolean  @default(true)
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
 }
@@ -43,7 +42,7 @@ model AdminUser {
   email       String
   role        AdminRole
   isActive    Boolean   @default(true)
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, supabaseUid])
   @@index([tenantId])
@@ -61,7 +60,7 @@ model Wallet {
   metadata           Json?
   closureScheduledAt DateTime?
   transactions       Transaction[]
-  tenant             Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant             Tenant        @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, externalUserId, isSandbox])
   @@index([tenantId])
@@ -81,8 +80,8 @@ model Transaction {
   idempotencyKey String?
   metadata       Json?
   createdAt      DateTime        @default(now())
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  wallet         Wallet          @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  wallet         Wallet          @relation(fields: [walletId], references: [id])
 
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId])
@@ -101,7 +100,7 @@ model AuditLog {
   actorType  String?
   timestamp  DateTime @default(now())
   isSandbox  Boolean  @default(false)
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([entityType, entityId])
@@ -110,18 +109,19 @@ model AuditLog {
 }
 
 model Webhook {
-  id           String    @id @default(cuid())
+  id           String          @id @default(cuid())
   tenantId     String
   url          String
   events       String[]
   secret       String
-  isActive     Boolean   @default(true)
+  isActive     Boolean         @default(true)
   lastAttempt  DateTime?
-  failureCount Int       @default(0)
-  status       String    @default("active")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  failureCount Int             @default(0)
+  status       String          @default("active")
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  tenant       Tenant          @relation(fields: [tenantId], references: [id])
+  deliveries   WebhookDelivery[]
 
   @@index([tenantId])
 }
@@ -129,6 +129,7 @@ model Webhook {
 model WebhookDelivery {
   id          String    @id @default(cuid())
   webhookId   String
+  webhook     Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
   eventType   String
   payload     Json
   statusCode  Int?
