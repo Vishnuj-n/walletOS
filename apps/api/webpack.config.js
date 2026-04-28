@@ -5,7 +5,7 @@ module.exports = {
   output: {
     path: join(__dirname, '../../dist/apps/api'),
     clean: true,
-    devtoolModuleFilenameTemplate: '[absolute-resource-path]',
+    devtoolModuleFilenameTemplate: process.env.NODE_ENV !== 'production' ? '[absolute-resource-path]' : undefined,
   },
   plugins: [
     new NxAppWebpackPlugin({

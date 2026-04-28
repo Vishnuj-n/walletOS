@@ -1,13 +1,12 @@
+import React, { ReactNode } from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useLedgerActivities } from './useLedgerActivities';
+import { fetchLedgerActivities } from '../lib/api-client';
 
 // Mock the api-client
-jest.mock('../lib/api-client', () => ({
-  fetchLedgerActivities: jest.fn(),
-}));
-
-const { fetchLedgerActivities } = require('../lib/api-client');
+jest.mock('../lib/api-client');
+const mockedFetchLedgerActivities = jest.mocked(fetchLedgerActivities);
 
 describe('useLedgerActivities', () => {
   let queryClient: QueryClient;
@@ -44,9 +43,9 @@ describe('useLedgerActivities', () => {
       next_cursor: 'cursor_123',
       total: 1,
     };
-    (fetchLedgerActivities as jest.Mock).mockResolvedValue(mockActivities);
+    mockedFetchLedgerActivities.mockResolvedValue(mockActivities);
 
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
+    const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
 
@@ -69,9 +68,9 @@ describe('useLedgerActivities', () => {
       next_cursor: null,
       total: 0,
     };
-    (fetchLedgerActivities as jest.Mock).mockResolvedValue(mockActivities);
+    mockedFetchLedgerActivities.mockResolvedValue(mockActivities);
 
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
+    const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
 
@@ -93,7 +92,7 @@ describe('useLedgerActivities', () => {
   });
 
   it('should not be enabled if walletId is missing', () => {
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
+    const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
 
@@ -106,7 +105,7 @@ describe('useLedgerActivities', () => {
   });
 
   it('should not be enabled if token is missing', () => {
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
+    const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
 
@@ -129,11 +128,11 @@ describe('useLedgerActivities', () => {
       next_cursor: 'cursor_2',
       total: 1,
     };
-    (fetchLedgerActivities as jest.Mock)
+    mockedFetchLedgerActivities
       .mockResolvedValueOnce(mockActivities1)
       .mockResolvedValueOnce(mockActivities2);
 
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
+    const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
 
@@ -163,11 +162,11 @@ describe('useLedgerActivities', () => {
   });
 
   it('should handle fetch errors', async () => {
-    (fetchLedgerActivities as jest.Mock).mockRejectedValue(
+    mockedFetchLedgerActivities.mockRejectedValue(
       new Error('Activities fetch failed')
     );
 
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
+    const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
 

@@ -6,7 +6,8 @@
 
 // Load test environment variables from .env.test
 import { config } from 'dotenv';
-config({ path: '../../.env.test' });
+import path from 'path';
+config({ path: path.resolve(process.cwd(), '.env.test') });
 
 // Mock @supabase/supabase-js BEFORE any imports that use it
 // This ensures the middleware uses the mocked client instead of the real one

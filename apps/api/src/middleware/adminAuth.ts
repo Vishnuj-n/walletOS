@@ -82,12 +82,10 @@ export async function adminAuthMiddleware(
 
     next();
   } catch (error) {
-    // Log sanitized error message without sensitive details
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('adminAuth authentication error:', {
-      name: error instanceof Error ? error.name : 'Error',
-      message: errorMessage.replace(/token|key|password|secret/gi, '[REDACTED]'),
-    });
+    // Log minimal error message without sensitive details
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('adminAuth: authentication failed');
+    }
     return next(new AppError(500, ErrorCode.INTERNAL_ERROR, 'Authentication error'));
   }
 }

@@ -20,6 +20,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Validate walletId query param matches the hardcoded demo wallet
+  const { searchParams } = new URL(request.url);
+  const walletId = searchParams.get('walletId');
+  if (walletId && walletId !== DEMO_WALLET_ID) {
+    return NextResponse.json(
+      { error: 'Invalid wallet ID for demo session' },
+      { status: 400 }
+    );
+  }
+
   const response = await fetch(`${API_BASE_URL}/auth/session`, {
     method: 'POST',
     headers: {

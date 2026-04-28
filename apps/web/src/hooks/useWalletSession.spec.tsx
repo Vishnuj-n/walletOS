@@ -51,8 +51,8 @@ describe('useWalletSession', () => {
 
   it('should schedule refresh 5 minutes before expiry', async () => {
     const now = Date.now();
-    const fiveMinutesFromNow = now + 5 * 60 * 1000;
     const oneHourFromNow = now + 60 * 60 * 1000;
+    const refreshDelay = oneHourFromNow - now - 5 * 60 * 1000; // 55 minutes
 
     const mockSession = {
       token: 'sess_test_token',
@@ -71,9 +71,9 @@ describe('useWalletSession', () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    // Fast-forward to 5 minutes before expiry
+    // Fast-forward to the scheduled refresh point (5 minutes before expiry)
     act(() => {
-      jest.advanceTimersByTime(fiveMinutesFromNow - now);
+      jest.advanceTimersByTime(refreshDelay);
     });
 
     await waitFor(() => {

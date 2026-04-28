@@ -214,6 +214,17 @@ export async function idempotencyMiddleware(
                   where: { id: tx.id },
                   data: { metadata: { ...(tx.metadata as any || {}), response: req.cachedResponse } }
                 });
+              } else {
+                // Retry if transaction not found due to visibility delays
+                if (retryCount < 5) {
+                  const backoff = Math.pow(2, retryCount) * 50; // Exponential backoff: 50ms, 100ms, 200ms, 400ms, 800ms
+                  await new Promise(resolve => setTimeout(resolve, backoff));
+                  return updateMetadata(retryCount + 1);
+                }
+                // Max retries exceeded - log warning in production
+                if (process.env.NODE_ENV !== 'test') {
+                  console.warn(`[idempotency] Failed to find transaction for metadata update after retries: ${req.idempotencyKey}`);
+                }
               }
             } catch (e: any) {
               // Retry on Prisma record not found errors - handles race conditions with cleanup
@@ -222,11 +233,15 @@ export async function idempotencyMiddleware(
                 e?.message?.includes('required but not found') ||
                 e?.message?.includes('No record was found for an update');
               
-              if (isRecordNotFoundError && retryCount < 3) {
-                await new Promise(resolve => setTimeout(resolve, 50));
+              if (isRecordNotFoundError && retryCount < 5) {
+                const backoff = Math.pow(2, retryCount) * 50;
+                await new Promise(resolve => setTimeout(resolve, backoff));
                 return updateMetadata(retryCount + 1);
               }
-              // Silent catch for other errors - this is a background optimization
+              // Log warning in production for other errors after retries exhausted
+              if (retryCount >= 5 && process.env.NODE_ENV !== 'test') {
+                console.warn(`[idempotency] Failed to update metadata after retries: ${e?.code || e?.message}`);
+              }
             }
           };
 

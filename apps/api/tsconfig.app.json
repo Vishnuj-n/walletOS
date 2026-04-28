@@ -5,6 +5,7 @@
     "module": "Node16",
     "types": ["node", "express"]
   },
+  "composite": true,
   "include": ["src/**/*.ts", "src/types/**/*.d.ts"],
   "exclude": [
     "jest.config.ts",

@@ -26,7 +26,12 @@ router.get(
 
     const where: Prisma.WalletWhereInput = { tenantId, isSandbox };
 
-    if (status) where.status = status as any;
+    if (status) {
+      const allowedStatuses = ['active', 'frozen', 'pending_closure', 'closed'];
+      if (allowedStatuses.includes(status as string)) {
+        where.status = status as any;
+      }
+    }
     if (currency) where.currency = Array.isArray(currency) ? currency[0] : currency;
     if (search) {
       where.OR = [
@@ -138,6 +143,12 @@ router.post(
           where: {
             tenantId,
             idempotencyKey,
+            wallet: {
+              isSandbox,
+            },
+          },
+          include: {
+            wallet: true,
           },
         });
 
@@ -281,6 +292,12 @@ router.post(
           where: {
             tenantId,
             idempotencyKey,
+            wallet: {
+              isSandbox,
+            },
+          },
+          include: {
+            wallet: true,
           },
         });
 
@@ -440,6 +457,12 @@ router.post(
           where: {
             tenantId,
             idempotencyKey,
+            wallet: {
+              isSandbox,
+            },
+          },
+          include: {
+            wallet: true,
           },
         });
 
@@ -694,7 +717,7 @@ router.post(
       }
     }
 
-    const updatedWallet = await unfreezeWallet(walletId, tenantId, wallet.isSandbox, reason, idempotencyKey);
+    const updatedWallet = await unfreezeWallet(walletId, tenantId, wallet.isSandbox, reason, idempotencyKey, adminEmail, 'admin');
 
     res.json({
       wallet_id: updatedWallet.id,

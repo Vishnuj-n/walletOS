@@ -75,6 +75,8 @@ describe('useWalletBalance', () => {
   });
 
   it('should handle loading state', () => {
+    (fetchWallet as jest.Mock).mockReturnValue(new Promise(() => {}));
+
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
