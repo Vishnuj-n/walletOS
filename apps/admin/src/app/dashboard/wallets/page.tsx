@@ -25,6 +25,7 @@ export default function WalletsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -523,13 +524,7 @@ export default function WalletsPage() {
                 <p className="text-sm"><strong>Balance:</strong> {selectedWallet.currency} {selectedWallet.balance}</p>
               </div>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                handleDeleteWallet(formData.get('reason') as string);
-              }}
-            >
+            <form>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Reason for closing *
@@ -542,20 +537,49 @@ export default function WalletsPage() {
                   placeholder="Enter reason for closing this wallet..."
                 />
               </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Type wallet ID to confirm *
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmation}
+                  onChange={(e) => setDeleteConfirmation(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder={`Enter: ${selectedWallet.wallet_id}`}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  This action cannot be undone. Please type the wallet ID exactly as shown above.
+                </p>
+              </div>
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => {
                     setShowDeleteModal(false);
                     setSelectedWallet(null);
+                    setDeleteConfirmation('');
                   }}
                   className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const form = e.currentTarget.closest('form') as HTMLFormElement;
+                    const formData = new FormData(form);
+                    if (deleteConfirmation === selectedWallet.wallet_id) {
+                      handleDeleteWallet(formData.get('reason') as string);
+                    }
+                  }}
+                  disabled={deleteConfirmation !== selectedWallet.wallet_id}
+                  className={`px-4 py-2 rounded-md ${
+                    deleteConfirmation === selectedWallet.wallet_id
+                      ? 'bg-red-600 text-white hover:bg-red-700'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
                 >
                   Close Wallet
                 </button>

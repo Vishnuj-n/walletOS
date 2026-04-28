@@ -31,6 +31,10 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'external_user_id and currency are required');
     }
 
+    if (!idempotencyKey) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'idempotency-key header is required');
+    }
+
     // If tenant_id is provided, validate admin has access to this tenant
     if (tenant_id && tenant_id !== req.adminUser!.tenantId) {
       // For now, only superadmins can create wallets in other tenants
@@ -48,85 +52,60 @@ router.post(
       }
     }
 
-    // Check for existing audit log with same idempotency key
-    if (idempotencyKey) {
-      const existingAudit = await prisma.auditLog.findFirst({
-        where: {
-          tenantId,
+    // Atomic wallet creation with idempotency reservation
+    const result = await prisma.$transaction(async (tx) => {
+      // Create audit log reservation first
+      const auditReservation = await tx.auditLog.create({
+        data: {
+          tenantId: tenantId as string,
+          entityType: 'wallet',
+          entityId: '', // Will be updated after wallet creation
           action: 'wallet.created',
-          isSandbox,
           changes: {
-            path: ['idempotency_key'],
-            equals: idempotencyKey,
-          },
+            idempotency_key: idempotencyKey,
+          } as Prisma.InputJsonValue,
         },
       });
 
-      if (existingAudit) {
-        const existingWallet = await prisma.wallet.findUnique({
-          where: { id: existingAudit.entityId },
-        });
-
-        if (existingWallet) {
-          return res.status(200).json({
-            wallet_id: existingWallet.id,
-            external_user_id: existingWallet.externalUserId,
-            label: existingWallet.label,
-            balance: existingWallet.balance.toFixed(4),
-            currency: existingWallet.currency,
-            status: existingWallet.status,
-            is_sandbox: existingWallet.isSandbox,
-            metadata: existingWallet.metadata,
-          });
-        }
-      }
-    }
-
-    const wallet = await createWallet({
-      tenantId,
-      externalUserId: external_user_id,
-      currency,
-      label,
-      metadata,
-      isSandbox,
-    });
-
-    // Update audit log with admin metadata while preserving service-generated data
-    const existingAudit = await prisma.auditLog.findFirst({
-      where: {
+      // Create the wallet
+      const wallet = await createWallet({
         tenantId,
-        entityId: wallet.id,
-        action: 'wallet.created',
-      },
-    });
+        externalUserId: external_user_id,
+        currency,
+        label,
+        metadata,
+        isSandbox,
+      });
 
-    if (existingAudit) {
-      await prisma.auditLog.updateMany({
-        where: {
-          tenantId,
-          entityId: wallet.id,
-          action: 'wallet.created',
-        },
+      // Update audit log with complete information
+      await tx.auditLog.update({
+        where: { id: auditReservation.id },
         data: {
+          entityId: wallet.id,
           actorId: adminEmail,
           actorType: 'admin',
           changes: {
-            ...existingAudit.changes as any,
             idempotency_key: idempotencyKey,
-          },
+            external_user_id,
+            currency,
+            label,
+            metadata,
+          } as Prisma.InputJsonValue,
         },
       });
-    }
+
+      return wallet;
+    });
 
     res.status(201).json({
-      wallet_id: wallet.id,
-      external_user_id: wallet.externalUserId,
-      label: wallet.label,
-      balance: wallet.balance.toFixed(4),
-      currency: wallet.currency,
-      status: wallet.status,
-      is_sandbox: wallet.isSandbox,
-      metadata: wallet.metadata,
+      wallet_id: result.id,
+      external_user_id: result.externalUserId,
+      label: result.label,
+      balance: result.balance.toFixed(4),
+      currency: result.currency,
+      status: result.status,
+      is_sandbox: result.isSandbox,
+      metadata: result.metadata,
     });
   })
 );
@@ -146,7 +125,7 @@ router.patch(
     const idempotencyKey = req.headers['idempotency-key'] as string;
     const isSandbox = req.isSandbox || false;
 
-    if (!label && !metadata) {
+    if (label === undefined && metadata === undefined) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'label or metadata must be provided');
     }
 
@@ -184,6 +163,15 @@ router.patch(
       }
     }
 
+    // Capture pre-update state for audit log
+    const prevWallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+    });
+
+    if (!prevWallet) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
+    }
+
     const wallet = await updateWallet(
       walletId,
       tenantId,
@@ -191,32 +179,28 @@ router.patch(
       { label, metadata }
     );
 
-    // Update audit log with admin metadata while preserving service-generated data
-    const existingAudit = await prisma.auditLog.findFirst({
-      where: {
-        tenantId,
+    // Create new audit log entry (append-only)
+    await prisma.auditLog.create({
+      data: {
+        tenantId: tenantId as string,
+        entityType: 'wallet',
         entityId: walletId,
         action: 'wallet.updated',
+        actorId: adminEmail,
+        actorType: 'admin',
+        changes: {
+          before: {
+            label: prevWallet.label,
+            metadata: prevWallet.metadata,
+          },
+          after: {
+            label,
+            metadata,
+          },
+          idempotency_key: idempotencyKey,
+        } as Prisma.InputJsonValue,
       },
     });
-
-    if (existingAudit) {
-      await prisma.auditLog.updateMany({
-        where: {
-          tenantId,
-          entityId: walletId,
-          action: 'wallet.updated',
-        },
-        data: {
-          actorId: adminEmail,
-          actorType: 'admin',
-          changes: {
-            ...existingAudit.changes as any,
-            idempotency_key: idempotencyKey,
-          },
-        },
-      });
-    }
 
     res.json({
       wallet_id: wallet.id,
