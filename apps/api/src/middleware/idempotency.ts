@@ -198,7 +198,7 @@ export async function idempotencyMiddleware(
       // Persist response to transaction metadata when response finishes
       res.on('finish', async () => {
         if ((res.statusCode === 201 || res.statusCode === 200) && req.cachedResponse && req.idempotencyKey) {
-          const updateMetadata = async () => {
+          const updateMetadata = async (retryCount = 0): Promise<void> => {
             try {
               const tx = await prisma.transaction.findFirst({
                 where: {
@@ -215,7 +215,19 @@ export async function idempotencyMiddleware(
                   data: { metadata: { ...(tx.metadata as any || {}), response: req.cachedResponse } }
                 });
               }
-            } catch (e) { /* silent catch for background task */ }
+            } catch (e: any) {
+              // Retry on Prisma record not found errors - handles race conditions with cleanup
+              // in tests where transaction might be deleted before metadata update completes
+              const isRecordNotFoundError = e?.code === 'P2025' || 
+                e?.message?.includes('required but not found') ||
+                e?.message?.includes('No record was found for an update');
+              
+              if (isRecordNotFoundError && retryCount < 3) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+                return updateMetadata(retryCount + 1);
+              }
+              // Silent catch for other errors - this is a background optimization
+            }
           };
 
           // In test environment, run immediately to prevent async leaks

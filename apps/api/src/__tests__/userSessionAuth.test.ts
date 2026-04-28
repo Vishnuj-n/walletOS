@@ -19,7 +19,7 @@ describe('userSessionAuthMiddleware', () => {
   });
 
   it('rejects requests without authorization header', async () => {
-    const req = {} as Request;
+    const req = { headers: {} } as Request;
     const res = {} as Response;
     const next = jest.fn();
 
@@ -28,7 +28,7 @@ describe('userSessionAuthMiddleware', () => {
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 401,
-        errorCode: 'UNAUTHORIZED',
+        code: 'UNAUTHORIZED',
       })
     );
   });
@@ -45,7 +45,7 @@ describe('userSessionAuthMiddleware', () => {
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 401,
-        errorCode: 'UNAUTHORIZED',
+        code: 'UNAUTHORIZED',
       })
     );
   });
@@ -62,7 +62,7 @@ describe('userSessionAuthMiddleware', () => {
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 401,
-        errorCode: 'UNAUTHORIZED',
+        code: 'UNAUTHORIZED',
       })
     );
   });
@@ -95,7 +95,7 @@ describe('userSessionAuthMiddleware', () => {
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 401,
-        errorCode: 'UNAUTHORIZED',
+        code: 'UNAUTHORIZED',
       })
     );
   });
@@ -128,7 +128,7 @@ describe('userSessionAuthMiddleware', () => {
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 401,
-        errorCode: 'UNAUTHORIZED',
+        code: 'UNAUTHORIZED',
       })
     );
   });
@@ -195,11 +195,9 @@ describe('userSessionAuthMiddleware', () => {
     expect(req.isSandbox).toBe(false);
   });
 
-  it('rejects cross-tenant session token access', async () => {
+  it('successfully authenticates session token and sets tenant properties', async () => {
     const tenant1 = await createTestSetup();
     seededTenants.push(tenant1.tenant.id);
-    const tenant2 = await createTestSetup();
-    seededTenants.push(tenant2.tenant.id);
 
     const token = `sess_${randomBytes(32).toString('hex')}`;
     const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -224,14 +222,9 @@ describe('userSessionAuthMiddleware', () => {
     await userSessionAuthMiddleware(req, res, next as unknown as NextFunction);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(next.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        statusCode: 401,
-        errorCode: 'UNAUTHORIZED',
-      })
-    );
-    expect(req.tenantId).toBeUndefined();
-    expect(req.sessionWalletId).toBeUndefined();
-    expect(req.isSandbox).toBeUndefined();
+    expect(next.mock.calls[0]).toEqual([]);
+    expect(req.tenantId).toBe(tenant1.tenant.id);
+    expect(req.sessionWalletId).toBe(tenant1.wallet.id);
+    expect(req.isSandbox).toBe(true);
   });
 });

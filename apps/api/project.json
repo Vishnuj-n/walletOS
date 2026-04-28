@@ -42,9 +42,6 @@
       "configurations": {
         "development": {
           "buildTarget": "api:build:development"
-        },
-        "production": {
-          "buildTarget": "api:build:production"
         }
       }
     },
@@ -81,20 +78,23 @@
         }
       }
     },
-    "migrate-dev": {
+    "migrate": {
       "executor": "nx:run-commands",
+      "defaultConfiguration": "development",
       "options": {
         "command": "npx prisma migrate dev",
         "cwd": "{projectRoot}",
         "envFile": "{workspaceRoot}/.env"
-      }
-    },
-    "migrate-test": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "npx prisma migrate deploy",
-        "cwd": "{projectRoot}",
-        "envFile": "{workspaceRoot}/.env.test"
+      },
+      "configurations": {
+        "development": {
+          "command": "npx prisma migrate dev",
+          "envFile": "{workspaceRoot}/.env"
+        },
+        "test": {
+          "command": "npx prisma migrate deploy",
+          "envFile": "{workspaceRoot}/.env.test"
+        }
       }
     }
   }

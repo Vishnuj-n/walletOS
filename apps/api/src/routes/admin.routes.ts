@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Decimal } from '@prisma/client/runtime/library';
 import { Prisma } from '@prisma/client';
+import { createHash, randomBytes } from 'crypto';
 import { adminAuthMiddleware, requireAdminRole } from '../middleware/adminAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
@@ -619,7 +620,7 @@ router.post(
       }
     }
 
-    const updatedWallet = await freezeWallet(walletId, tenantId, wallet.isSandbox, reason, idempotencyKey);
+    const updatedWallet = await freezeWallet(walletId, tenantId, wallet.isSandbox, reason, idempotencyKey, adminEmail, 'admin');
 
     res.json({
       wallet_id: updatedWallet.id,
@@ -754,8 +755,6 @@ router.post(
         }
       }
     }
-
-    const { randomBytes, createHash } = await import('crypto');
 
     // Generate API keys
     const liveKey = `wlt_live_${randomBytes(24).toString('hex')}`;

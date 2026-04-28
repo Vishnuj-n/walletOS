@@ -4,6 +4,10 @@
  * Global test configuration and database setup for API tests.
  */
 
+// Load test environment variables from .env.test
+import { config } from 'dotenv';
+config({ path: '../../.env.test' });
+
 // Mock @supabase/supabase-js BEFORE any imports that use it
 // This ensures the middleware uses the mocked client instead of the real one
 const useRealSupabase = process.env.TEST_REAL_SUPABASE === 'true';
