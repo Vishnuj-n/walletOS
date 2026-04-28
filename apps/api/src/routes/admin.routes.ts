@@ -27,6 +27,7 @@ router.post(
     const idempotencyKey = req.headers['idempotency-key'] as string;
     const isSandbox = req.isSandbox || false;
 
+
     if (!external_user_id || !currency) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'external_user_id and currency are required');
     }
@@ -52,8 +53,36 @@ router.post(
       }
     }
 
-    // Atomic wallet creation with idempotency reservation
+    // Atomic wallet creation with idempotency handling
+    let wasExisting = false;
     const result = await prisma.$transaction(async (tx) => {
+      // Check if wallet already exists with same parameters (idempotency check)
+      const existingWallet = await tx.wallet.findFirst({
+        where: {
+          tenantId: tenantId as string,
+          externalUserId: external_user_id,
+          currency,
+          isSandbox,
+        },
+      });
+
+      if (existingWallet) {
+        // Wallet already exists, check if it was created by an admin
+        const existingAuditLog = await tx.auditLog.findFirst({
+          where: {
+            tenantId: tenantId as string,
+            entityId: existingWallet.id,
+            action: 'wallet.created',
+            actorId: adminEmail, // Only return if created by same admin
+          },
+        });
+
+        if (existingAuditLog) {
+          wasExisting = true;
+          return existingWallet;
+        }
+      }
+
       // Create audit log reservation first
       const auditReservation = await tx.auditLog.create({
         data: {
@@ -78,7 +107,7 @@ router.post(
       });
 
       // Update audit log with complete information
-      await tx.auditLog.update({
+      const auditUpdate = await tx.auditLog.update({
         where: { id: auditReservation.id },
         data: {
           entityId: wallet.id,
@@ -94,10 +123,14 @@ router.post(
         },
       });
 
+
       return wallet;
     });
 
-    res.status(201).json({
+    // Check if this was an existing wallet (idempotent response) or new creation
+    const statusCode = wasExisting ? 200 : 201;
+
+    res.status(statusCode).json({
       wallet_id: result.id,
       external_user_id: result.externalUserId,
       label: result.label,
@@ -941,7 +974,7 @@ router.post(
       }
     }
 
-    const updatedWallet = await freezeWallet(walletId, tenantId, wallet.isSandbox, reason, idempotencyKey, adminEmail, 'admin');
+    const updatedWallet = await freezeWallet(walletId, tenantId, isSandbox, reason, idempotencyKey, adminEmail, 'admin');
 
     res.json({
       wallet_id: updatedWallet.id,

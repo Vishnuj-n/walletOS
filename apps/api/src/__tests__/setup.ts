@@ -25,18 +25,37 @@ if (!useRealSupabase) {
       auth: {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore - jest global is available at runtime
-        getUser: jest.fn(() => Promise.resolve({
-          data: {
-            user: {
-              id: 'test-admin-uuid',
-              email: 'admin@test.com',
-              app_metadata: {
-                tenantId: 'default',
+        getUser: jest.fn((token: string) => {
+          // Return different users based on token for testing different roles
+          if (token === 'support-jwt-token') {
+            return Promise.resolve({
+              data: {
+                user: {
+                  id: 'support-uuid',
+                  email: 'support@test.com',
+                  app_metadata: {
+                    tenantId: 'default',
+                  },
+                },
+              },
+              error: null,
+            });
+          }
+          
+          // Default admin user
+          return Promise.resolve({
+            data: {
+              user: {
+                id: 'test-admin-uuid',
+                email: 'admin@test.com',
+                app_metadata: {
+                  tenantId: 'default',
+                },
               },
             },
-          },
-          error: null,
-        })),
+            error: null,
+          });
+        }),
       },
     })),
   }));

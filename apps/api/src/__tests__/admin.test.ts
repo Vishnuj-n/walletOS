@@ -12,9 +12,15 @@ describe('Admin API Endpoints', () => {
   let testTransactionId: string;
 
   beforeAll(async () => {
-    // Create test tenant with ID 'default' to match the mock Supabase user's app_metadata.tenantId
-    const tenant = await prisma.tenant.create({
-      data: {
+    // Create or update test tenant with ID 'default' to match the mock Supabase user's app_metadata.tenantId
+    // Using upsert to handle cases where tenant already exists from previous runs or seeded data
+    const tenant = await prisma.tenant.upsert({
+      where: { id: 'default' },
+      update: {
+        name: 'Test Admin Tenant',
+        contactEmail: 'admin-test@example.com',
+      },
+      create: {
         id: 'default',
         name: 'Test Admin Tenant',
         contactEmail: 'admin-test@example.com',
@@ -55,16 +61,30 @@ describe('Admin API Endpoints', () => {
     });
 
     // Mock admin auth token (in real implementation, this would be a valid Supabase JWT)
-    adminAuthToken = 'Bearer mock-admin-jwt-token';
+    // The mocked Supabase client will accept any token and return the test user
+    adminAuthToken = 'Bearer test-admin-jwt-token';
   });
 
   afterAll(async () => {
-    // Cleanup
-    await prisma.auditLog.deleteMany({ where: { tenantId: testTenantId } });
-    await prisma.transaction.deleteMany({ where: { tenantId: testTenantId } });
-    await prisma.wallet.deleteMany({ where: { tenantId: testTenantId } });
-    await prisma.adminUser.deleteMany({ where: { tenantId: testTenantId, supabaseUid: 'test-admin-uuid' } });
-    await prisma.tenant.delete({ where: { id: testTenantId } });
+    // Cleanup - only run if setup completed successfully
+    if (testTenantId) {
+      try {
+        // Delete in correct foreign key order to avoid constraint violations
+        await prisma.auditLog.deleteMany({ where: { tenantId: testTenantId } });
+        await prisma.transaction.deleteMany({ where: { tenantId: testTenantId } });
+        await prisma.wallet.deleteMany({ where: { tenantId: testTenantId } });
+        await prisma.adminUser.deleteMany({ where: { tenantId: testTenantId, supabaseUid: 'test-admin-uuid' } });
+        
+        // Note: We don't delete the 'default' tenant as it might be shared across tests
+        // and the mocked auth depends on it. Use deleteMany for safety if needed:
+        // await prisma.tenant.deleteMany({ where: { id: testTenantId } });
+      } catch (error) {
+        console.warn('Test cleanup warning:', error);
+      }
+    }
+    
+    // Disconnect Prisma to prevent open handle warnings
+    await prisma.$disconnect();
   });
 
   describe('POST /admin/wallets/:walletId/freeze', () => {
@@ -82,6 +102,7 @@ describe('Admin API Endpoints', () => {
         where: {
           tenantId: testTenantId,
           action: 'wallet.frozen',
+          actorId: 'admin@test.com',
         },
       });
       expect(auditLog).toBeDefined();
@@ -142,6 +163,7 @@ describe('Admin API Endpoints', () => {
         where: {
           tenantId: testTenantId,
           action: 'wallet.unfrozen',
+          actorId: 'admin@test.com',
         },
       });
       expect(auditLog).toBeDefined();
@@ -197,6 +219,7 @@ describe('Admin API Endpoints', () => {
         where: {
           tenantId: testTenantId,
           action: 'admin.reverse',
+          actorId: 'admin@test.com',
         },
       });
       expect(auditLog).toBeDefined();
@@ -328,6 +351,7 @@ describe('Admin API Endpoints', () => {
         where: {
           tenantId: testTenantId,
           action: 'admin.credit',
+          actorId: 'admin@test.com',
         },
       });
       expect(auditLog).toBeDefined();
@@ -366,10 +390,12 @@ describe('Admin API Endpoints', () => {
       expect(response.body.label).toBe('Admin Created Wallet');
       
       // Verify audit log was created with admin metadata
+      // Find the audit log with admin actor information (the one created by admin route)
       const auditLog = await prisma.auditLog.findFirst({
         where: {
           tenantId: testTenantId,
           action: 'wallet.created',
+          actorId: 'admin@test.com',
         },
       });
       expect(auditLog).toBeDefined();
@@ -423,6 +449,7 @@ describe('Admin API Endpoints', () => {
         where: {
           tenantId: testTenantId,
           action: 'wallet.updated',
+          actorId: 'admin@test.com',
         },
       });
       expect(auditLog).toBeDefined();
@@ -479,6 +506,7 @@ describe('Admin API Endpoints', () => {
         where: {
           tenantId: testTenantId,
           action: 'wallet.closed',
+          actorId: 'admin@test.com',
         },
       });
       expect(auditLog).toBeDefined();
@@ -552,9 +580,29 @@ describe('Admin API Endpoints', () => {
     });
 
     it('should reject tenant listing for non-superadmin', async () => {
+      // Create a non-superadmin user (support role)
+      await prisma.adminUser.upsert({
+        where: {
+          tenantId_supabaseUid: {
+            tenantId: 'default',
+            supabaseUid: 'support-uuid',
+          },
+        },
+        update: {},
+        create: {
+          tenantId: 'default',
+          supabaseUid: 'support-uuid',
+          email: 'support@test.com',
+          role: 'support',
+          isActive: true,
+        },
+      });
+
+      const supportAuthToken = 'Bearer support-jwt-token';
+
       const response = await request(app)
         .get('/api/v1/admin/tenants')
-        .set('Authorization', adminAuthToken);
+        .set('Authorization', supportAuthToken);
 
       expect(response.status).toBe(403);
       expect(response.body.error.code).toBe('FORBIDDEN');
@@ -589,6 +637,8 @@ describe('Admin API Endpoints', () => {
         where: {
           tenantId: testTenantId,
           action: 'wallet.frozen',
+          entityId: sandboxWallet.id,
+          isSandbox: true,
         },
       });
       expect(auditLog?.isSandbox).toBe(true);
@@ -601,7 +651,7 @@ describe('Admin API Endpoints', () => {
   describe('CORS Preflight', () => {
     it('should handle OPTIONS preflight for PATCH with custom headers', async () => {
       const response = await request(app)
-        .patch(`/api/v1/admin/wallets/${testWalletId}`)
+        .options(`/api/v1/admin/wallets/${testWalletId}`)
         .set('Origin', 'http://localhost:3000')
         .set('Access-Control-Request-Method', 'PATCH')
         .set('Access-Control-Request-Headers', 'Content-Type, Authorization, Idempotency-Key');
@@ -615,16 +665,29 @@ describe('Admin API Endpoints', () => {
 
   describe('Audit Log Actor Metadata', () => {
     it('should preserve admin actor metadata in audit logs', async () => {
+      // Ensure wallet is active (previous tests may have frozen it)
+      await prisma.wallet.update({
+        where: { id: testWalletId },
+        data: { status: 'active' },
+      });
+
+      const uniqueAmount = (25 + Math.random() * 100).toFixed(2);
+      const timestamp = Date.now();
       const response = await request(app)
         .post('/api/v1/admin/transactions/credit')
         .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', `audit-metadata-${timestamp}`)
         .send({
           wallet_id: testWalletId,
-          amount: '25.00',
-          description: 'Test audit metadata',
+          amount: uniqueAmount,
+          description: `Test audit metadata ${timestamp}`,
           reason: 'Audit metadata test',
         });
 
+      if (response.status !== 201) {
+        console.log('Error response:', response.body);
+        console.log('Status:', response.status);
+      }
       expect(response.status).toBe(201);
 
       // Verify audit log contains proper actor metadata
@@ -632,6 +695,7 @@ describe('Admin API Endpoints', () => {
         where: {
           tenantId: testTenantId,
           action: 'admin.credit',
+          actorId: 'admin@test.com',
         },
       });
       expect(auditLog).toBeDefined();

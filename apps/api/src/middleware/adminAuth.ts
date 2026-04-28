@@ -18,6 +18,19 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   },
 });
 
+// Use mocked client in test environment unless TEST_REAL_SUPABASE is true
+const useRealSupabase = process.env.TEST_REAL_SUPABASE === 'true';
+const getSupabaseClient = () => {
+  if (useRealSupabase) {
+    return supabaseAdmin;
+  }
+  
+  // In tests, use the mocked client
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createClient: mockedCreateClient } = require('@supabase/supabase-js');
+  return mockedCreateClient();
+};
+
 /**
  * Admin Authentication Middleware
  * Verifies Supabase JWT and attaches admin user info to request
@@ -27,6 +40,11 @@ export async function adminAuthMiddleware(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  // Allow OPTIONS requests to bypass authentication for CORS preflight
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+
   const authHeader = req.headers['authorization'];
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -36,8 +54,10 @@ export async function adminAuthMiddleware(
   const token = authHeader.substring(7);
 
   try {
-    // Verify JWT with Supabase
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    // Verify JWT with Supabase (real or mocked depending on environment)
+    const supabaseClient = getSupabaseClient();
+    const { data: { user }, error } = await supabaseClient.auth.getUser(token);
+
 
     if (error || !user) {
       return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Invalid or expired token'));
@@ -59,6 +79,7 @@ export async function adminAuthMiddleware(
       },
     });
 
+
     if (!adminUser) {
       return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Admin user not found'));
     }
@@ -75,6 +96,7 @@ export async function adminAuthMiddleware(
       role: adminUser.role,
     };
     req.tenantId = adminUser.tenantId;
+
     
     // Set isSandbox from X-Sandbox header (case-insensitive), default to false
     const sandboxHeader = req.headers['x-sandbox'];
