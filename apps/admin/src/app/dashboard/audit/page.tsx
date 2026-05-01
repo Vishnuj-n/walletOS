@@ -2,17 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import React from 'react';
-import { supabase, API_BASE_URL } from '../../../lib/supabase';
-
-interface AuditLog {
-  id: string;
-  tenant_id: string;
-  wallet_id: string | null;
-  action: string;
-  actor: string;
-  changes: Record<string, unknown>;
-  timestamp: string;
-}
+import {
+  fetchAuditLogs,
+  type AuditLog,
+} from '../../../services/adminService';
 
 export default function AuditLogPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -25,7 +18,7 @@ export default function AuditLogPage() {
   const abortControllerRef = React.useRef<AbortController | null>(null);
 
   useEffect(() => {
-    fetchAuditLogs();
+    fetchAuditLogData();
   }, [debouncedWalletFilter, debouncedActionFilter]);
 
   useEffect(() => {
@@ -42,7 +35,7 @@ export default function AuditLogPage() {
     return () => clearTimeout(handler);
   }, [actionFilter]);
 
-  const fetchAuditLogs = async () => {
+  const fetchAuditLogData = async () => {
     // Abort previous request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -54,29 +47,11 @@ export default function AuditLogPage() {
     setError('');
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const params = new URLSearchParams();
-      if (debouncedWalletFilter) params.append('wallet_id', debouncedWalletFilter);
-      if (debouncedActionFilter) params.append('action', debouncedActionFilter);
-
-      const response = await fetch(
-        `${API_BASE_URL}/admin/audit?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          signal: controller.signal,
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch audit logs');
-      }
-
-      const data = await response.json();
-      setLogs(data.data);
+      const data = await fetchAuditLogs({
+        wallet_id: debouncedWalletFilter || undefined,
+        action: debouncedActionFilter || undefined,
+      });
+      setLogs(data);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
         // Ignore aborted requests

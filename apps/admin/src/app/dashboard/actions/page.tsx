@@ -1,20 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { supabase, API_BASE_URL } from '../../../lib/supabase';
-
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
+import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import {
+  creditWallet,
+  debitWallet,
+  reverseTransaction,
+  type CreditTransactionRequest,
+  type DebitTransactionRequest,
+  type ReversalTransactionRequest,
+} from '../../../services/adminService';
 
 export default function ManualActionsPage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const [actionType, setActionType] = useState<'credit' | 'debit' | 'reversal'>('credit');
   const [walletId, setWalletId] = useState(searchParams.get('walletId') || '');
   const [amount, setAmount] = useState('');
@@ -32,54 +30,34 @@ export default function ManualActionsPage() {
     setLoading(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Not authenticated');
-      }
-
-      let endpoint = '';
-      let body: Record<string, unknown> = {};
+      let result;
 
       if (actionType === 'credit') {
-        endpoint = `${API_BASE_URL}/admin/transactions/credit`;
-        body = {
+        const request: CreditTransactionRequest = {
           wallet_id: walletId,
-          amount: amount,
+          amount,
           description,
-          reference_id: referenceId,
+          reference_id: referenceId || undefined,
           reason,
         };
+        result = await creditWallet(request);
       } else if (actionType === 'debit') {
-        endpoint = `${API_BASE_URL}/admin/transactions/debit`;
-        body = {
+        const request: DebitTransactionRequest = {
           wallet_id: walletId,
-          amount: amount,
+          amount,
           description,
-          reference_id: referenceId,
+          reference_id: referenceId || undefined,
           reason,
         };
+        result = await debitWallet(request);
       } else if (actionType === 'reversal') {
-        endpoint = `${API_BASE_URL}/admin/transactions/${walletId}/reverse`;
-        body = { reason };
+        const request: ReversalTransactionRequest = {
+          reason,
+        };
+        result = await reverseTransaction(walletId, request);
       }
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          'Idempotency-Key': generateUUID(),
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Action failed');
-      }
-
-      const result = await response.json();
-      setSuccess(`${actionType} completed successfully! Transaction ID: ${result.transaction_id}`);
+      setSuccess(`${actionType} completed successfully! Transaction ID: ${result?.transaction_id}`);
       
       // Clear form
       setAmount('');
