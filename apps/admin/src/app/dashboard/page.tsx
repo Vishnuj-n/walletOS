@@ -1,18 +1,11 @@
 'use client';
 
-import { useAuth } from '../../contexts/AuthContext';
+import { useRequireAuth } from '../../hooks/useRequireAuth';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 
 export default function DashboardPage() {
-  const { user, loading } = useAuth();
+  const { adminUser, loading } = useRequireAuth();
   const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router]);
 
   if (loading) {
     return <div className="text-gray-600">Loading...</div>;
@@ -53,6 +46,13 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+      {adminUser && (
+        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800">
+            <strong>Role:</strong> {adminUser.role} | <strong>Tenant:</strong> {adminUser.tenantId}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

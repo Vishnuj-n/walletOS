@@ -1,18 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase, API_BASE_URL } from '../../../lib/supabase';
 import Link from 'next/link';
-
-interface Wallet {
-  wallet_id: string;
-  external_user_id: string;
-  label: string | null;
-  balance: string;
-  currency: string;
-  status: string;
-  is_sandbox: boolean;
-}
+import {
+  fetchWallets,
+  createWallet,
+  updateWallet,
+  closeWallet,
+  freezeWallet,
+  unfreezeWallet,
+  type Wallet,
+  type CreateWalletRequest,
+} from '../../../services/walletService';
 
 export default function WalletsPage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -34,34 +33,14 @@ export default function WalletsPage() {
     return () => clearTimeout(handler);
   }, [search]);
 
-  useEffect(() => {
-    fetchWallets();
-  }, [debouncedSearch, statusFilter]);
-
-  const fetchWallets = async () => {
+  const loadWallets = async () => {
+    setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const params = new URLSearchParams();
-      if (debouncedSearch) params.append('search', debouncedSearch);
-      if (statusFilter) params.append('status', statusFilter);
-
-      const response = await fetch(
-        `${API_BASE_URL}/admin/wallets?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch wallets');
-      }
-
-      const data = await response.json();
-      setWallets(data.data);
+      const data = await fetchWallets({
+        search: debouncedSearch,
+        status: statusFilter,
+      });
+      setWallets(data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch wallets');
     } finally {
@@ -69,31 +48,17 @@ export default function WalletsPage() {
     }
   };
 
+  useEffect(() => {
+    loadWallets();
+  }, [debouncedSearch, statusFilter]);
+
   const handleFreeze = async (walletId: string) => {
     const reason = prompt('Enter reason for freezing this wallet:');
     if (!reason) return;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const response = await fetch(
-        `${API_BASE_URL}/admin/wallets/${walletId}/freeze`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ reason }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to freeze wallet');
-      }
-
-      fetchWallets();
+      await freezeWallet(walletId, reason);
+      loadWallets();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to freeze wallet');
     }
@@ -104,93 +69,31 @@ export default function WalletsPage() {
     if (!reason) return;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const response = await fetch(
-        `${API_BASE_URL}/admin/wallets/${walletId}/unfreeze`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ reason }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to unfreeze wallet');
-      }
-
-      fetchWallets();
+      await unfreezeWallet(walletId, reason);
+      loadWallets();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to unfreeze wallet');
     }
   };
 
-  const handleCreateWallet = async (formData: {
-    external_user_id: string;
-    currency: string;
-    label: string;
-  }) => {
+  const handleCreateWallet = async (formData: CreateWalletRequest) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const response = await fetch(
-        `${API_BASE_URL}/admin/wallets`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify(formData),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create wallet');
-      }
-
+      await createWallet(formData);
       setShowCreateModal(false);
-      fetchWallets();
+      loadWallets();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to create wallet');
     }
   };
 
-  const handleEditWallet = async (formData: {
-    label: string;
-  }) => {
+  const handleEditWallet = async (formData: { label: string }) => {
     if (!selectedWallet) return;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const response = await fetch(
-        `${API_BASE_URL}/admin/wallets/${selectedWallet.wallet_id}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify(formData),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to update wallet');
-      }
-
+      await updateWallet(selectedWallet.wallet_id, formData);
       setShowEditModal(false);
       setSelectedWallet(null);
-      fetchWallets();
+      loadWallets();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to update wallet');
     }
@@ -200,29 +103,10 @@ export default function WalletsPage() {
     if (!selectedWallet) return;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const response = await fetch(
-        `${API_BASE_URL}/admin/wallets/${selectedWallet.wallet_id}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ reason }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to close wallet');
-      }
-
+      await closeWallet(selectedWallet.wallet_id, reason);
       setShowDeleteModal(false);
       setSelectedWallet(null);
-      fetchWallets();
+      loadWallets();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to close wallet');
     }

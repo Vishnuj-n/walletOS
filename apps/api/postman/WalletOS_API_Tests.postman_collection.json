@@ -146,6 +146,10 @@
               {
                 "key": "x-api-key",
                 "value": "{{apiKey}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "wallet_update_{{$guid}}"
               }
             ],
             "body": {

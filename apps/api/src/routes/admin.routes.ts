@@ -1252,6 +1252,24 @@ router.get(
 );
 
 /**
+ * GET /admin/me
+ * Get current admin user information
+ */
+router.get(
+  '/me',
+  asyncHandler(async (req, res) => {
+    res.json({
+      adminUser: {
+        id: req.adminUser!.id,
+        email: req.adminUser!.email,
+        tenantId: req.adminUser!.tenantId,
+        role: req.adminUser!.role,
+      },
+    });
+  })
+);
+
+/**
  * GET /admin/tenants
  * List all available tenants (superadmin only)
  */

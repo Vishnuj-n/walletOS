@@ -54,3 +54,7 @@ out
 .env*
 !.env.example
 context.md 
+graphify-out/
+.graphify*
+.codex
+.gemini

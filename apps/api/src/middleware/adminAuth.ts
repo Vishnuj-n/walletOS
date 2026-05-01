@@ -18,14 +18,17 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   },
 });
 
-// Use mocked client in test environment unless TEST_REAL_SUPABASE is true
-const useRealSupabase = process.env.TEST_REAL_SUPABASE === 'true';
 const getSupabaseClient = () => {
-  if (useRealSupabase) {
+  // Only use mocked Supabase client in Jest tests unless explicitly enabled.
+  // In all real runtime environments (dev/prod), always use the real service-role client.
+  const shouldMockSupabase =
+    process.env.NODE_ENV === 'test' && process.env.TEST_REAL_SUPABASE !== 'true';
+
+  if (!shouldMockSupabase) {
     return supabaseAdmin;
   }
-  
-  // In tests, use the mocked client
+
+  // In tests, use the mocked client (configured by jest mocks)
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { createClient: mockedCreateClient } = require('@supabase/supabase-js');
   return mockedCreateClient();

@@ -9,7 +9,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, signOut } = useAuth();
+  const { adminUser, signOut } = useAuth();
   const router = useRouter();
 
   const handleSignOut = async () => {
@@ -54,9 +54,14 @@ export default function DashboardLayout({
               </div>
             </div>
             <div className="flex items-center">
-              <span className="text-sm text-gray-700 mr-4">
-                {user?.email}
-              </span>
+              <div className="flex flex-col items-end mr-4">
+                <span className="text-sm text-gray-700">
+                  {adminUser?.email}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {adminUser?.role}
+                </span>
+              </div>
               <button
                 onClick={handleSignOut}
                 className="text-sm text-gray-500 hover:text-gray-700"

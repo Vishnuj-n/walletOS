@@ -2,18 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase, API_BASE_URL } from '../../../../lib/supabase';
-
-interface Wallet {
-  wallet_id: string;
-  external_user_id: string;
-  label: string | null;
-  balance: string;
-  currency: string;
-  status: string;
-  is_sandbox: boolean;
-  metadata: Record<string, unknown>;
-}
+import {
+  fetchWallet,
+  freezeWallet,
+  unfreezeWallet,
+  type Wallet,
+} from '../../../../services/walletService';
 
 export default function WalletDetailPage() {
   const { walletId } = useParams();
@@ -28,33 +22,10 @@ export default function WalletDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchWallet();
-  }, [walletId]);
-
-  const fetchWallet = async () => {
+  const loadWallet = async () => {
+    setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError('Session expired, please re-login');
-        setLoading(false);
-        return;
-      }
-
-      const response = await fetch(
-        `${API_BASE_URL}/admin/wallets/${walletId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch wallet');
-      }
-
-      const data = await response.json();
+      const data = await fetchWallet(walletId);
       setWallet(data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch wallet');
@@ -63,38 +34,17 @@ export default function WalletDetailPage() {
     }
   };
 
+  useEffect(() => {
+    loadWallet();
+  }, [walletId]);
+
   const handleFreeze = async () => {
     const reason = prompt('Enter reason for freezing this wallet:');
     if (!reason) return;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError('Session expired, please re-login');
-        return;
-      }
-      
-      const idempotencyKey = crypto.randomUUID();
-
-      const response = await fetch(
-        `${API_BASE_URL}/admin/wallets/${walletId}/freeze`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-            'Idempotency-Key': idempotencyKey,
-          },
-          body: JSON.stringify({ reason }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to freeze wallet');
-      }
-
-      fetchWallet();
+      await freezeWallet(walletId, reason);
+      loadWallet();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to freeze wallet');
     }
@@ -105,33 +55,8 @@ export default function WalletDetailPage() {
     if (!reason) return;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError('Session expired, please re-login');
-        return;
-      }
-      
-      const idempotencyKey = crypto.randomUUID();
-
-      const response = await fetch(
-        `${API_BASE_URL}/admin/wallets/${walletId}/unfreeze`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-            'Idempotency-Key': idempotencyKey,
-          },
-          body: JSON.stringify({ reason }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to unfreeze wallet');
-      }
-
-      fetchWallet();
+      await unfreezeWallet(walletId, reason);
+      loadWallet();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to unfreeze wallet');
     }

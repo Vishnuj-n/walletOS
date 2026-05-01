@@ -1,20 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useRequireAuth } from '../hooks/useRequireAuth';
 import { useRouter } from 'next/navigation';
 
 export default function HomePage() {
-  const { user, loading } = useAuth();
+  const { loading } = useRequireAuth();
   const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    } else if (!loading && user) {
-      router.push('/dashboard');
-    }
-  }, [user, loading, router]);
 
   if (loading) {
     return (
@@ -24,5 +15,7 @@ export default function HomePage() {
     );
   }
 
+  // Redirect to dashboard after auth check
+  router.push('/dashboard');
   return null;
 }

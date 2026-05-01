@@ -4,8 +4,11 @@ Use these tables to navigate the WalletOS monorepo.
 
 | Task | Command | Result |
 | :--- | :--- | :--- |
-| **Start Server** | `npx nx serve api` | Launches the backend on port 3333. |
+| **Start API Server** | `npx nx serve api` | Launches the backend on port 3333. |
+| **Start Admin Dashboard** | `npx nx dev admin` | Launches the admin dashboard on port 4200. |
 | **Sync Database** | `npx nx db-push api` | Pushes Prisma schema changes to your local DB. |
+| **Generate Prisma Client** | `npx nx prisma generate api` | Generates TypeScript types from Prisma schema. |
+| **Run Prisma Migrations** | `npx nx prisma migrate dev api` | Creates and applies database migrations. |
 | **View Data** | `npx nx db-studio api` | Opens the Prisma Studio GUI in your browser. |
 | **Run All Tests** | `npx nx run-many -t test` | Executes tests across all apps and libs. |
 
