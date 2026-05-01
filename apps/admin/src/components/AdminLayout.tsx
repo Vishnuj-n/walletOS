@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '../contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import React from 'react';
 
@@ -18,10 +18,23 @@ interface AdminLayoutProps {
 export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
   const { adminUser, signOut } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleSignOut = async () => {
-    await signOut();
-    router.push('/login');
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Sign out failed:', error);
+    } finally {
+      router.push('/login');
+    }
+  };
+
+  const getNavLinkClass = (href: string) => {
+    const isActive = pathname === href;
+    return isActive
+      ? 'inline-flex items-center px-1 pt-1 border-b-2 border-indigo-500 text-sm font-medium text-gray-900'
+      : 'inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300';
   };
 
   return (
@@ -37,25 +50,25 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                   <Link
                     href="/dashboard/wallets"
-                    className="inline-flex items-center px-1 pt-1 border-b-2 border-indigo-500 text-sm font-medium text-gray-900"
+                    className={getNavLinkClass('/dashboard/wallets')}
                   >
                     Wallets
                   </Link>
                   <Link
                     href="/dashboard/actions"
-                    className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    className={getNavLinkClass('/dashboard/actions')}
                   >
                     Manual Actions
                   </Link>
                   <Link
                     href="/dashboard/tenants"
-                    className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    className={getNavLinkClass('/dashboard/tenants')}
                   >
                     Tenants
                   </Link>
                   <Link
                     href="/dashboard/audit"
-                    className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    className={getNavLinkClass('/dashboard/audit')}
                   >
                     Audit Log
                   </Link>

@@ -19,6 +19,11 @@ export default function AuditLogPage() {
 
   useEffect(() => {
     fetchAuditLogData();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [debouncedWalletFilter, debouncedActionFilter]);
 
   useEffect(() => {
@@ -40,16 +45,18 @@ export default function AuditLogPage() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
-    
+
     setError('');
-    
+    setLoading(true);
+
     try {
       const data = await fetchAuditLogs({
         wallet_id: debouncedWalletFilter || undefined,
         action: debouncedActionFilter || undefined,
+        signal: controller.signal,
       });
       setLogs(data);
     } catch (err: unknown) {

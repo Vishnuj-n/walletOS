@@ -15,6 +15,7 @@ export default function ManualActionsPage() {
   const searchParams = useSearchParams();
   const [actionType, setActionType] = useState<'credit' | 'debit' | 'reversal'>('credit');
   const [walletId, setWalletId] = useState(searchParams.get('walletId') || '');
+  const [transactionId, setTransactionId] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [referenceId, setReferenceId] = useState('');
@@ -54,16 +55,17 @@ export default function ManualActionsPage() {
         const request: ReversalTransactionRequest = {
           reason,
         };
-        result = await reverseTransaction(walletId, request);
+        result = await reverseTransaction(transactionId, request);
       }
 
-      setSuccess(`${actionType} completed successfully! Transaction ID: ${result?.transaction_id}`);
+      setSuccess(`${actionType} completed successfully! Transaction ID: ${result?.transaction_id || 'N/A'}`);
       
       // Clear form
       setAmount('');
       setDescription('');
       setReferenceId('');
       setReason('');
+      setTransactionId('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Action failed');
     } finally {
@@ -153,6 +155,7 @@ export default function ManualActionsPage() {
                 <input
                   type="number"
                   step="0.01"
+                  min="0"
                   required
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
@@ -198,8 +201,8 @@ export default function ManualActionsPage() {
               <input
                 type="text"
                 required
-                value={walletId}
-                onChange={(e) => setWalletId(e.target.value)}
+                value={transactionId}
+                onChange={(e) => setTransactionId(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter transaction ID to reverse"
               />

@@ -75,6 +75,7 @@ export async function fetchAuditLogs(params: {
   action?: string;
   limit?: number;
   after?: string;
+  signal?: AbortSignal;
 }): Promise<AuditLog[]> {
   const token = await getAuthToken();
   if (!token) throw new Error('No active session');
@@ -91,12 +92,13 @@ export async function fetchAuditLogs(params: {
       headers: {
         Authorization: `Bearer ${token}`,
       },
+      signal: params.signal,
     }
   );
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.message || 'Failed to fetch audit logs');
+    throw new Error(error.error?.message || 'Failed to fetch audit logs');
   }
 
   const data: AuditLogListResponse = await response.json();

@@ -150,7 +150,8 @@ describe('ManualActionsPage', () => {
     const reversalButton = screen.getByText('Reversal');
     fireEvent.click(reversalButton);
 
-    fireEvent.change(screen.getByPlaceholderText('Enter transaction ID to reverse'), {
+    const transactionInput = screen.getByPlaceholderText('Enter transaction ID to reverse');
+    fireEvent.change(transactionInput, {
       target: { value: 'tx-123' },
     });
     fireEvent.change(screen.getByPlaceholderText('Enter reason for this action'), {
