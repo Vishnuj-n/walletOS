@@ -177,7 +177,7 @@ export default function TenantsPage() {
       const token = await (await import('../../../lib/supabase')).supabase.auth.getSession().then(({ data: { session } }) => session?.access_token);
       if (!token) throw new Error('Not authenticated');
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/admin/tenants`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/tenants`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
