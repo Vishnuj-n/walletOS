@@ -4,24 +4,17 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { SuperadminOnly } from '../../../components/SuperadminOnly';
 import { 
+  createTenant,
   fetchTenants, 
   rotateTenantKey, 
   fetchTenantUsage, 
   revokeTenantKey,
   Tenant,
+  CreatedTenantResponse,
   RotateKeyRequest,
   TenantUsageResponse,
   RevokeKeyRequest
 } from '../../../services/adminService';
-
-interface CreatedTenant {
-  tenant_id: string;
-  name: string;
-  contact_email: string | null;
-  live_key: string;
-  test_key: string;
-  created_at: string;
-}
 
 interface UsageModalProps {
   tenantId: string;
@@ -112,7 +105,7 @@ export default function TenantsPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
   const [createSuccess, setCreateSuccess] = useState('');
-  const [createdTenant, setCreatedTenant] = useState<CreatedTenant | null>(null);
+  const [createdTenant, setCreatedTenant] = useState<CreatedTenantResponse | null>(null);
   const [copyStatus, setCopyStatus] = useState<string>('');
 
   useEffect(() => {
@@ -168,33 +161,24 @@ export default function TenantsPage() {
 
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (createLoading) return;
+
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      setCreateError('Tenant name is required');
+      return;
+    }
+
     setCreateError('');
     setCreateSuccess('');
     setCreateLoading(true);
     setCreatedTenant(null);
 
     try {
-      const token = await (await import('../../../lib/supabase')).supabase.auth.getSession().then(({ data: { session } }) => session?.access_token);
-      if (!token) throw new Error('Not authenticated');
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/tenants`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name,
-          contact_email: contactEmail,
-        }),
+      const result = await createTenant({
+        name: normalizedName,
+        contact_email: contactEmail.trim() || undefined,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to create tenant');
-      }
-
-      const result = await response.json();
       setCreatedTenant(result);
       setCreateSuccess('Tenant created successfully!');
       setName('');
