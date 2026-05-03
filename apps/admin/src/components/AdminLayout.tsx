@@ -46,7 +46,9 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
             <div className="flex justify-between h-16">
               <div className="flex">
                 <div className="flex-shrink-0 flex items-center">
-                  <h1 className="text-xl font-bold text-gray-900">WalletOS Admin</h1>
+                  <Link href="/dashboard" className="text-xl font-bold text-gray-900 hover:text-gray-700">
+                    WalletOS Admin
+                  </Link>
                 </div>
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                   <Link

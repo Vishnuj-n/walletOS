@@ -5,6 +5,7 @@ declare global {
     interface Request {
       id: string;
       tenantId?: string;
+      apiKeyId?: string;
       apiKeyScope?: string;
       isSandbox?: boolean;
       sessionWalletId?: string;

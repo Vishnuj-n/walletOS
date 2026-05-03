@@ -16,6 +16,7 @@ import {
   RevokeKeyRequest
 } from '../../../services/adminService';
 import { Building2, KeyRound, Plus, ShieldAlert } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface UsageModalProps {
   tenantId: string;
@@ -123,20 +124,73 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
 
         {usage && (
           <div>
-            <p className="text-sm text-gray-600 mb-4">
-              Showing API requests per hour for the last {usage.hours} hours
-            </p>
-            <div className="space-y-2">
-              {usage.usage.map((hour, index) => (
-                <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-sm text-gray-600">
-                    {new Date(hour.hour).toLocaleString()}
-                  </span>
-                  <span className="text-sm font-medium text-gray-900">
-                    {hour.requests} requests
-                  </span>
-                </div>
-              ))}
+            <div className="flex justify-between items-center mb-4">
+              <p className="text-sm text-gray-600">
+                API requests per hour for the last {usage.hours} hours
+              </p>
+              <p className="text-xs text-gray-500">
+                Last updated: {new Date().toLocaleTimeString()}
+              </p>
+            </div>
+            
+            <div className="bg-slate-50 rounded-lg p-4">
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={usage.usage.map(hour => ({
+                  time: new Date(hour.hour).toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    hour12: true 
+                  }),
+                  hour: new Date(hour.hour).toLocaleString(),
+                  requests: hour.requests
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis 
+                    dataKey="time" 
+                    stroke="#64748b"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis 
+                    stroke="#64748b"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '12px'
+                    }}
+                    labelFormatter={(value) => `Time: ${value}`}
+                    formatter={(value) => [typeof value === 'number' ? `${value} requests` : '0 requests', 'API Calls']}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="requests" 
+                    stroke="#2563eb" 
+                    fill="#2563eb" 
+                    fillOpacity={0.1}
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="mt-4 text-xs text-gray-500 text-center">
+              {usage.usage.length > 0 && (
+                <p>
+                  Current hour data may not be available yet. 
+                  {usage.usage[usage.usage.length - 1].requests === 0 && 
+                    ` Data for ${new Date().toLocaleTimeString('en-US', { 
+                      hour: 'numeric', 
+                      hour12: true 
+                    })} is still being processed.`
+                  }
+                </p>
+              )}
             </div>
           </div>
         )}

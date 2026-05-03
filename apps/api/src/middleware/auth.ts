@@ -30,6 +30,7 @@ export async function apiKeyAuthMiddleware(
 
     // Attach tenant info to request
     req.tenantId = apiKeyRecord.tenantId;
+    req.apiKeyId = apiKeyRecord.id;
     req.apiKeyScope = apiKeyRecord.scope;
     req.isSandbox = apiKeyRecord.isSandbox;
 

@@ -57,21 +57,8 @@ export async function createWallet(params: CreateWalletParams) {
         },
       });
 
-      // Create audit log
-      await tx.auditLog.create({
-        data: {
-          tenantId: params.tenantId,
-          entityType: 'Wallet',
-          entityId: wallet.id,
-          action: 'wallet.created',
-          changes: {
-            externalUserId: params.externalUserId,
-            currency: params.currency,
-            isSandbox: params.isSandbox,
-          },
-          isSandbox: params.isSandbox,
-        },
-      });
+      // Note: Audit log creation is the responsibility of the caller (e.g., admin route)
+      // to ensure actor information is properly captured. Do NOT add audit logging here.
 
       return wallet;
     }, { timeout: 20000 });
