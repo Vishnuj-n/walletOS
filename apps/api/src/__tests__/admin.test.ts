@@ -79,7 +79,8 @@ describe('Admin API Endpoints', () => {
         // and the mocked auth depends on it. Use deleteMany for safety if needed:
         // await prisma.tenant.deleteMany({ where: { id: testTenantId } });
       } catch (error) {
-        console.warn('Test cleanup warning:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn('Test cleanup warning:', errorMessage);
       }
     }
     
@@ -205,9 +206,11 @@ describe('Admin API Endpoints', () => {
     });
 
     it('should reverse a transaction with a reason', async () => {
+      const idempotencyKey = 'test-reverse-reason-' + Date.now();
       const response = await request(app)
         .post(`/api/v1/admin/transactions/${testTransactionId}/reverse`)
         .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', idempotencyKey)
         .send({ reason: 'Test reversal reason' });
 
       expect(response.status).toBe(201);
@@ -215,7 +218,7 @@ describe('Admin API Endpoints', () => {
       expect(response.body.original_tx_id).toBe(testTransactionId);
       
       // Verify audit log was created
-      const auditLog = await prisma.auditLog.findFirst({
+      let auditLog = await prisma.auditLog.findFirst({
         where: {
           tenantId: testTenantId,
           action: 'admin.reverse',
@@ -223,6 +226,43 @@ describe('Admin API Endpoints', () => {
         },
       });
       expect(auditLog).toBeDefined();
+      const reversalCount = await prisma.transaction.count({
+        where: {
+          tenantId: testTenantId,
+          type: 'reversal',
+          metadata: { path: ['idempotency_key'], equals: idempotencyKey },
+        },
+      });
+      
+      // Verify idempotency: replay the same request
+      const retryResponse = await request(app)
+        .post(`/api/v1/admin/transactions/${testTransactionId}/reverse`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', idempotencyKey)
+        .send({ reason: 'Test reversal reason' });
+      
+      expect(retryResponse.status).toBe(201);
+      expect(retryResponse.body.type).toBe('reversal');
+      // Verify no duplicate reversal was created
+      const finalReversalCount = await prisma.transaction.count({
+        where: {
+          tenantId: testTenantId,
+          type: 'reversal',
+          metadata: { path: ['idempotency_key'], equals: idempotencyKey },
+        },
+      });
+      expect(finalReversalCount).toBe(reversalCount);
+      
+      // Verify only one audit log entry for this operation
+      const auditLogsForKey = await prisma.auditLog.findMany({
+        where: {
+          tenantId: testTenantId,
+          action: 'admin.reverse',
+          actorId: 'admin@test.com',
+          createdAt: { gte: new Date(Date.now() - 10000) },
+        },
+      });
+      expect(auditLogsForKey.length).toBeLessThanOrEqual(2);
     });
 
     it('should reject reversal without reason', async () => {
@@ -285,6 +325,7 @@ describe('Admin API Endpoints', () => {
         },
       });
       expect(auditLog).toBeDefined();
+      expect(auditLog?.isSandbox).toBe(false);
 
       // Cleanup
       await prisma.auditLog.deleteMany({ where: { tenantId: response.body.tenant_id } });
@@ -324,6 +365,38 @@ describe('Admin API Endpoints', () => {
     });
   });
 
+  describe('GET /admin/system/balance', () => {
+    it('should return live and sandbox totals', async () => {
+      await prisma.wallet.update({
+        where: { id: testWalletId },
+        data: { status: 'active', balance: '1000.00', isSandbox: false },
+      });
+
+      const sandboxWallet = await prisma.wallet.create({
+        data: {
+          tenantId: testTenantId,
+          externalUserId: `system-balance-sandbox-${Date.now()}`,
+          currency: 'USD',
+          balance: '250.00',
+          status: 'active',
+          isSandbox: true,
+        },
+      });
+
+      const response = await request(app)
+        .get('/api/v1/admin/system/balance')
+        .set('Authorization', adminAuthToken);
+
+      expect(response.status).toBe(200);
+      expect(response.body.total_live).toBe('1000.0000');
+      expect(response.body.total_sandbox).toBe('250.0000');
+      expect(response.body.currency_breakdown.USD.live).toBe('1000.0000');
+      expect(response.body.currency_breakdown.USD.sandbox).toBe('250.0000');
+
+      await prisma.wallet.delete({ where: { id: sandboxWallet.id } });
+    });
+  });
+
   describe('POST /admin/transactions/credit', () => {
     it('should credit a wallet with mandatory reason', async () => {
       // Ensure wallet is active
@@ -335,6 +408,7 @@ describe('Admin API Endpoints', () => {
       const response = await request(app)
         .post('/api/v1/admin/transactions/credit')
         .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', 'test-credit-mandatory-reason')
         .send({
           wallet_id: testWalletId,
           amount: '50.00',
@@ -684,7 +758,7 @@ describe('Admin API Endpoints', () => {
           reason: 'Audit metadata test',
         });
 
-      if (response.status !== 201) {
+      if (response.status !== 201 && process.env.NODE_ENV === 'development') {
         console.log('Error response:', response.body);
         console.log('Status:', response.status);
       }

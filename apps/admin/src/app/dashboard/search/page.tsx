@@ -10,6 +10,12 @@ import {
   TransactionSearchResponse 
 } from '../../../services/adminService';
 
+interface SearchParams {
+  transactionId?: string;
+  requestId?: string;
+  idempotencyKey?: string;
+}
+
 export default function GlobalSearchPage() {
   const { isSuperadmin } = useAuth();
   const [query, setQuery] = useState('');
@@ -32,7 +38,7 @@ export default function GlobalSearchPage() {
         setTransactionResults(null);
       } else {
         // For transactions, determine if it's a transaction ID, request ID, or idempotency key
-        const searchParams: any = {};
+        const searchParams: SearchParams = {};
         if (query.startsWith('tx_')) {
           searchParams.transactionId = query;
         } else if (query.startsWith('req_')) {

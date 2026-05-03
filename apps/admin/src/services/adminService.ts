@@ -174,6 +174,8 @@ export interface SystemBalanceResponse {
   total_sandbox: string;
   currency_breakdown: Record<string, { live: string; sandbox: string }>;
   calculated_at: string;
+  currency?: string;
+  currency_code?: string;
 }
 
 // ==================== Audit Enhancement Types ====================

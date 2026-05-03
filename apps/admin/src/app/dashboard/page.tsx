@@ -12,8 +12,20 @@ function SystemBalanceWidget() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const formatCurrency = (amount: string, currencyCode = 'USD') =>
+    new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode || 'USD',
+    }).format(Number(amount));
+
   useEffect(() => {
     loadBalance();
+
+    const intervalId = setInterval(() => {
+      loadBalance();
+    }, 300000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const loadBalance = async () => {
@@ -63,6 +75,8 @@ function SystemBalanceWidget() {
     return null;
   }
 
+  const balanceCurrencyCode = balance.currency ?? balance.currency_code ?? 'USD';
+
   return (
     <div className="bg-white shadow rounded-lg p-6">
       <div className="flex justify-between items-center mb-4">
@@ -81,13 +95,13 @@ function SystemBalanceWidget() {
           <div>
             <p className="text-sm text-gray-500">Live Total</p>
             <p className="text-2xl font-bold text-green-600">
-              ${Number(balance.total_live).toLocaleString()}
+              {formatCurrency(balance.total_live, balanceCurrencyCode)}
             </p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Sandbox Total</p>
             <p className="text-2xl font-bold text-yellow-600">
-              ${Number(balance.total_sandbox).toLocaleString()}
+              {formatCurrency(balance.total_sandbox, balanceCurrencyCode)}
             </p>
           </div>
         </div>
@@ -100,10 +114,10 @@ function SystemBalanceWidget() {
                 <span className="text-sm font-medium text-gray-700">{currency}</span>
                 <div className="flex gap-4 text-sm">
                   <span className="text-green-600">
-                    Live: ${Number(amounts.live).toLocaleString()}
+                    Live: {formatCurrency(amounts.live, currency)}
                   </span>
                   <span className="text-yellow-600">
-                    Sandbox: ${Number(amounts.sandbox).toLocaleString()}
+                    Sandbox: {formatCurrency(amounts.sandbox, currency)}
                   </span>
                 </div>
               </div>

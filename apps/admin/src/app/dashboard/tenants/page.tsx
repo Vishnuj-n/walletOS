@@ -14,6 +14,15 @@ import {
   RevokeKeyRequest
 } from '../../../services/adminService';
 
+interface CreatedTenant {
+  tenant_id: string;
+  name: string;
+  contact_email: string | null;
+  live_key: string;
+  test_key: string;
+  created_at: string;
+}
+
 interface UsageModalProps {
   tenantId: string;
   tenantName: string;
@@ -103,7 +112,7 @@ export default function TenantsPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
   const [createSuccess, setCreateSuccess] = useState('');
-  const [createdTenant, setCreatedTenant] = useState<any>(null);
+  const [createdTenant, setCreatedTenant] = useState<CreatedTenant | null>(null);
   const [copyStatus, setCopyStatus] = useState<string>('');
 
   useEffect(() => {

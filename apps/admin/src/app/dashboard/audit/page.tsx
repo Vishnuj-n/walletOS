@@ -33,6 +33,8 @@ export default function AuditLogPage() {
   const [adminError, setAdminError] = useState('');
   const [adminEmailFilter, setAdminEmailFilter] = useState('');
   const [adminActionFilter, setAdminActionFilter] = useState('');
+  const [debouncedAdminEmail, setDebouncedAdminEmail] = useState('');
+  const [debouncedAdminAction, setDebouncedAdminAction] = useState('');
   const [adminNextCursor, setAdminNextCursor] = useState<string | null>(null);
 
   // System errors state
@@ -66,12 +68,26 @@ export default function AuditLogPage() {
     return () => clearTimeout(handler);
   }, [actionFilter]);
 
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedAdminEmail(adminEmailFilter);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [adminEmailFilter]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedAdminAction(adminActionFilter);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [adminActionFilter]);
+
   // Admin activity effect
   useEffect(() => {
     if (activeTab === 'admin') {
       fetchAdminActivityData();
     }
-  }, [activeTab, adminEmailFilter, adminActionFilter]);
+  }, [activeTab, debouncedAdminEmail, debouncedAdminAction]);
 
   // System errors effect
   useEffect(() => {
@@ -116,12 +132,12 @@ export default function AuditLogPage() {
 
     try {
       const data = await fetchAdminActivity({
-        adminEmail: adminEmailFilter || undefined,
-        actionType: adminActionFilter || undefined,
+        adminEmail: debouncedAdminEmail || undefined,
+        actionType: debouncedAdminAction || undefined,
         limit: 50,
       });
       setAdminLogs(data.data);
-      setAdminNextCursor(data.next_cursor);
+      setAdminNextCursor(data.next_cursor ?? null);
     } catch (err) {
       setAdminError(err instanceof Error ? err.message : 'Failed to fetch admin activity');
     } finally {

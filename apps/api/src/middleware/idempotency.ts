@@ -280,7 +280,7 @@ export async function idempotencyMiddleware(
                 await updateMetadata();
               } catch (error) {
                 // Log production errors but don't crash the server
-                console.warn(`[idempotency] Background metadata update failed: ${error?.message}`);
+                console.warn(`[idempotency] Background metadata update failed: ${(error as Error)?.message}`);
               }
             };
             

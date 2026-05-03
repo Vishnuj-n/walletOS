@@ -144,25 +144,6 @@ Stores tenant API credentials.
 
 ---
 
-# AdminUser
-
-Dashboard users.
-
-| Field | Type |
-|------|------|
-| id | String |
-| tenantId | String |
-| supabaseUid | String |
-| email | String |
-| role | AdminRole |
-| isActive | Boolean |
-
-## Notes
-
-Uses Supabase authentication.
-
----
-
 # Wallet
 
 Main user balance account.
@@ -186,3 +167,34 @@ Unique:
 
 ```text
 tenantId + externalUserId + isSandbox
+```
+
+---
+
+# AdminUser
+
+Dashboard admin users linked to Supabase authentication.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | String | Primary key |
+| tenantId | String | FK to Tenant |
+| supabaseUid | String | Supabase auth user ID; must match auth.users.id |
+| email | String | Admin email |
+| role | AdminRole | support, finance, or superadmin |
+| isActive | Boolean | Activation status |
+
+## Unique Constraint
+
+```text
+tenantId + supabaseUid
+```
+
+Ensures one admin per Supabase user per tenant.
+
+## Notes
+
+- **Authentication**: Admin users authenticate via Supabase JWT (not API keys)
+- **Role hierarchy**: support < finance < superadmin
+- **Superadmin tasks**: cross-tenant wallets, create tenants, view system balance, audit logs
+- **Setup**: Create Supabase auth user first, then insert AdminUser record with matching `supabaseUid`

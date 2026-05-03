@@ -1165,7 +1165,7 @@ router.post(
           },
           actorId: adminEmail,
           actorType: 'admin',
-          isSandbox: true,
+          isSandbox: req.isSandbox || false,
         },
       });
 
@@ -1317,9 +1317,20 @@ router.post(
     const { tenantId } = req.params;
     const { scope } = req.body;
     const adminEmail = req.adminUser!.email;
+    const idempotencyKeyHeader = req.headers['idempotency-key'];
+    const idempotencyKey = Array.isArray(idempotencyKeyHeader) ? idempotencyKeyHeader[0] : idempotencyKeyHeader;
+    const idempotencyWindowStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     if (!scope || !['live', 'test'].includes(scope)) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'scope must be "live" or "test"');
+    }
+
+    if (!idempotencyKey || typeof idempotencyKey !== 'string') {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key header is required');
+    }
+
+    if (idempotencyKey.length > 255) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key must be at most 255 characters');
     }
 
     const tenant = await prisma.tenant.findUnique({
@@ -1331,12 +1342,81 @@ router.post(
     }
 
     const isSandbox = scope === 'test';
-    
-    // Generate new API key
-    const newKey = `wlt_${scope}_${randomBytes(24).toString('hex')}`;
-    const newKeyHash = createHash('sha256').update(newKey).digest('hex');
+
+    const existingAudit = await prisma.auditLog.findFirst({
+      where: {
+        tenantId,
+        entityType: 'tenant',
+        entityId: tenantId,
+        action: 'tenant.key_rotated',
+        timestamp: {
+          gte: idempotencyWindowStart,
+        },
+        changes: {
+          path: ['idempotency_key'],
+          equals: idempotencyKey,
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+    });
+
+    if (existingAudit) {
+      const changes = (existingAudit.changes as Record<string, unknown> | null) ?? {};
+      const cachedResponse = changes.response as
+        | { api_key: string; scope: string; tenant_id: string; created_at: string }
+        | undefined;
+
+      if (cachedResponse) {
+        return res.status((changes.response_status as number) || 201).json(cachedResponse);
+      }
+    }
 
     const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${tenantId}:${idempotencyKey}:tenant.key_rotated`}));`;
+
+      const cachedAudit = await tx.auditLog.findFirst({
+        where: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.key_rotated',
+          timestamp: {
+            gte: idempotencyWindowStart,
+          },
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+        orderBy: {
+          timestamp: 'desc',
+        },
+      });
+
+      if (cachedAudit) {
+        const cachedChanges = (cachedAudit.changes as Record<string, unknown> | null) ?? {};
+        const cachedResponse = cachedChanges.response as
+          | { api_key: string; scope: string; tenant_id: string; created_at: string }
+          | undefined;
+
+        if (cachedResponse) {
+          return {
+            apiKey: {
+              createdAt: new Date(cachedResponse.created_at),
+            },
+            newKey: cachedResponse.api_key,
+            cachedResponse,
+            status: (cachedChanges.response_status as number) || 201,
+          };
+        }
+      }
+
+      // Generate new API key
+      const newKey = `wlt_${scope}_${randomBytes(24).toString('hex')}`;
+      const newKeyHash = createHash('sha256').update(newKey).digest('hex');
+
       // Deactivate old key
       await tx.apiKey.updateMany({
         where: {
@@ -1371,18 +1451,37 @@ router.post(
             scope,
             key_prefix: newKey.substring(0, 15),
             rotated_by: adminEmail,
+            idempotency_key: idempotencyKey,
+            response: {
+              api_key_masked: `${newKey.substring(0, 8)}...${newKey.substring(newKey.length - 4)}`,
+              key_returned: true,
+              scope,
+              tenant_id: tenantId,
+              created_at: apiKey.createdAt.toISOString(),
+            },
+            response_status: 201,
           },
           actorId: adminEmail,
           actorType: 'admin',
-          isSandbox: true,
+          isSandbox: req.isSandbox || false,
         },
       });
 
-      return { apiKey, newKey };
+      return {
+        apiKey,
+        newKey,
+        cachedResponse: {
+          api_key: newKey,
+          scope,
+          tenant_id: tenantId,
+          created_at: apiKey.createdAt.toISOString(),
+        },
+        status: 201,
+      };
     });
 
-    res.json({
-      api_key: result.newKey,
+    res.status(result.status).json({
+      api_key: result.cachedResponse.api_key,
       scope,
       tenant_id: tenantId,
       created_at: result.apiKey.createdAt,
@@ -1447,7 +1546,7 @@ router.get(
 
     usage.forEach(item => {
       const hourKey = item.timestamp.toISOString().substring(0, 13) + ':00:00.000Z';
-      hourlyUsage.set(hourKey, item._count.id);
+      hourlyUsage.set(hourKey, (hourlyUsage.get(hourKey) || 0) + item._count.id);
     });
 
     res.json({
@@ -1472,9 +1571,20 @@ router.post(
     const { tenantId } = req.params;
     const { scope } = req.body;
     const adminEmail = req.adminUser!.email;
+    const idempotencyKeyHeader = req.headers['idempotency-key'];
+    const idempotencyKey = Array.isArray(idempotencyKeyHeader) ? idempotencyKeyHeader[0] : idempotencyKeyHeader;
+    const idempotencyWindowStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     if (!scope || !['live', 'test'].includes(scope)) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'scope must be "live" or "test"');
+    }
+
+    if (!idempotencyKey || typeof idempotencyKey !== 'string') {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key header is required');
+    }
+
+    if (idempotencyKey.length > 255) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key must be at most 255 characters');
     }
 
     const tenant = await prisma.tenant.findUnique({
@@ -1487,7 +1597,73 @@ router.post(
 
     const isSandbox = scope === 'test';
 
+    const existingAudit = await prisma.auditLog.findFirst({
+      where: {
+        tenantId,
+        entityType: 'tenant',
+        entityId: tenantId,
+        action: 'tenant.key_revoked',
+        timestamp: {
+          gte: idempotencyWindowStart,
+        },
+        changes: {
+          path: ['idempotency_key'],
+          equals: idempotencyKey,
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+    });
+
+    if (existingAudit) {
+      const changes = (existingAudit.changes as Record<string, unknown> | null) ?? {};
+      const cachedResponse = changes.response as
+        | { tenant_id: string; scope: string; keys_deactivated: number }
+        | undefined;
+
+      if (cachedResponse) {
+        return res.status((changes.response_status as number) || 200).json(cachedResponse);
+      }
+    }
+
     const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${tenantId}:${idempotencyKey}:tenant.key_revoked`}));`;
+
+      const cachedAudit = await tx.auditLog.findFirst({
+        where: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.key_revoked',
+          timestamp: {
+            gte: idempotencyWindowStart,
+          },
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+        orderBy: {
+          timestamp: 'desc',
+        },
+      });
+
+      if (cachedAudit) {
+        const cachedChanges = (cachedAudit.changes as Record<string, unknown> | null) ?? {};
+        const cachedResponse = cachedChanges.response as
+          | { tenant_id: string; scope: string; keys_deactivated: number }
+          | undefined;
+
+        if (cachedResponse) {
+          return {
+            deactivatedKeys: { count: cachedResponse.keys_deactivated },
+            cachedResponse,
+            status: (cachedChanges.response_status as number) || 200,
+          };
+        }
+      }
+
       // Deactivate all keys for this scope
       const deactivatedKeys = await tx.apiKey.updateMany({
         where: {
@@ -1511,21 +1687,32 @@ router.post(
             scope,
             keys_deactivated: deactivatedKeys.count,
             revoked_by: adminEmail,
+            idempotency_key: idempotencyKey,
+            response: {
+              tenant_id: tenantId,
+              scope,
+              keys_deactivated: deactivatedKeys.count,
+            },
+            response_status: 200,
           },
           actorId: adminEmail,
           actorType: 'admin',
-          isSandbox: true,
+          isSandbox: req.isSandbox || false,
         },
       });
 
-      return { deactivatedKeys };
+      return {
+        deactivatedKeys,
+        cachedResponse: {
+          tenant_id: tenantId,
+          scope,
+          keys_deactivated: deactivatedKeys.count,
+        },
+        status: 200,
+      };
     });
 
-    res.json({
-      tenant_id: tenantId,
-      scope,
-      keys_deactivated: result.deactivatedKeys.count,
-    });
+    res.status(result.status).json(result.cachedResponse);
   })
 );
 
@@ -1831,8 +2018,8 @@ router.get(
       },
     });
 
-    const liveTotal = new Decimal(0);
-    const sandboxTotal = new Decimal(0);
+    let liveTotal = new Decimal(0);
+    let sandboxTotal = new Decimal(0);
     const currencyBreakdown: Record<string, { live: string; sandbox: string }> = {};
 
     balances.forEach((balance) => {
@@ -1844,10 +2031,10 @@ router.get(
       }
 
       if (balance.isSandbox) {
-        sandboxTotal.add(amount);
+        sandboxTotal = sandboxTotal.add(amount);
         currencyBreakdown[currency].sandbox = amount.toFixed(4);
       } else {
-        liveTotal.add(amount);
+        liveTotal = liveTotal.add(amount);
         currencyBreakdown[currency].live = amount.toFixed(4);
       }
     });

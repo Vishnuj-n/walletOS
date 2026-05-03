@@ -222,6 +222,32 @@ Token expires in 1 hour. Scoped to the one `wallet_id`. The consuming project se
 
 ---
 
+## Admin API
+
+Admin routes use Supabase JWTs, not API keys. Requests must send `Authorization: Bearer <admin_jwt>`.
+
+Role hierarchy:
+
+- `support` < `finance` < `superadmin`
+
+Selected routes:
+
+- `GET /admin/me` - current admin identity and role
+- `GET /admin/audit` - tenant-scoped audit logs
+- `GET /admin/tenants` - list all tenants, superadmin only
+- `POST /admin/tenants` - create a tenant, superadmin only
+- `POST /admin/tenants/:tenantId/rotate-key` - rotate a tenant API key, superadmin only
+- `POST /admin/tenants/:tenantId/revoke-key` - revoke a tenant API key, superadmin only
+- `GET /admin/audit/admin-activity` - cross-tenant admin activity, superadmin only
+- `GET /admin/system/errors` - recent system errors, superadmin only
+- `GET /admin/search/wallets` - cross-tenant wallet search, superadmin only
+- `GET /admin/search/transactions` - transaction tracer, superadmin only
+- `GET /admin/system/balance` - total live and sandbox balances across all tenants, superadmin only
+
+Sandbox mode for admin routes is controlled with `X-Sandbox: true`.
+
+---
+
 ## Transactions
 
 All write endpoints require `Idempotency-Key` header. Max 255 characters. The database enforces a permanent unique constraint on the tenant ID and idempotency key combination. If reused with the same parameters, the original response is returned. If reused with different parameters, returns 409 `IDEMPOTENCY_CONFLICT`.

@@ -33,8 +33,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized - Invalid token' }, { status: 401 });
   }
 
-  // Use service key if available for DB query (bypasses RLS), otherwise use anon key
-  const dbKey = supabaseServiceKey || supabaseAnonKey;
+  if (!supabaseServiceKey) {
+    console.warn('SUPABASE_SERVICE_ROLE_KEY is missing; refusing AdminUser lookup because the anon key may be blocked by RLS.');
+    return NextResponse.json(
+      { error: 'Admin service configuration missing. Contact an administrator.' },
+      { status: 500 }
+    );
+  }
+
+  const dbKey = supabaseServiceKey;
   const dbClient = createClient(supabaseUrl, dbKey, {
     auth: {
       autoRefreshToken: false,
@@ -50,9 +57,14 @@ export async function GET(request: Request) {
     .single();
 
   if (adminError || !adminUser) {
-    console.error('Admin user lookup failed:', adminError);
+    const adminLookupError = adminError?.message || adminError?.code || 'unknown admin lookup error';
+    console.error('Admin user lookup failed:', adminLookupError);
     return NextResponse.json(
-      { error: 'Admin user not found. Contact administrator for access.' },
+      {
+        error: supabaseServiceKey
+          ? 'Admin user not found. Contact administrator for access.'
+          : 'Admin service configuration missing. Contact an administrator.',
+      },
       { status: 403 }
     );
   }
