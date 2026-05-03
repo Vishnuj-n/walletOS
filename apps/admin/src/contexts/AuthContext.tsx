@@ -101,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setAdminUser(null);
       }
+      // Note: loading is only set to false once during initial session check
     });
 
     return () => subscription.unsubscribe();

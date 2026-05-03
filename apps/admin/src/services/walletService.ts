@@ -1,5 +1,16 @@
 import { supabase, API_BASE_URL } from '../lib/supabase';
 
+/**
+ * Generate UUID for idempotency key
+ */
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export interface Wallet {
   wallet_id: string;
   external_user_id: string;
@@ -65,7 +76,9 @@ async function parseApiError(response: Response, fallbackMessage: string): Promi
     throw new Error(error.error?.message || error.message || fallbackMessage);
   } catch (jsonError) {
     if (jsonError instanceof SyntaxError) {
-      throw new Error(fallbackMessage);
+      // JSON parse failed, read text for more descriptive error
+      const textError = await response.text();
+      throw new Error(textError || fallbackMessage);
     }
     throw jsonError;
   }
@@ -143,6 +156,7 @@ export async function createWallet(data: CreateWalletRequest): Promise<Wallet> {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'Idempotency-Key': generateUUID(),
       },
       body: JSON.stringify(data),
     }

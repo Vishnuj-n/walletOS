@@ -1498,10 +1498,10 @@ router.get(
   requireAdminRole('superadmin'),
   asyncHandler(async (req, res) => {
     const { tenantId } = req.params;
-    const hours = parseInt(req.query.hours as string) || 24;
+    const hours = parseInt(req.query.hours as string);
 
-    if (hours > 168) { // Max 7 days
-      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Maximum 168 hours (7 days) allowed');
+    if (!Number.isFinite(hours) || hours < 1 || hours > 168) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Hours must be a finite integer between 1 and 168');
     }
 
     const tenant = await prisma.tenant.findUnique({
@@ -1951,47 +1951,56 @@ router.get(
       orderBy: { createdAt: 'desc' },
     });
 
-    // Get audit trail for each transaction
-    const results = await Promise.all(
-      transactions.map(async (tx) => {
-        const auditTrail = await prisma.auditLog.findMany({
-          where: {
-            entityType: 'transaction',
-            entityId: tx.id,
-          },
-          orderBy: { timestamp: 'desc' },
-          take: 10,
-        });
+    // Fetch all audit logs in a single query to eliminate N+1 pattern
+    const transactionIds = transactions.map(tx => tx.id);
+    const auditLogs = await prisma.auditLog.findMany({
+      where: {
+        entityType: 'transaction',
+        entityId: { in: transactionIds },
+      },
+      orderBy: { timestamp: 'desc' },
+    });
 
-        return {
-          transaction_id: tx.id,
-          type: tx.type,
-          amount: tx.amount.toFixed(4),
-          currency: tx.currency,
-          balance_before: tx.balanceBefore.toFixed(4),
-          balance_after: tx.balanceAfter.toFixed(4),
-          reference_id: tx.referenceId,
-          idempotency_key: tx.idempotencyKey,
-          metadata: tx.metadata,
-          created_at: tx.createdAt,
-          wallet: {
-            wallet_id: tx.wallet.id,
-            external_user_id: tx.wallet.externalUserId,
-            tenant: {
-              tenant_id: tx.wallet.tenant.id,
-              name: tx.wallet.tenant.name,
-            },
+    // Group audit logs by transaction ID
+    const auditLogsByTxId = new Map<string, typeof auditLogs>();
+    for (const log of auditLogs) {
+      if (!auditLogsByTxId.has(log.entityId)) {
+        auditLogsByTxId.set(log.entityId, []);
+      }
+      auditLogsByTxId.get(log.entityId)!.push(log);
+    }
+
+    const results = transactions.map(tx => {
+      const auditTrail = (auditLogsByTxId.get(tx.id) || []).slice(0, 10);
+
+      return {
+        transaction_id: tx.id,
+        type: tx.type,
+        amount: tx.amount.toFixed(4),
+        currency: tx.currency,
+        balance_before: tx.balanceBefore.toFixed(4),
+        balance_after: tx.balanceAfter.toFixed(4),
+        reference_id: tx.referenceId,
+        idempotency_key: tx.idempotencyKey,
+        metadata: tx.metadata,
+        created_at: tx.createdAt,
+        wallet: {
+          wallet_id: tx.wallet.id,
+          external_user_id: tx.wallet.externalUserId,
+          tenant: {
+            tenant_id: tx.wallet.tenant.id,
+            name: tx.wallet.tenant.name,
           },
-          audit_trail: auditTrail.map(log => ({
-            id: log.id,
-            action: log.action,
-            actor: log.actorType ? `${log.actorType}:${log.actorId}` : log.actorId,
-            changes: log.changes,
-            timestamp: log.timestamp,
-          })),
-        };
-      })
-    );
+        },
+        audit_trail: auditTrail.map(log => ({
+          id: log.id,
+          action: log.action,
+          actor: log.actorType ? `${log.actorType}:${log.actorId}` : log.actorId,
+          changes: log.changes,
+          timestamp: log.timestamp,
+        })),
+      };
+    });
 
     res.json({
       query: { transactionId, requestId, idempotencyKey },

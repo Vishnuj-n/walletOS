@@ -36,8 +36,7 @@ export default function AuditLogPage() {
   const [adminActionFilter, setAdminActionFilter] = useState('');
   const [debouncedAdminEmail, setDebouncedAdminEmail] = useState('');
   const [debouncedAdminAction, setDebouncedAdminAction] = useState('');
-  const [adminNextCursor, setAdminNextCursor] = useState<string | null>(null);
-
+  
   // System errors state
   const [systemErrors, setSystemErrors] = useState<SystemError[]>([]);
   const [errorsLoading, setErrorsLoading] = useState(false);
@@ -138,7 +137,6 @@ export default function AuditLogPage() {
         limit: 50,
       });
       setAdminLogs(data.data);
-      setAdminNextCursor(data.next_cursor ?? null);
     } catch (err) {
       setAdminError(err instanceof Error ? err.message : 'Failed to fetch admin activity');
     } finally {

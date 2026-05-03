@@ -470,6 +470,7 @@ export async function rotateTenantKey(
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'Idempotency-Key': generateUUID(),
       },
       body: JSON.stringify(request),
     }
@@ -487,7 +488,7 @@ export async function rotateTenantKey(
  */
 export async function fetchTenantUsage(
   tenantId: string,
-  hours: number = 24
+  hours = 24
 ): Promise<TenantUsageResponse> {
   const token = await getAuthToken();
   if (!token) throw new Error('No active session');
@@ -525,6 +526,7 @@ export async function revokeTenantKey(
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'Idempotency-Key': generateUUID(),
       },
       body: JSON.stringify(request),
     }

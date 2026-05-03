@@ -89,19 +89,20 @@ export async function adminAuthMiddleware(
       // Fallback: find admin user by Supabase UID and derive tenantId from DB.
       // This allows older tokens (missing app_metadata) to continue working
       // while preserving strict verification for the common case.
-      // Use findFirst in case the DB doesn't have a unique constraint on supabaseUid.
+      // Use count check to harden admin lookup and prevent PII exposure.
+      const count = await prisma.adminUser.count({
+        where: { supabaseUid: user.id }
+      });
+
+      if (count !== 1) {
+        return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Admin user not found'));
+      }
+
       adminUser = await prisma.adminUser.findFirst({
         where: { supabaseUid: user.id },
       });
 
       if (adminUser) {
-        // Log warning if multiple admin users share the same supabaseUid
-        const count = await prisma.adminUser.count({
-          where: { supabaseUid: user.id }
-        });
-        if (count > 1) {
-          console.warn(`Multiple admin users found for supabaseUid: ${user.id}`);
-        }
         tenantId = adminUser.tenantId;
       }
     }

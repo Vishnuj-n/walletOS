@@ -222,7 +222,7 @@ export default function DashboardUI() {
                   </td>
 
                   <td className="p-3">
-                    <span className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-600">
+                    <span className={`text-xs px-2 py-1 rounded ${t.status === 'warning' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
                       {t.status}
                     </span>
                   </td>

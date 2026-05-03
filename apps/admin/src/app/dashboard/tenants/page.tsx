@@ -23,6 +23,59 @@ interface UsageModalProps {
   onClose: () => void;
 }
 
+interface AlertModalProps {
+  message: string;
+  type: 'success' | 'error';
+  onClose: () => void;
+}
+
+function AlertModal({ message, type, onClose }: AlertModalProps) {
+  const bgColor = type === 'success' ? 'bg-green-50' : 'bg-red-50';
+  const borderColor = type === 'success' ? 'border-green-200' : 'border-red-200';
+  const textColor = type === 'success' ? 'text-green-700' : 'text-red-700';
+  const iconColor = type === 'success' ? 'text-green-600' : 'text-red-600';
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
+      <div className={`${bgColor} ${borderColor} border rounded-xl p-6 max-w-md w-full shadow-xl`}>
+        <div className="flex items-start gap-3">
+          <div className={`${iconColor} mt-0.5`}>
+            {type === 'success' ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+          </div>
+          <div className="flex-1">
+            <h3 className={`text-sm font-semibold ${type === 'success' ? 'text-green-900' : 'text-red-900'} mb-2`}>
+              {type === 'success' ? 'Success' : 'Error'}
+            </h3>
+            <p className={`text-sm ${textColor} whitespace-pre-wrap`}>{message}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className={`text-gray-400 hover:text-gray-600`}
+          >
+            ×
+          </button>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 text-sm font-semibold"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
   const [usage, setUsage] = useState<TenantUsageResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -98,8 +151,10 @@ export default function TenantsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usageModal, setUsageModal] = useState<{ tenantId: string; tenantName: string } | null>(null);
+  const [apiKeyModal, setApiKeyModal] = useState<{ apiKey: string; scope: string; tenantName: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [alertModal, setAlertModal] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Create tenant form state
   const [name, setName] = useState('');
@@ -135,10 +190,16 @@ export default function TenantsPage() {
     setActionLoading(`${tenantId}-${scope}`);
     try {
       const result = await rotateTenantKey(tenantId, { scope });
-      alert(`New ${scope} API key generated: ${result.api_key}\n\nSave this key now - it won't be shown again!`);
+      setAlertModal({
+        message: `New ${scope} API key generated: ${result.api_key}\n\nSave this key now - it won't be shown again!`,
+        type: 'success'
+      });
       await loadTenants(); // Refresh the list
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to rotate key');
+      setAlertModal({
+        message: err instanceof Error ? err.message : 'Failed to rotate key',
+        type: 'error'
+      });
     } finally {
       setActionLoading(null);
     }
@@ -152,10 +213,16 @@ export default function TenantsPage() {
     setActionLoading(`${tenantId}-revoke-${scope}`);
     try {
       await revokeTenantKey(tenantId, { scope });
-      alert(`${scope} API keys revoked successfully for ${tenantName}`);
+      setAlertModal({
+        message: `${scope} API keys revoked successfully for ${tenantName}`,
+        type: 'success'
+      });
       await loadTenants(); // Refresh the list
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to revoke keys');
+      setAlertModal({
+        message: err instanceof Error ? err.message : 'Failed to revoke keys',
+        type: 'error'
+      });
     } finally {
       setActionLoading(null);
     }
@@ -171,6 +238,15 @@ export default function TenantsPage() {
       return;
     }
 
+    const trimmedEmail = contactEmail.trim();
+    if (trimmedEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        setCreateError('Please enter a valid email address');
+        return;
+      }
+    }
+
     setCreateError('');
     setCreateSuccess('');
     setCreateLoading(true);
@@ -179,7 +255,7 @@ export default function TenantsPage() {
     try {
       const result = await createTenant({
         name: normalizedName,
-        contact_email: contactEmail.trim() || undefined,
+        contact_email: trimmedEmail || undefined,
       });
       setCreatedTenant(result);
       setCreateSuccess('Tenant created successfully!');
@@ -395,7 +471,10 @@ export default function TenantsPage() {
                       onChange={(e) => setContactEmail(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       placeholder="Enter contact email (optional)"
+                      pattern="[^\s@]+@[^\s@]+\.[^\s@]+"
+                      title="Please enter a valid email address"
                     />
+                    <p className="text-xs text-gray-500 mt-1">Optional - must be a valid email if provided</p>
                   </div>
 
                   <button
@@ -483,6 +562,15 @@ export default function TenantsPage() {
             tenantId={usageModal.tenantId}
             tenantName={usageModal.tenantName}
             onClose={() => setUsageModal(null)}
+          />
+        )}
+
+        {/* Alert Modal */}
+        {alertModal && (
+          <AlertModal
+            message={alertModal.message}
+            type={alertModal.type}
+            onClose={() => setAlertModal(null)}
           />
         )}
       </div>

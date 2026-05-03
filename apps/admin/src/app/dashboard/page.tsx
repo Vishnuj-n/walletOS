@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRequireAuth } from '../../hooks/useRequireAuth';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -29,17 +29,7 @@ function SystemBalanceWidget() {
       currency: currencyCode || 'USD',
     }).format(Number(amount));
 
-  useEffect(() => {
-    loadBalance();
-
-    const intervalId = setInterval(() => {
-      loadBalance();
-    }, 300000);
-
-    return () => clearInterval(intervalId);
-  }, []);
-
-  const loadBalance = async () => {
+  const loadBalance = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -50,7 +40,17 @@ function SystemBalanceWidget() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadBalance();
+
+    const intervalId = setInterval(() => {
+      loadBalance();
+    }, 300000);
+
+    return () => clearInterval(intervalId);
+  }, [loadBalance]);
 
   if (loading) {
     return (

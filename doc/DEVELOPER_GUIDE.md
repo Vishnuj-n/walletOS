@@ -49,18 +49,18 @@ The core ledger and concurrency logic are stable. You will build the admin dashb
 
 ### Creating a Superadmin User (Supabase Remote)
 
-To create a superadmin in your remote Supabase database:
+Use magic links or the Supabase dashboard for secure account creation. Direct SQL insertion is not recommended for production use.
 
-#### 1) Create a Supabase auth user (in Supabase SQL editor)
+#### 1) Insert user record (auth schema)
 
 ```sql
 INSERT INTO auth.users (
-  id, aud, role, email, encrypted_password, 
-  raw_user_meta_data, raw_app_meta_data, 
+  id, aud, role, email, encrypted_password,
+  raw_user_meta_data, raw_app_meta_data,
   created_at, updated_at
 ) VALUES (
-  '<UUID>', 'authenticated', 'authenticated', 
-  'admin@example.com', NULL, '{}', 
+  '<UUID>', 'authenticated', 'authenticated',
+  'admin@example.com', '', '{}',
   '{"tenantId":"your-tenant-id"}', now(), now()
 );
 ```
@@ -70,12 +70,13 @@ Replace:
 - `admin@example.com`: your admin email
 - `your-tenant-id`: the tenant ID (e.g., `default`)
 
+Note: For production, use Supabase dashboard or magic links to create users securely.
+
 #### 2) Mark email as confirmed (optional)
 
 ```sql
 UPDATE auth.users
 SET email_confirmed_at = now()
-WHERE id = '<UUID>';
 ```
 
 #### 3) Create the AdminUser record (app database)

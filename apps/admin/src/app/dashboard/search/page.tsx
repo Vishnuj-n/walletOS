@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { SuperadminOnly } from '../../../components/SuperadminOnly';
 import { 
   searchWallets, 
   searchTransactions, 
@@ -77,7 +76,6 @@ export default function GlobalSearchPage() {
   }
 
   return (
-    <SuperadminOnly>
       <div className="p-6">
         <div className="mb-4">
           <h1 className="text-lg font-semibold text-slate-900 mb-1">Global Search</h1>
@@ -93,7 +91,7 @@ export default function GlobalSearchPage() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyPress}
                 placeholder="Enter wallet ID, external user ID, transaction ID, request ID, or idempotency key..."
                 className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
@@ -313,6 +311,5 @@ export default function GlobalSearchPage() {
           )}
         </div>
       </div>
-    </SuperadminOnly>
   );
 }
