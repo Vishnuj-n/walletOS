@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { prisma } from '../lib/prisma';
+import { AdminUser } from '@prisma/client';
 import { AppError, ErrorCode } from './errorHandler';
 
 // Initialize Supabase admin client
@@ -66,22 +67,44 @@ export async function adminAuthMiddleware(
       return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Invalid or expired token'));
     }
 
-    // Extract tenantId from JWT metadata - explicitly reject if missing or invalid
-    const tenantId = user.app_metadata?.tenantId;
-    if (typeof tenantId !== 'string' || tenantId.trim() === '') {
-      return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Missing or invalid tenantId in JWT'));
-    }
+    // Extract tenantId from JWT metadata. If missing, fall back to a DB lookup
+    // by Supabase UID and infer tenantId from the admin user record.
+    let tenantId = user.app_metadata?.tenantId;
 
-    // Look up admin user in database
-    const adminUser = await prisma.adminUser.findUnique({
-      where: {
-        tenantId_supabaseUid: {
-          tenantId,
-          supabaseUid: user.id,
+    // Attempt to fetch the admin user. Prefer the composite lookup when tenantId
+    // is present in the token (fast path). Otherwise fall back to a lookup by
+    // supabase UID to infer the tenant.
+    let adminUser: AdminUser | null = null;
+
+    if (typeof tenantId === 'string' && tenantId.trim() !== '') {
+      adminUser = await prisma.adminUser.findUnique({
+        where: {
+          tenantId_supabaseUid: {
+            tenantId,
+            supabaseUid: user.id,
+          },
         },
-      },
-    });
+      });
+    } else {
+      // Fallback: find admin user by Supabase UID and derive tenantId from DB.
+      // This allows older tokens (missing app_metadata) to continue working
+      // while preserving strict verification for the common case.
+      // Use findFirst in case the DB doesn't have a unique constraint on supabaseUid.
+      adminUser = await prisma.adminUser.findFirst({
+        where: { supabaseUid: user.id },
+      });
 
+      if (adminUser) {
+        // Log warning if multiple admin users share the same supabaseUid
+        const count = await prisma.adminUser.count({
+          where: { supabaseUid: user.id }
+        });
+        if (count > 1) {
+          console.warn(`Multiple admin users found for supabaseUid: ${user.id}`);
+        }
+        tenantId = adminUser.tenantId;
+      }
+    }
 
     if (!adminUser) {
       return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Admin user not found'));

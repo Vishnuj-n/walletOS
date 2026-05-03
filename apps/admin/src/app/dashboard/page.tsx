@@ -6,6 +6,17 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { SuperadminOnly } from '../../components/SuperadminOnly';
 import { fetchSystemBalance, type SystemBalanceResponse } from '../../services/adminService';
+import {
+  Activity,
+  ArrowRight,
+  Building2,
+  Clock3,
+  HandCoins,
+  RefreshCcw,
+  Search,
+  ShieldCheck,
+  Wallet,
+} from 'lucide-react';
 
 function SystemBalanceWidget() {
   const [balance, setBalance] = useState<SystemBalanceResponse | null>(null);
@@ -43,12 +54,17 @@ function SystemBalanceWidget() {
 
   if (loading) {
     return (
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-2">System Balance</h3>
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-slate-900">System Balance</h3>
+          <div className="p-2 rounded-lg bg-slate-100 text-slate-400">
+            <Activity size={16} />
+          </div>
+        </div>
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-200 rounded mb-2"></div>
-          <div className="h-4 bg-gray-200 rounded mb-2"></div>
-          <div className="h-4 bg-gray-200 rounded"></div>
+          <div className="h-3 bg-slate-200 rounded mb-2"></div>
+          <div className="h-3 bg-slate-200 rounded mb-2"></div>
+          <div className="h-3 bg-slate-200 rounded"></div>
         </div>
       </div>
     );
@@ -56,16 +72,21 @@ function SystemBalanceWidget() {
 
   if (error) {
     return (
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-2">System Balance</h3>
-        <div className="bg-red-50 border border-red-200 rounded p-3">
-          <p className="text-sm text-red-700">{error}</p>
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-slate-900">System Balance</h3>
+          <div className="p-2 rounded-lg bg-slate-100 text-slate-400">
+            <ShieldCheck size={16} />
+          </div>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+          <p className="text-xs text-red-700">{error}</p>
         </div>
         <button
           onClick={loadBalance}
-          className="mt-3 text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+          className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
         >
-          Retry →
+          Retry <ArrowRight size={14} />
         </button>
       </div>
     );
@@ -78,55 +99,67 @@ function SystemBalanceWidget() {
   const balanceCurrencyCode = balance.currency ?? balance.currency_code ?? 'USD';
 
   return (
-    <div className="bg-white shadow rounded-lg p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-medium text-gray-900">System Balance</h3>
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+      <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">System Balance</h3>
+          <p className="text-xs text-slate-500">Live and sandbox liabilities</p>
+        </div>
         <button
           onClick={loadBalance}
-          className="text-gray-400 hover:text-gray-600"
+          className="p-2 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
           title="Refresh"
         >
-          ↻
+          <RefreshCcw size={16} />
         </button>
       </div>
-      
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-gray-500">Live Total</p>
-            <p className="text-2xl font-bold text-green-600">
+
+      <div className="p-4 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rounded-lg border border-slate-200 p-3 bg-slate-50/60">
+            <p className="text-xs text-slate-500">Live Total</p>
+            <p className="text-lg font-semibold text-slate-900">
               {formatCurrency(balance.total_live, balanceCurrencyCode)}
             </p>
           </div>
-          <div>
-            <p className="text-sm text-gray-500">Sandbox Total</p>
-            <p className="text-2xl font-bold text-yellow-600">
+          <div className="rounded-lg border border-slate-200 p-3 bg-slate-50/60">
+            <p className="text-xs text-slate-500">Sandbox Total</p>
+            <p className="text-lg font-semibold text-slate-900">
               {formatCurrency(balance.total_sandbox, balanceCurrencyCode)}
             </p>
           </div>
         </div>
 
-        <div className="border-t pt-4">
-          <p className="text-sm text-gray-500 mb-2">Currency Breakdown</p>
-          <div className="space-y-2">
-            {Object.entries(balance.currency_breakdown).map(([currency, amounts]) => (
-              <div key={currency} className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-700">{currency}</span>
-                <div className="flex gap-4 text-sm">
-                  <span className="text-green-600">
-                    Live: {formatCurrency(amounts.live, currency)}
-                  </span>
-                  <span className="text-yellow-600">
-                    Sandbox: {formatCurrency(amounts.sandbox, currency)}
-                  </span>
-                </div>
-              </div>
-            ))}
+        <div className="border border-slate-200 rounded-lg overflow-hidden">
+          <div className="px-3 py-2 border-b border-slate-200 bg-slate-50">
+            <p className="text-xs font-semibold text-slate-900">Currency Breakdown</p>
           </div>
+          <table className="w-full text-sm">
+            <thead className="bg-white text-slate-500 text-xs">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Currency</th>
+                <th className="px-3 py-2 text-right font-medium">Live</th>
+                <th className="px-3 py-2 text-right font-medium">Sandbox</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(balance.currency_breakdown).map(([currency, amounts]) => (
+                <tr key={currency} className="border-t border-slate-100">
+                  <td className="px-3 py-2 text-sm font-semibold text-slate-900">{currency}</td>
+                  <td className="px-3 py-2 text-right text-sm text-slate-700">
+                    {formatCurrency(amounts.live, currency)}
+                  </td>
+                  <td className="px-3 py-2 text-right text-sm text-slate-700">
+                    {formatCurrency(amounts.sandbox, currency)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        <div className="text-xs text-gray-400 border-t pt-2">
-          Last updated: {new Date(balance.calculated_at).toLocaleString()}
+        <div className="text-[11px] font-mono text-slate-400 border-t border-slate-200 pt-3 flex items-center gap-1">
+          <Clock3 size={12} /> Last updated: {new Date(balance.calculated_at).toLocaleString()}
         </div>
       </div>
     </div>
@@ -135,77 +168,112 @@ function SystemBalanceWidget() {
 
 export default function DashboardPage() {
   const { adminUser, loading } = useRequireAuth();
-  const { isSuperadmin } = useAuth();
   const router = useRouter();
 
   if (loading) {
-    return <div className="text-gray-600">Loading...</div>;
+    return <div className="min-h-screen bg-slate-50 p-6 text-sm text-slate-500">Loading...</div>;
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">Manage your WalletOS administration</p>
+    <div className="min-h-screen bg-slate-50 p-6 space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-lg font-semibold text-slate-900">Governance Console</h1>
+          <p className="text-xs text-slate-500">Manage your WalletOS administration</p>
+        </div>
+        <button className="p-2 rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+          <RefreshCcw size={16} />
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Wallet Management</h3>
-          <p className="text-gray-600 mb-4">Search, view, and manage user wallets</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
+              <Wallet size={18} />
+            </div>
+            <span className="text-[11px] font-mono text-slate-400">/wallets</span>
+          </div>
+          <h3 className="text-sm font-semibold text-slate-900 mb-1">Wallet Management</h3>
+          <p className="text-xs text-slate-500 mb-4">Search, view, and manage user wallets</p>
           <button
             onClick={() => router.push('/dashboard/wallets')}
-            className="text-indigo-600 hover:text-indigo-700 font-medium"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
           >
-            Manage Wallets →
+            Manage Wallets <ArrowRight size={14} />
           </button>
         </div>
-        <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Manual Actions</h3>
-          <p className="text-gray-600 mb-4">Perform manual credits, debits, and reversals</p>
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
+              <HandCoins size={18} />
+            </div>
+            <span className="text-[11px] font-mono text-slate-400">/actions</span>
+          </div>
+          <h3 className="text-sm font-semibold text-slate-900 mb-1">Manual Actions</h3>
+          <p className="text-xs text-slate-500 mb-4">Perform manual credits, debits, and reversals</p>
           <button
             onClick={() => router.push('/dashboard/actions')}
-            className="text-indigo-600 hover:text-indigo-700 font-medium"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
           >
-            Perform Actions →
+            Perform Actions <ArrowRight size={14} />
           </button>
         </div>
-        <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Tenant Management</h3>
-          <p className="text-gray-600 mb-4">Create and manage tenants with API keys</p>
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+              <Building2 size={18} />
+            </div>
+            <span className="text-[11px] font-mono text-slate-400">/tenants</span>
+          </div>
+          <h3 className="text-sm font-semibold text-slate-900 mb-1">Tenant Management</h3>
+          <p className="text-xs text-slate-500 mb-4">Create and manage tenants with API keys</p>
           <button
             onClick={() => router.push('/dashboard/tenants')}
-            className="text-indigo-600 hover:text-indigo-700 font-medium"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
           >
-            Manage Tenants →
+            Manage Tenants <ArrowRight size={14} />
           </button>
         </div>
-        <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Audit Logs</h3>
-          <p className="text-gray-600 mb-4">View system activity and audit trails</p>
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
+              <ShieldCheck size={18} />
+            </div>
+            <span className="text-[11px] font-mono text-slate-400">/audit</span>
+          </div>
+          <h3 className="text-sm font-semibold text-slate-900 mb-1">Audit Logs</h3>
+          <p className="text-xs text-slate-500 mb-4">View system activity and audit trails</p>
           <button
             onClick={() => router.push('/dashboard/audit')}
-            className="text-indigo-600 hover:text-indigo-700 font-medium"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
           >
-            View Logs →
+            View Logs <ArrowRight size={14} />
           </button>
         </div>
       </div>
 
-      {/* Superadmin-only sections */}
       <SuperadminOnly>
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Superadmin Tools</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold text-slate-900">Superadmin Tools</h2>
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <SystemBalanceWidget />
-            <div className="bg-white shadow rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Global Search</h3>
-              <p className="text-gray-600 mb-4">Search wallets and transactions across all tenants</p>
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 xl:col-span-2">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
+                  <Search size={18} />
+                </div>
+                <span className="text-[11px] font-mono text-slate-400">/search</span>
+              </div>
+              <h3 className="text-sm font-semibold text-slate-900 mb-1">Global Search</h3>
+              <p className="text-xs text-slate-500 mb-4">
+                Search wallets and transactions across all tenants
+              </p>
               <button
                 onClick={() => router.push('/dashboard/search')}
-                className="text-indigo-600 hover:text-indigo-700 font-medium"
+                className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3 py-2 rounded-lg inline-flex items-center gap-2"
               >
-                Global Search →
+                Open Search <ArrowRight size={14} />
               </button>
             </div>
           </div>
@@ -213,8 +281,9 @@ export default function DashboardPage() {
       </SuperadminOnly>
 
       {adminUser && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex items-center gap-2">
+          <Activity size={16} className="text-slate-400" />
+          <p className="text-xs text-slate-500">
             <strong>Role:</strong> {adminUser.role} | <strong>Tenant:</strong> {adminUser.tenantId}
           </p>
         </div>

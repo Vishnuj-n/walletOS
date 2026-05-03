@@ -608,6 +608,13 @@ export async function fetchSystemBalance(): Promise<SystemBalanceResponse> {
   });
 
   if (!response.ok) {
+    // Don't auto-signout for balance endpoint errors - let the widget handle it
+    if (response.status === 401) {
+      throw new Error('Unauthorized: Superadmin access required');
+    }
+    if (response.status === 403) {
+      throw new Error('Forbidden: Superadmin access required');
+    }
     return parseApiError(response, 'Failed to fetch system balance');
   }
 

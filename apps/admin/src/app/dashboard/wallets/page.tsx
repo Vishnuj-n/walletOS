@@ -12,6 +12,7 @@ import {
   type Wallet,
   type CreateWalletRequest,
 } from '../../../services/walletService';
+import { Plus, Search, Wallet } from 'lucide-react';
 
 export default function WalletsPage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -112,32 +113,35 @@ export default function WalletsPage() {
     }
   };
 
-  if (loading) return <div className="text-gray-600">Loading...</div>;
+  if (loading) return <div className="min-h-screen bg-slate-50 p-6 text-sm text-slate-500">Loading...</div>;
 
   return (
-    <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Wallet Management</h2>
+    <div className="min-h-screen bg-slate-50 p-6">
+      <h2 className="text-lg font-semibold text-slate-900 mb-4">Wallet Management</h2>
       
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
           {error}
         </div>
       )}
 
-      <div className="bg-white shadow rounded-lg p-6 mb-6">
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 mb-4">
         <div className="flex justify-between items-center mb-4">
           <div className="flex gap-4 flex-1">
-            <input
-              type="text"
-              placeholder="Search by user ID or label..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by user ID or label..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Statuses</option>
               <option value="active">Active</option>
@@ -147,58 +151,58 @@ export default function WalletsPage() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold inline-flex items-center gap-2"
           >
-            Create Wallet
+            <Plus size={16} /> Create Wallet
           </button>
         </div>
       </div>
 
-      <div className="bg-white shadow rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                 Wallet ID
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                 User ID
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                 Label
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                 Balance
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                 Status
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white divide-y divide-slate-100">
             {wallets.map((wallet) => (
-              <tr key={wallet.wallet_id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+              <tr key={wallet.wallet_id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-900">
                   <Link
                     href={`/dashboard/wallets/${wallet.wallet_id}`}
-                    className="text-indigo-600 hover:text-indigo-900"
+                    className="text-blue-600 hover:text-blue-700 font-mono text-[11px]"
                   >
                     {wallet.wallet_id.substring(0, 8)}...
                   </Link>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">
                   {wallet.external_user_id}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">
                   {wallet.label || '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-900">
                   {wallet.currency} {wallet.balance}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-4 py-3 whitespace-nowrap">
                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                     wallet.status === 'active' ? 'bg-green-100 text-green-800' :
                     wallet.status === 'frozen' ? 'bg-red-100 text-red-800' :
@@ -207,7 +211,7 @@ export default function WalletsPage() {
                     {wallet.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium space-x-2">
                   <Link
                     href={`/dashboard/wallets/${wallet.wallet_id}`}
                     className="text-indigo-600 hover:text-indigo-900"
@@ -256,7 +260,7 @@ export default function WalletsPage() {
           </tbody>
         </table>
         {wallets.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-sm text-slate-500">
             No wallets found
           </div>
         )}
@@ -264,9 +268,9 @@ export default function WalletsPage() {
 
       {/* Create Wallet Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Create New Wallet</h3>
+        <div className="fixed inset-0 bg-slate-900/40 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border border-slate-200 w-96 shadow-xl rounded-xl bg-white">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4 inline-flex items-center gap-2"><Wallet size={16} /> Create New Wallet</h3>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -286,7 +290,7 @@ export default function WalletsPage() {
                   type="text"
                   name="external_user_id"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="mb-4">
@@ -296,7 +300,7 @@ export default function WalletsPage() {
                 <select
                   name="currency"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Currency</option>
                   <option value="USD">USD</option>
@@ -311,20 +315,20 @@ export default function WalletsPage() {
                 <input
                   type="text"
                   name="label"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold"
                 >
                   Create
                 </button>
@@ -336,9 +340,9 @@ export default function WalletsPage() {
 
       {/* Edit Wallet Modal */}
       {showEditModal && selectedWallet && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Edit Wallet</h3>
+        <div className="fixed inset-0 bg-slate-900/40 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border border-slate-200 w-96 shadow-xl rounded-xl bg-white">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">Edit Wallet</h3>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -356,7 +360,7 @@ export default function WalletsPage() {
                   type="text"
                   value={selectedWallet.wallet_id}
                   disabled
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-100 text-sm"
                 />
               </div>
               <div className="mb-4">
@@ -367,7 +371,7 @@ export default function WalletsPage() {
                   type="text"
                   name="label"
                   defaultValue={selectedWallet.label || ''}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="flex justify-end space-x-3">
@@ -377,13 +381,13 @@ export default function WalletsPage() {
                     setShowEditModal(false);
                     setSelectedWallet(null);
                   }}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold"
                 >
                   Update
                 </button>
@@ -395,14 +399,14 @@ export default function WalletsPage() {
 
       {/* Delete Wallet Modal */}
       {showDeleteModal && selectedWallet && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Close Wallet</h3>
+        <div className="fixed inset-0 bg-slate-900/40 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border border-slate-200 w-96 shadow-xl rounded-xl bg-white">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">Close Wallet</h3>
             <div className="mb-4">
               <p className="text-sm text-gray-600 mb-2">
                 Are you sure you want to close this wallet? This action cannot be undone.
               </p>
-              <div className="bg-gray-50 p-3 rounded">
+              <div className="bg-slate-50 p-3 rounded-lg">
                 <p className="text-sm"><strong>Wallet ID:</strong> {selectedWallet.wallet_id}</p>
                 <p className="text-sm"><strong>User ID:</strong> {selectedWallet.external_user_id}</p>
                 <p className="text-sm"><strong>Balance:</strong> {selectedWallet.currency} {selectedWallet.balance}</p>
@@ -417,7 +421,7 @@ export default function WalletsPage() {
                   name="reason"
                   required
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter reason for closing this wallet..."
                 />
               </div>
@@ -429,7 +433,7 @@ export default function WalletsPage() {
                   type="text"
                   value={deleteConfirmation}
                   onChange={(e) => setDeleteConfirmation(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder={`Enter: ${selectedWallet.wallet_id}`}
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -444,7 +448,7 @@ export default function WalletsPage() {
                     setSelectedWallet(null);
                     setDeleteConfirmation('');
                   }}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm"
                 >
                   Cancel
                 </button>
@@ -459,7 +463,7 @@ export default function WalletsPage() {
                     }
                   }}
                   disabled={deleteConfirmation !== selectedWallet.wallet_id}
-                  className={`px-4 py-2 rounded-md ${
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${
                     deleteConfirmation === selectedWallet.wallet_id
                       ? 'bg-red-600 text-white hover:bg-red-700'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'

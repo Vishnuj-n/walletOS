@@ -12,6 +12,7 @@ import {
   type AdminActivityLog,
   type SystemError,
 } from '../../../services/adminService';
+import { Activity, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 export default function AuditLogPage() {
   const { isSuperadmin } = useAuth();
@@ -159,49 +160,49 @@ export default function AuditLogPage() {
     }
   };
 
-  if (loading && activeTab === 'tenant') return <div className="text-gray-600">Loading...</div>;
+  if (loading && activeTab === 'tenant') return <div className="min-h-screen bg-slate-50 p-6 text-sm text-slate-500">Loading...</div>;
 
   return (
-    <div className="p-6">
+    <div className="min-h-screen bg-slate-50 p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Audit Logs</h1>
-        <p className="text-gray-600">Monitor system activity and errors</p>
+        <h1 className="text-lg font-semibold text-slate-900">Audit Logs</h1>
+        <p className="text-xs text-slate-500">Monitor system activity and errors</p>
       </div>
 
       {/* Tabs */}
       <div className="mb-6">
-        <div className="border-b border-gray-200">
+        <div className="border-b border-slate-200">
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab('tenant')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              className={`py-2 px-1 border-b-2 font-medium text-sm inline-flex items-center gap-2 ${
                 activeTab === 'tenant'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Tenant Activity
+              <Activity size={16} /> Tenant Activity
             </button>
             <SuperadminOnly>
               <button
                 onClick={() => setActiveTab('admin')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm inline-flex items-center gap-2 ${
                   activeTab === 'admin'
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Admin Activity
+                <ShieldCheck size={16} /> Admin Activity
               </button>
               <button
                 onClick={() => setActiveTab('errors')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm inline-flex items-center gap-2 ${
                   activeTab === 'errors'
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                System Errors
+                <AlertTriangle size={16} /> System Errors
               </button>
             </SuperadminOnly>
           </nav>
@@ -217,28 +218,28 @@ export default function AuditLogPage() {
             </div>
           )}
 
-          <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 mb-4">
             <div className="flex gap-4">
               <input
                 type="text"
                 placeholder="Filter by entity ID..."
                 value={walletFilter}
                 onChange={(e) => setWalletFilter(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <input
                 type="text"
                 placeholder="Filter by action..."
                 value={actionFilter}
                 onChange={(e) => setActionFilter(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
 
-          <div className="bg-white shadow rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Timestamp
@@ -257,7 +258,7 @@ export default function AuditLogPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white divide-y divide-slate-100">
                 {logs.map((log) => (
                   <tr key={log.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -281,7 +282,7 @@ export default function AuditLogPage() {
                       {typeof log.wallet_id === 'string' ? log.wallet_id.substring(0, 8) + '...' : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
-                      <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto max-w-xs">
+                      <pre className="text-xs bg-slate-50 p-2 rounded overflow-auto max-w-xs">
                         {JSON.stringify(log.changes, null, 2)}
                       </pre>
                     </td>
@@ -308,21 +309,21 @@ export default function AuditLogPage() {
               </div>
             )}
 
-            <div className="bg-white shadow rounded-lg p-6 mb-6">
+            <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 mb-4">
               <div className="flex gap-4">
                 <input
                   type="text"
                   placeholder="Filter by admin email..."
                   value={adminEmailFilter}
                   onChange={(e) => setAdminEmailFilter(e.target.value)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <input
                   type="text"
                   placeholder="Filter by action type..."
                   value={adminActionFilter}
                   onChange={(e) => setAdminActionFilter(e.target.value)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -332,9 +333,9 @@ export default function AuditLogPage() {
                 <p className="text-gray-500">Loading admin activity...</p>
               </div>
             ) : (
-              <div className="bg-white shadow rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+              <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Timestamp
@@ -356,7 +357,7 @@ export default function AuditLogPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white divide-y divide-slate-100">
                     {adminLogs.map((log) => (
                       <tr key={log.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -427,9 +428,9 @@ export default function AuditLogPage() {
                 <p className="text-gray-500">Loading system errors...</p>
               </div>
             ) : (
-              <div className="bg-white shadow rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+              <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Timestamp
@@ -451,7 +452,7 @@ export default function AuditLogPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white divide-y divide-slate-100">
                     {systemErrors.map((error) => (
                       <tr key={error.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

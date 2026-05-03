@@ -15,6 +15,7 @@ import {
   TenantUsageResponse,
   RevokeKeyRequest
 } from '../../../services/adminService';
+import { Building2, KeyRound, Plus, ShieldAlert } from 'lucide-react';
 
 interface UsageModalProps {
   tenantId: string;
@@ -45,10 +46,11 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
   }, [tenantId]);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
+      <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto shadow-xl">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900">
+          <h3 className="text-sm font-semibold text-slate-900 inline-flex items-center gap-2">
+            <Building2 size={16} className="text-blue-600" />
             API Usage - {tenantName}
           </h3>
           <button
@@ -216,24 +218,24 @@ export default function TenantsPage() {
 
   return (
     <SuperadminOnly>
-      <div className="p-6">
+      <div className="min-h-screen bg-slate-50 p-6">
         <div className="mb-6 flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Tenant Management</h1>
-            <p className="text-gray-600">Manage all tenants and their API keys</p>
+            <h1 className="text-lg font-semibold text-slate-900">Tenant Management</h1>
+            <p className="text-xs text-slate-500">Manage all tenants and their API keys</p>
           </div>
           <button
             onClick={() => setCreateModalOpen(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold inline-flex items-center gap-2"
           >
-            Create New Tenant
+            <Plus size={16} /> Create New Tenant
           </button>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <h3 className="text-lg font-medium text-red-800">Error</h3>
-            <p className="text-red-700">{error}</p>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <h3 className="text-sm font-semibold text-red-800">Error</h3>
+            <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
@@ -242,9 +244,9 @@ export default function TenantsPage() {
             <p className="text-gray-500">Loading tenants...</p>
           </div>
         ) : (
-          <div className="bg-white shadow overflow-hidden rounded-md">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded-xl">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Tenant
@@ -266,12 +268,12 @@ export default function TenantsPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white divide-y divide-slate-100">
                 {tenants.map((tenant) => (
-                  <tr key={tenant.tenant_id}>
+                  <tr key={tenant.tenant_id} className="hover:bg-slate-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{tenant.name}</div>
-                      <div className="text-sm text-gray-500">{tenant.tenant_id}</div>
+                      <div className="text-sm font-semibold text-slate-900">{tenant.name}</div>
+                      <div className="text-[11px] font-mono text-slate-400">{tenant.tenant_id}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {tenant.contact_email}
@@ -337,10 +339,10 @@ export default function TenantsPage() {
 
         {/* Create Tenant Modal */}
         {createModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
+          <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-md w-full shadow-xl">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Create New Tenant</h3>
+                <h3 className="text-sm font-semibold text-slate-900 inline-flex items-center gap-2"><Building2 size={16} className="text-blue-600" />Create New Tenant</h3>
                 <button
                   onClick={() => setCreateModalOpen(false)}
                   className="text-gray-400 hover:text-gray-600"
@@ -406,10 +408,10 @@ export default function TenantsPage() {
                 </form>
               ) : (
                 <div>
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">
-                    🔑 API Keys - Save These Now!
+                  <h4 className="text-sm font-semibold text-slate-900 mb-4 inline-flex items-center gap-2">
+                    <KeyRound size={16} className="text-blue-600" /> API Keys - Save These Now!
                   </h4>
-                  <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-4">
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg mb-4">
                     <p className="font-medium">Important:</p>
                     <p className="text-sm">
                       These API keys will only be shown once. Please save them securely.
@@ -465,7 +467,7 @@ export default function TenantsPage() {
                       setCreateModalOpen(false);
                       setCreatedTenant(null);
                     }}
-                    className="w-full mt-6 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                    className="w-full mt-6 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 text-sm font-semibold"
                   >
                     Done
                   </button>

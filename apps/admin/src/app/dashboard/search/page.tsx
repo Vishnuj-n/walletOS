@@ -9,6 +9,7 @@ import {
   WalletSearchResponse, 
   TransactionSearchResponse 
 } from '../../../services/adminService';
+import { Search, Wallet, ArrowLeftRight, Building2 } from 'lucide-react';
 
 interface SearchParams {
   transactionId?: string;
@@ -66,7 +67,7 @@ export default function GlobalSearchPage() {
 
   if (!isSuperadmin) {
     return (
-      <div className="p-6">
+      <div className="min-h-screen bg-slate-50 p-6">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <h3 className="text-lg font-medium text-yellow-800">Access Denied</h3>
           <p className="text-yellow-700 mt-2">This feature is only available to superadmins.</p>
@@ -78,26 +79,29 @@ export default function GlobalSearchPage() {
   return (
     <SuperadminOnly>
       <div className="p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Global Search</h1>
-          <p className="text-gray-600">Search wallets and transactions across all tenants</p>
+        <div className="mb-4">
+          <h1 className="text-lg font-semibold text-slate-900 mb-1">Global Search</h1>
+          <p className="text-xs text-slate-500">Search wallets and transactions across all tenants</p>
         </div>
 
         {/* Search Bar */}
-        <div className="mb-6">
+        <div className="mb-4 bg-white border border-slate-200 rounded-xl shadow-sm p-4">
           <div className="flex gap-4">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Enter wallet ID, external user ID, transaction ID, request ID, or idempotency key..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Enter wallet ID, external user ID, transaction ID, request ID, or idempotency key..."
+                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
             <button
               onClick={handleSearch}
               disabled={loading || !query.trim()}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
             >
               {loading ? 'Searching...' : 'Search'}
             </button>
@@ -105,28 +109,28 @@ export default function GlobalSearchPage() {
         </div>
 
         {/* Tabs */}
-        <div className="mb-6">
-          <div className="border-b border-gray-200">
+        <div className="mb-4">
+          <div className="border-b border-slate-200">
             <nav className="-mb-px flex space-x-8">
               <button
                 onClick={() => setActiveTab('wallets')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm inline-flex items-center gap-2 ${
                   activeTab === 'wallets'
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Wallets
+                <Wallet size={16} /> Wallets
               </button>
               <button
                 onClick={() => setActiveTab('transactions')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm inline-flex items-center gap-2 ${
                   activeTab === 'transactions'
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Transactions
+                <ArrowLeftRight size={16} /> Transactions
               </button>
             </nav>
           </div>
@@ -134,9 +138,9 @@ export default function GlobalSearchPage() {
 
         {/* Error Display */}
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-            <h3 className="text-lg font-medium text-red-800">Error</h3>
-            <p className="text-red-700 mt-1">{error}</p>
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-red-800">Error</h3>
+            <p className="text-sm text-red-700 mt-1">{error}</p>
           </div>
         )}
 
@@ -144,15 +148,15 @@ export default function GlobalSearchPage() {
         <div>
           {activeTab === 'wallets' && walletResults && (
             <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
+              <h3 className="text-sm font-semibold text-slate-900 mb-3">
                 Wallet Results ({walletResults.results.length})
               </h3>
               {walletResults.results.length === 0 ? (
                 <p className="text-gray-500">No wallets found for "{walletResults.query}"</p>
               ) : (
-                <div className="bg-white shadow overflow-hidden rounded-md">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Wallet ID
@@ -177,16 +181,16 @@ export default function GlobalSearchPage() {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {walletResults.results.map((wallet) => (
                         <tr key={wallet.wallet_id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 font-mono text-[11px]">
                             {wallet.wallet_id}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                             {wallet.external_user_id}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                             <div>
-                              <div className="font-medium">{wallet.tenant.name}</div>
-                              <div className="text-gray-400">{wallet.tenant.tenant_id}</div>
+                              <div className="font-medium inline-flex items-center gap-1"><Building2 size={14} className="text-slate-400" />{wallet.tenant.name}</div>
+                              <div className="text-slate-400 text-[11px] font-mono">{wallet.tenant.tenant_id}</div>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -223,7 +227,7 @@ export default function GlobalSearchPage() {
 
           {activeTab === 'transactions' && transactionResults && (
             <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
+              <h3 className="text-sm font-semibold text-slate-900 mb-3">
                 Transaction Results ({transactionResults.results.length})
               </h3>
               {transactionResults.results.length === 0 ? (
@@ -231,7 +235,7 @@ export default function GlobalSearchPage() {
               ) : (
                 <div className="space-y-6">
                   {transactionResults.results.map((tx) => (
-                    <div key={tx.transaction_id} className="bg-white shadow rounded-lg p-6">
+                    <div key={tx.transaction_id} className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
                       <div className="grid grid-cols-2 gap-4 mb-4">
                         <div>
                           <h4 className="text-sm font-medium text-gray-500">Transaction ID</h4>
