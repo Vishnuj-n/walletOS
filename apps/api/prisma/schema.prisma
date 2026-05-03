@@ -30,6 +30,7 @@ model ApiKey {
   scope     KeyScope
   isSandbox Boolean  @default(false)
   isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
@@ -59,6 +60,8 @@ model Wallet {
   isSandbox          Boolean       @default(false)
   metadata           Json?
   closureScheduledAt DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
   transactions       Transaction[]
   tenant             Tenant        @relation(fields: [tenantId], references: [id])
 

@@ -1306,4 +1306,559 @@ router.get(
   })
 );
 
+/**
+ * POST /admin/tenants/:tenantId/rotate-key
+ * Regenerate API keys for a tenant (superadmin only)
+ */
+router.post(
+  '/tenants/:tenantId/rotate-key',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const { tenantId } = req.params;
+    const { scope } = req.body;
+    const adminEmail = req.adminUser!.email;
+
+    if (!scope || !['live', 'test'].includes(scope)) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'scope must be "live" or "test"');
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
+
+    if (!tenant) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
+    }
+
+    const isSandbox = scope === 'test';
+    
+    // Generate new API key
+    const newKey = `wlt_${scope}_${randomBytes(24).toString('hex')}`;
+    const newKeyHash = createHash('sha256').update(newKey).digest('hex');
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Deactivate old key
+      await tx.apiKey.updateMany({
+        where: {
+          tenantId,
+          scope: 'admin',
+          isSandbox,
+        },
+        data: {
+          isActive: false,
+        },
+      });
+
+      // Create new key
+      const apiKey = await tx.apiKey.create({
+        data: {
+          tenantId,
+          keyHash: newKeyHash,
+          prefix: newKey.substring(0, 15),
+          scope: 'admin',
+          isSandbox,
+        },
+      });
+
+      // Create audit log
+      await tx.auditLog.create({
+        data: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.key_rotated',
+          changes: {
+            scope,
+            key_prefix: newKey.substring(0, 15),
+            rotated_by: adminEmail,
+          },
+          actorId: adminEmail,
+          actorType: 'admin',
+          isSandbox: true,
+        },
+      });
+
+      return { apiKey, newKey };
+    });
+
+    res.json({
+      api_key: result.newKey,
+      scope,
+      tenant_id: tenantId,
+      created_at: result.apiKey.createdAt,
+    });
+  })
+);
+
+/**
+ * GET /admin/tenants/:tenantId/usage
+ * Get API usage stats for a tenant (superadmin only)
+ */
+router.get(
+  '/tenants/:tenantId/usage',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const { tenantId } = req.params;
+    const hours = parseInt(req.query.hours as string) || 24;
+
+    if (hours > 168) { // Max 7 days
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Maximum 168 hours (7 days) allowed');
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
+
+    if (!tenant) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
+    }
+
+    // Get hourly request counts from audit logs
+    const startTime = new Date();
+    startTime.setHours(startTime.getHours() - hours);
+
+    const usage = await prisma.auditLog.groupBy({
+      by: ['timestamp'],
+      where: {
+        tenantId,
+        timestamp: {
+          gte: startTime,
+        },
+        action: {
+          startsWith: 'api.',
+        },
+      },
+      _count: {
+        id: true,
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+    });
+
+    // Group by hour
+    const hourlyUsage = new Map<string, number>();
+    for (let i = 0; i < hours; i++) {
+      const hour = new Date();
+      hour.setHours(hour.getHours() - i);
+      const hourKey = hour.toISOString().substring(0, 13) + ':00:00.000Z';
+      hourlyUsage.set(hourKey, 0);
+    }
+
+    usage.forEach(item => {
+      const hourKey = item.timestamp.toISOString().substring(0, 13) + ':00:00.000Z';
+      hourlyUsage.set(hourKey, item._count.id);
+    });
+
+    res.json({
+      tenant_id: tenantId,
+      hours,
+      usage: Array.from(hourlyUsage.entries()).map(([hour, count]) => ({
+        hour,
+        requests: count,
+      })).reverse(),
+    });
+  })
+);
+
+/**
+ * POST /admin/tenants/:tenantId/revoke-key
+ * Revoke API keys for a tenant (superadmin only)
+ */
+router.post(
+  '/tenants/:tenantId/revoke-key',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const { tenantId } = req.params;
+    const { scope } = req.body;
+    const adminEmail = req.adminUser!.email;
+
+    if (!scope || !['live', 'test'].includes(scope)) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'scope must be "live" or "test"');
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
+
+    if (!tenant) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
+    }
+
+    const isSandbox = scope === 'test';
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Deactivate all keys for this scope
+      const deactivatedKeys = await tx.apiKey.updateMany({
+        where: {
+          tenantId,
+          scope: 'admin',
+          isSandbox,
+        },
+        data: {
+          isActive: false,
+        },
+      });
+
+      // Create audit log
+      await tx.auditLog.create({
+        data: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.key_revoked',
+          changes: {
+            scope,
+            keys_deactivated: deactivatedKeys.count,
+            revoked_by: adminEmail,
+          },
+          actorId: adminEmail,
+          actorType: 'admin',
+          isSandbox: true,
+        },
+      });
+
+      return { deactivatedKeys };
+    });
+
+    res.json({
+      tenant_id: tenantId,
+      scope,
+      keys_deactivated: result.deactivatedKeys.count,
+    });
+  })
+);
+
+// ==================== AUDIT LOG ENHANCEMENTS (SUPERADMIN ONLY) ====================
+
+/**
+ * GET /admin/audit/admin-activity
+ * Filter admin actions across all tenants (superadmin only)
+ */
+router.get(
+  '/audit/admin-activity',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const { adminEmail, actionType, limit = 50, after } = req.query;
+
+    const where: Prisma.AuditLogWhereInput = {
+      actorType: 'admin',
+    };
+
+    if (adminEmail) {
+      where.actorId = Array.isArray(adminEmail) ? adminEmail[0] : adminEmail;
+    }
+
+    if (actionType) {
+      where.action = Array.isArray(actionType) ? actionType[0] : actionType;
+    }
+
+    const parsedLimit = Number(limit);
+    const cappedLimit = (!Number.isFinite(parsedLimit) || parsedLimit <= 0) ? 10 : Math.min(Math.floor(parsedLimit), 100);
+
+    // Parse cursor for pagination
+    if (after) {
+      const cursorLog = await prisma.auditLog.findUnique({
+        where: { id: after as string },
+        select: { timestamp: true, id: true },
+      });
+
+      if (cursorLog) {
+        where.OR = [
+          { timestamp: { lt: cursorLog.timestamp } },
+          {
+            AND: [
+              { timestamp: cursorLog.timestamp },
+              { id: { lt: cursorLog.id } },
+            ],
+          },
+        ];
+      }
+    }
+
+    const auditLogs = await prisma.auditLog.findMany({
+      where,
+      take: cappedLimit,
+      orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
+      include: {
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    const nextCursor = auditLogs.length === cappedLimit ? auditLogs[auditLogs.length - 1].id : null;
+
+    res.json({
+      data: auditLogs.map(log => ({
+        id: log.id,
+        tenant: {
+          tenant_id: log.tenantId,
+          name: log.tenant?.name || 'Unknown',
+        },
+        entity_type: log.entityType,
+        entity_id: log.entityId,
+        action: log.action,
+        actor: log.actorId,
+        changes: log.changes,
+        timestamp: log.timestamp,
+        is_sandbox: log.isSandbox,
+      })),
+      next_cursor: nextCursor,
+    });
+  })
+);
+
+/**
+ * GET /admin/system/errors
+ * Recent system errors (superadmin only)
+ */
+router.get(
+  '/system/errors',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const { limit = 50 } = req.query;
+
+    const parsedLimit = Number(limit);
+    const cappedLimit = (!Number.isFinite(parsedLimit) || parsedLimit <= 0) ? 10 : Math.min(Math.floor(parsedLimit), 100);
+
+    // Since we don't have a dedicated error logs table, we'll simulate with recent audit logs
+    // In a real implementation, this would query a proper error logging system
+    const errors = await prisma.auditLog.findMany({
+      where: {
+        action: {
+          in: ['error.http.500', 'error.http.400', 'error.validation', 'error.auth'],
+        },
+      },
+      take: cappedLimit,
+      orderBy: { timestamp: 'desc' },
+      include: {
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    res.json({
+      data: errors.map(error => ({
+        id: error.id,
+        timestamp: error.timestamp,
+        tenant: {
+          tenant_id: error.tenantId,
+          name: error.tenant?.name || 'Unknown',
+        },
+        error_type: error.action,
+        message: (error.changes as any)?.message || 'Unknown error',
+        endpoint: (error.changes as any)?.endpoint || 'Unknown',
+        request_id: (error.changes as any)?.request_id,
+        actor: error.actorId,
+        is_sandbox: error.isSandbox,
+      })),
+      total_count: errors.length,
+    });
+  })
+);
+
+// ==================== GLOBAL SEARCH ENDPOINTS (SUPERADMIN ONLY) ====================
+
+/**
+ * GET /admin/search/wallets
+ * Cross-tenant wallet search (superadmin only)
+ */
+router.get(
+  '/search/wallets',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const { q } = req.query;
+
+    if (!q || typeof q !== 'string') {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Search query "q" is required');
+    }
+
+    const wallets = await prisma.wallet.findMany({
+      where: {
+        OR: [
+          { id: { contains: q, mode: 'insensitive' } },
+          { externalUserId: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      include: {
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      take: 50,
+      orderBy: { id: 'desc' },
+    });
+
+    res.json({
+      query: q,
+      results: wallets.map(w => ({
+        wallet_id: w.id,
+        external_user_id: w.externalUserId,
+        label: w.label,
+        balance: w.balance.toFixed(4),
+        currency: w.currency,
+        status: w.status,
+        is_sandbox: w.isSandbox,
+        tenant: {
+          tenant_id: w.tenant.id,
+          name: w.tenant.name,
+        },
+        created_at: w.createdAt,
+      })),
+    });
+  })
+);
+
+/**
+ * GET /admin/search/transactions
+ * Transaction tracer (superadmin only)
+ */
+router.get(
+  '/search/transactions',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const { transactionId, requestId, idempotencyKey } = req.query;
+
+    if (!transactionId && !requestId && !idempotencyKey) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'One of transactionId, requestId, or idempotencyKey is required');
+    }
+
+    const where: Prisma.TransactionWhereInput = {};
+
+    if (transactionId) {
+      where.id = Array.isArray(transactionId) ? transactionId[0] : transactionId;
+    }
+    if (requestId) {
+      where.referenceId = Array.isArray(requestId) ? requestId[0] : requestId;
+    }
+    if (idempotencyKey) {
+      where.idempotencyKey = Array.isArray(idempotencyKey) ? idempotencyKey[0] : idempotencyKey;
+    }
+
+    const transactions = await prisma.transaction.findMany({
+      where,
+      include: {
+        wallet: {
+          include: {
+            tenant: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      take: 10,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Get audit trail for each transaction
+    const results = await Promise.all(
+      transactions.map(async (tx) => {
+        const auditTrail = await prisma.auditLog.findMany({
+          where: {
+            entityType: 'transaction',
+            entityId: tx.id,
+          },
+          orderBy: { timestamp: 'desc' },
+          take: 10,
+        });
+
+        return {
+          transaction_id: tx.id,
+          type: tx.type,
+          amount: tx.amount.toFixed(4),
+          currency: tx.currency,
+          balance_before: tx.balanceBefore.toFixed(4),
+          balance_after: tx.balanceAfter.toFixed(4),
+          reference_id: tx.referenceId,
+          idempotency_key: tx.idempotencyKey,
+          metadata: tx.metadata,
+          created_at: tx.createdAt,
+          wallet: {
+            wallet_id: tx.wallet.id,
+            external_user_id: tx.wallet.externalUserId,
+            tenant: {
+              tenant_id: tx.wallet.tenant.id,
+              name: tx.wallet.tenant.name,
+            },
+          },
+          audit_trail: auditTrail.map(log => ({
+            id: log.id,
+            action: log.action,
+            actor: log.actorType ? `${log.actorType}:${log.actorId}` : log.actorId,
+            changes: log.changes,
+            timestamp: log.timestamp,
+          })),
+        };
+      })
+    );
+
+    res.json({
+      query: { transactionId, requestId, idempotencyKey },
+      results,
+    });
+  })
+);
+
+/**
+ * GET /admin/system/balance
+ * Total system value across all tenants (superadmin only)
+ */
+router.get(
+  '/system/balance',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const balances = await prisma.wallet.groupBy({
+      by: ['currency', 'isSandbox'],
+      _sum: {
+        balance: true,
+      },
+      where: {
+        status: 'active',
+      },
+    });
+
+    const liveTotal = new Decimal(0);
+    const sandboxTotal = new Decimal(0);
+    const currencyBreakdown: Record<string, { live: string; sandbox: string }> = {};
+
+    balances.forEach((balance) => {
+      const currency = balance.currency;
+      const amount = balance._sum.balance || new Decimal(0);
+      
+      if (!currencyBreakdown[currency]) {
+        currencyBreakdown[currency] = { live: '0', sandbox: '0' };
+      }
+
+      if (balance.isSandbox) {
+        sandboxTotal.add(amount);
+        currencyBreakdown[currency].sandbox = amount.toFixed(4);
+      } else {
+        liveTotal.add(amount);
+        currencyBreakdown[currency].live = amount.toFixed(4);
+      }
+    });
+
+    res.json({
+      total_live: liveTotal.toFixed(4),
+      total_sandbox: sandboxTotal.toFixed(4),
+      currency_breakdown: currencyBreakdown,
+      calculated_at: new Date().toISOString(),
+    });
+  })
+);
+
 export default router;

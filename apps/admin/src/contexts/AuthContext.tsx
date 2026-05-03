@@ -20,6 +20,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   hasRole: (minRole: AdminRole) => boolean;
+  isSuperadmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -108,8 +109,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return userRoleRank >= requiredRank;
   };
 
+  const isSuperadmin = adminUser?.role === 'superadmin';
+
   return (
-    <AuthContext.Provider value={{ user, adminUser, loading, signIn, signOut, hasRole }}>
+    <AuthContext.Provider value={{ user, adminUser, loading, signIn, signOut, hasRole, isSuperadmin }}>
       {children}
     </AuthContext.Provider>
   );

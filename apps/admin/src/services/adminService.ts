@@ -65,6 +65,159 @@ export interface TransactionResponse {
   created_at: string;
 }
 
+// ==================== Tenant Management Types ====================
+
+export interface Tenant {
+  tenant_id: string;
+  name: string;
+  contact_email: string;
+  created_at: string;
+  wallet_count: number;
+  admin_count: number;
+}
+
+export interface TenantListResponse {
+  data: Tenant[];
+}
+
+export interface RotateKeyRequest {
+  scope: 'live' | 'test';
+}
+
+export interface RotateKeyResponse {
+  api_key: string;
+  scope: string;
+  tenant_id: string;
+  created_at: string;
+}
+
+export interface TenantUsageResponse {
+  tenant_id: string;
+  hours: number;
+  usage: Array<{
+    hour: string;
+    requests: number;
+  }>;
+}
+
+export interface RevokeKeyRequest {
+  scope: 'live' | 'test';
+}
+
+export interface RevokeKeyResponse {
+  tenant_id: string;
+  scope: string;
+  keys_deactivated: number;
+}
+
+// ==================== Global Search Types ====================
+
+export interface WalletSearchResult {
+  wallet_id: string;
+  external_user_id: string;
+  label: string;
+  balance: string;
+  currency: string;
+  status: string;
+  is_sandbox: boolean;
+  tenant: {
+    tenant_id: string;
+    name: string;
+  };
+  created_at: string;
+}
+
+export interface WalletSearchResponse {
+  query: string;
+  results: WalletSearchResult[];
+}
+
+export interface TransactionSearchResult {
+  transaction_id: string;
+  type: string;
+  amount: string;
+  currency: string;
+  balance_before: string;
+  balance_after: string;
+  reference_id: string | null;
+  idempotency_key: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  wallet: {
+    wallet_id: string;
+    external_user_id: string;
+    tenant: {
+      tenant_id: string;
+      name: string;
+    };
+  };
+  audit_trail: Array<{
+    id: string;
+    action: string;
+    actor: string;
+    changes: Record<string, unknown>;
+    timestamp: string;
+  }>;
+}
+
+export interface TransactionSearchResponse {
+  query: {
+    transactionId?: string;
+    requestId?: string;
+    idempotencyKey?: string;
+  };
+  results: TransactionSearchResult[];
+}
+
+export interface SystemBalanceResponse {
+  total_live: string;
+  total_sandbox: string;
+  currency_breakdown: Record<string, { live: string; sandbox: string }>;
+  calculated_at: string;
+}
+
+// ==================== Audit Enhancement Types ====================
+
+export interface AdminActivityLog {
+  id: string;
+  tenant: {
+    tenant_id: string;
+    name: string;
+  };
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  actor: string;
+  changes: Record<string, unknown>;
+  timestamp: string;
+  is_sandbox: boolean;
+}
+
+export interface AdminActivityResponse {
+  data: AdminActivityLog[];
+  next_cursor?: string;
+}
+
+export interface SystemError {
+  id: string;
+  timestamp: string;
+  tenant: {
+    tenant_id: string;
+    name: string;
+  };
+  error_type: string;
+  message: string;
+  endpoint: string;
+  request_id: string | null;
+  actor: string;
+  is_sandbox: boolean;
+}
+
+export interface SystemErrorsResponse {
+  data: SystemError[];
+  total_count: number;
+}
+
 // ==================== Audit Log Operations ====================
 
 /**
@@ -193,6 +346,258 @@ export async function reverseTransaction(
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error?.message || 'Transaction reversal failed');
+  }
+
+  return await response.json();
+}
+
+// ==================== Tenant Management Operations ====================
+
+/**
+ * List all tenants with wallet counts
+ */
+export async function fetchTenants(): Promise<Tenant[]> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('No active session');
+
+  const response = await fetch(`${API_BASE_URL}/admin/tenants`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to fetch tenants');
+  }
+
+  const data: TenantListResponse = await response.json();
+  return data.data;
+}
+
+/**
+ * Rotate API key for a tenant
+ */
+export async function rotateTenantKey(
+  tenantId: string,
+  request: RotateKeyRequest
+): Promise<RotateKeyResponse> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('No active session');
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/tenants/${tenantId}/rotate-key`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(request),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to rotate API key');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Get API usage stats for a tenant
+ */
+export async function fetchTenantUsage(
+  tenantId: string,
+  hours: number = 24
+): Promise<TenantUsageResponse> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('No active session');
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/tenants/${tenantId}/usage?hours=${hours}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to fetch tenant usage');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Revoke API keys for a tenant
+ */
+export async function revokeTenantKey(
+  tenantId: string,
+  request: RevokeKeyRequest
+): Promise<RevokeKeyResponse> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('No active session');
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/tenants/${tenantId}/revoke-key`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(request),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to revoke API key');
+  }
+
+  return await response.json();
+}
+
+// ==================== Global Search Operations ====================
+
+/**
+ * Search wallets across all tenants
+ */
+export async function searchWallets(query: string): Promise<WalletSearchResponse> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('No active session');
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/search/wallets?q=${encodeURIComponent(query)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to search wallets');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Search transactions by ID, request ID, or idempotency key
+ */
+export async function searchTransactions(params: {
+  transactionId?: string;
+  requestId?: string;
+  idempotencyKey?: string;
+}): Promise<TransactionSearchResponse> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('No active session');
+
+  const queryParams = new URLSearchParams();
+  if (params.transactionId) queryParams.append('transactionId', params.transactionId);
+  if (params.requestId) queryParams.append('requestId', params.requestId);
+  if (params.idempotencyKey) queryParams.append('idempotencyKey', params.idempotencyKey);
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/search/transactions?${queryParams.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to search transactions');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Get total system balance across all tenants
+ */
+export async function fetchSystemBalance(): Promise<SystemBalanceResponse> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('No active session');
+
+  const response = await fetch(`${API_BASE_URL}/admin/system/balance`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to fetch system balance');
+  }
+
+  return await response.json();
+}
+
+// ==================== Audit Enhancement Operations ====================
+
+/**
+ * Fetch admin activity across all tenants
+ */
+export async function fetchAdminActivity(params: {
+  adminEmail?: string;
+  actionType?: string;
+  limit?: number;
+  after?: string;
+}): Promise<AdminActivityResponse> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('No active session');
+
+  const queryParams = new URLSearchParams();
+  if (params.adminEmail) queryParams.append('adminEmail', params.adminEmail);
+  if (params.actionType) queryParams.append('actionType', params.actionType);
+  if (params.limit) queryParams.append('limit', params.limit.toString());
+  if (params.after) queryParams.append('after', params.after);
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/audit/admin-activity?${queryParams.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to fetch admin activity');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Fetch recent system errors
+ */
+export async function fetchSystemErrors(limit: number = 50): Promise<SystemErrorsResponse> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('No active session');
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/system/errors?limit=${limit}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to fetch system errors');
   }
 
   return await response.json();

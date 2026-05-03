@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import React from 'react';
+import { SuperadminOnly } from './SuperadminOnly';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -66,6 +67,14 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
                   >
                     Tenants
                   </Link>
+                  <SuperadminOnly>
+                    <Link
+                      href="/dashboard/search"
+                      className={getNavLinkClass('/dashboard/search')}
+                    >
+                      Global Search
+                    </Link>
+                  </SuperadminOnly>
                   <Link
                     href="/dashboard/audit"
                     className={getNavLinkClass('/dashboard/audit')}

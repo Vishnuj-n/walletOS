@@ -2,10 +2,17 @@
 
 import { useRequireAuth } from '../hooks/useRequireAuth';
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function HomePage() {
   const { loading } = useRequireAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    if (!loading) {
+      router.push('/dashboard');
+    }
+  }, [loading, router]);
 
   if (loading) {
     return (
@@ -15,7 +22,5 @@ export default function HomePage() {
     );
   }
 
-  // Redirect to dashboard after auth check
-  router.push('/dashboard');
   return null;
 }
