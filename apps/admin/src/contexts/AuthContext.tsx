@@ -4,9 +4,10 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
 import type { AdminMeResponse, AdminRole, AdminUserInfo } from '@walletOS/types';
+import { roleRank } from '@walletOS/types';
 
 function isAdminRole(value: unknown): value is AdminRole {
-  return value === 'support' || value === 'finance' || value === 'superadmin';
+  return value === 'support' || value === 'finance' || value === 'tenant_admin' || value === 'superadmin';
 }
 
 function isAdminMeResponse(value: unknown): value is AdminMeResponse {
@@ -35,13 +36,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Role hierarchy: support(0) < finance(1) < superadmin(2)
-const roleRank: Record<AdminRole, number> = {
-  support: 0,
-  finance: 1,
-  superadmin: 2,
-};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);

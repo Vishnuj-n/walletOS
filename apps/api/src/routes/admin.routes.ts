@@ -7,8 +7,40 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet } from '../services/wallet.service';
+import { z } from 'zod';
 
 const router = Router();
+
+const adminWalletCreateSchema = z.object({
+  external_user_id: z.string().min(1),
+  currency: z.string().length(3),
+  label: z.string().min(1).max(120).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  tenant_id: z.string().min(1).optional(),
+});
+
+const transactionSearchSchema = z.object({
+  transactionId: z.string().min(1).max(255).optional(),
+  requestId: z.string().min(1).max(255).optional(),
+  idempotencyKey: z.string().min(1).max(255).optional(),
+  tenantId: z.string().min(1).max(255).optional(),
+  includeCrossTenant: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .transform((value) => value === 'true'),
+}).refine(
+  ({ transactionId, requestId, idempotencyKey }) => Boolean(transactionId || requestId || idempotencyKey),
+  { message: 'One of transactionId, requestId, or idempotencyKey is required' }
+);
+
+const walletSearchSchema = z.object({
+  q: z.string().min(1).max(255),
+  tenantId: z.string().min(1).max(255).optional(),
+  includeCrossTenant: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .transform((value) => value === 'true'),
+});
 
 // Apply admin auth to all routes
 router.use(adminAuthMiddleware);
@@ -21,16 +53,16 @@ router.post(
   '/wallets',
   requireAdminRole('support'),
   asyncHandler(async (req, res) => {
-    const { external_user_id, currency, label, metadata, tenant_id } = req.body;
+    const parsedPayload = adminWalletCreateSchema.safeParse(req.body);
+    if (!parsedPayload.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid wallet create payload');
+    }
+
+    const { external_user_id, currency, label, metadata, tenant_id } = parsedPayload.data;
     const tenantId = tenant_id || req.adminUser!.tenantId;
     const adminEmail = req.adminUser!.email;
     const idempotencyKey = req.headers['idempotency-key'] as string;
     const isSandbox = req.isSandbox || false;
-
-
-    if (!external_user_id || !currency) {
-      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'external_user_id and currency are required');
-    }
 
     if (!idempotencyKey) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'idempotency-key header is required');
@@ -1854,14 +1886,27 @@ router.get(
   '/search/wallets',
   requireAdminRole('superadmin'),
   asyncHandler(async (req, res) => {
-    const { q } = req.query;
-
-    if (!q || typeof q !== 'string') {
+    const parsedQuery = walletSearchSchema.safeParse(req.query);
+    if (!parsedQuery.success) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Search query "q" is required');
     }
 
+    const { q, tenantId: requestedTenantId, includeCrossTenant } = parsedQuery.data;
+    const isSuperadmin = req.adminUser!.role === 'superadmin';
+    
+    // Validate: if includeCrossTenant is requested, requestedTenantId must be provided
+    if (includeCrossTenant && !requestedTenantId) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'tenantId is required when includeCrossTenant is true');
+    }
+    
+    const tenantBoundary = (isSuperadmin && includeCrossTenant && requestedTenantId)
+      ? requestedTenantId
+      : req.adminUser!.tenantId;
+
     const wallets = await prisma.wallet.findMany({
       where: {
+        tenantId: tenantBoundary,
+        isSandbox: req.isSandbox,
         OR: [
           { id: { contains: q, mode: 'insensitive' } },
           { externalUserId: { contains: q, mode: 'insensitive' } },
@@ -1907,13 +1952,26 @@ router.get(
   '/search/transactions',
   requireAdminRole('superadmin'),
   asyncHandler(async (req, res) => {
-    const { transactionId, requestId, idempotencyKey } = req.query;
-
-    if (!transactionId && !requestId && !idempotencyKey) {
+    const parsedQuery = transactionSearchSchema.safeParse(req.query);
+    if (!parsedQuery.success) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'One of transactionId, requestId, or idempotencyKey is required');
     }
+    const { transactionId, requestId, idempotencyKey, tenantId: requestedTenantId, includeCrossTenant } = parsedQuery.data;
+    const isSuperadmin = req.adminUser!.role === 'superadmin';
+    
+    // Validate: if includeCrossTenant is requested, requestedTenantId must be provided
+    if (includeCrossTenant && !requestedTenantId) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'tenantId is required when includeCrossTenant is true');
+    }
+    
+    const tenantBoundary = (isSuperadmin && includeCrossTenant && requestedTenantId)
+      ? requestedTenantId
+      : req.adminUser!.tenantId;
 
-    const where: Prisma.TransactionWhereInput = {};
+    const where: Prisma.TransactionWhereInput = { 
+      tenantId: tenantBoundary,
+      isSandbox: req.isSandbox,
+    };
 
     if (transactionId) {
       where.id = Array.isArray(transactionId) ? transactionId[0] : transactionId;
@@ -1947,6 +2005,7 @@ router.get(
     const transactionIds = transactions.map(tx => tx.id);
     const auditLogs = await prisma.auditLog.findMany({
       where: {
+        isSandbox: req.isSandbox,
         entityType: 'transaction',
         entityId: { in: transactionIds },
       },

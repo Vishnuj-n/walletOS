@@ -1,4 +1,5 @@
 import { API_BASE_URL, supabase } from './supabase';
+import { mapErrorCodeToMessage } from './errorMap';
 
 interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -63,8 +64,9 @@ async function parseApiError(response: Response, fallbackMessage: string): Promi
   }
 
   try {
-    const error = await response.json();
-    throw new Error(error.error?.message || error.message || fallbackMessage);
+    const error = await response.json() as { error?: { code?: string; message?: string }; message?: string };
+    const mappedMessage = mapErrorCodeToMessage(error.error?.code, fallbackMessage);
+    throw new Error(mappedMessage || error.message || fallbackMessage);
   } catch (jsonError) {
     if (jsonError instanceof SyntaxError) {
       throw new Error(fallbackMessage);

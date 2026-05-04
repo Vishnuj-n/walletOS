@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { SuperadminOnly } from '../../../components/SuperadminOnly';
+import { PermissionGate } from '../../../components/PermissionGate';
 import { 
   createTenant,
   fetchTenants, 
@@ -11,7 +11,7 @@ import {
   revokeTenantKey,
 } from '../../../services/adminService';
 import type { CreatedTenantResponse, Tenant, TenantUsageResponse } from '@walletOS/types';
-import { Building2, KeyRound, Plus, ShieldAlert } from 'lucide-react';
+import { Building2, KeyRound, Plus } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface UsageModalProps {
@@ -85,8 +85,8 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
       try {
         const data = await fetchTenantUsage(tenantId);
         setUsage(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch usage');
+      } catch {
+        setError('Failed to fetch usage');
       } finally {
         setLoading(false);
       }
@@ -196,7 +196,7 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
 }
 
 export default function TenantsPage() {
-  const { isSuperadmin } = useAuth();
+  const { hasRole } = useAuth();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -324,25 +324,24 @@ export default function TenantsPage() {
       await navigator.clipboard.writeText(text);
       setCopyStatus('Copied!');
       setTimeout(() => setCopyStatus(''), 2000);
-    } catch (err) {
+    } catch {
       setCopyStatus('Select & copy manually');
       setTimeout(() => setCopyStatus(''), 3000);
     }
   };
 
-  if (!isSuperadmin) {
-    return (
-      <div className="p-6">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <h3 className="text-lg font-medium text-yellow-800">Access Denied</h3>
-          <p className="text-yellow-700 mt-2">This feature is only available to superadmins.</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <SuperadminOnly>
+    <PermissionGate 
+      minRole="superadmin"
+      fallback={
+        <div className="p-6">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <h3 className="text-lg font-medium text-yellow-800">Access Denied</h3>
+            <p className="text-yellow-700 mt-2">This feature is only available to superadmins.</p>
+          </div>
+        </div>
+      }
+    >
       <div className="min-h-screen bg-slate-50 p-6">
         <div className="mb-6 flex justify-between items-center">
           <div>
@@ -623,6 +622,6 @@ export default function TenantsPage() {
           />
         )}
       </div>
-    </SuperadminOnly>
+    </PermissionGate>
   );
 }

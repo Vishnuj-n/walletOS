@@ -243,7 +243,7 @@ describe('ManualActionsPage', () => {
   });
 
   it('should disable submit button while loading', async () => {
-    let resolvePromise: (value: any) => void;
+    let resolvePromise: (value: { transaction_id: string }) => void;
     (creditWallet as jest.Mock).mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -274,7 +274,7 @@ describe('ManualActionsPage', () => {
       expect(screen.getByText('Processing...')).toBeInTheDocument();
     });
 
-    resolvePromise!({ transaction_id: 'test-tx-id' });
+    resolvePromise({ transaction_id: 'test-tx-id' });
 
     await waitFor(() => {
       expect(submitButton).not.toBeDisabled();

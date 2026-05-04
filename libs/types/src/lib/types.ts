@@ -146,7 +146,24 @@ export interface ReversalTransactionRequest {
 /**
  * Admin role hierarchy
  */
-export type AdminRole = 'support' | 'finance' | 'superadmin';
+export type AdminRole = 'support' | 'finance' | 'tenant_admin' | 'superadmin';
+
+/**
+ * Role ranking for RBAC comparisons
+ */
+export const roleRank: Record<AdminRole, number> = {
+  support: 0,
+  finance: 1,
+  tenant_admin: 2,
+  superadmin: 3,
+};
+
+/**
+ * Check if user role meets minimum required role
+ */
+export function hasRequiredRole(userRole: AdminRole, minRole: AdminRole): boolean {
+  return roleRank[userRole] >= roleRank[minRole];
+}
 
 /**
  * Current admin user record used by admin UI

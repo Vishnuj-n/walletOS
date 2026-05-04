@@ -683,6 +683,45 @@ describe('Admin API Endpoints', () => {
     });
   });
 
+  describe('GET /admin/search/* authorization', () => {
+    it('should reject wallet search for non-superadmin users', async () => {
+      await prisma.adminUser.upsert({
+        where: {
+          tenantId_supabaseUid: {
+            tenantId: 'default',
+            supabaseUid: 'support-uuid',
+          },
+        },
+        update: { role: 'support', isActive: true },
+        create: {
+          tenantId: 'default',
+          supabaseUid: 'support-uuid',
+          email: 'support@test.com',
+          role: 'support',
+          isActive: true,
+        },
+      });
+
+      const supportAuthToken = 'Bearer support-jwt-token';
+      const response = await request(app)
+        .get('/api/v1/admin/search/wallets?q=tx_foo')
+        .set('Authorization', supportAuthToken);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('should reject transaction search for non-superadmin users', async () => {
+      const supportAuthToken = 'Bearer support-jwt-token';
+      const response = await request(app)
+        .get('/api/v1/admin/search/transactions?transactionId=tx_foo')
+        .set('Authorization', supportAuthToken);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error.code).toBe('FORBIDDEN');
+    });
+  });
+
   describe('Sandbox Mode Behavior', () => {
     it('should handle sandbox wallet operations correctly', async () => {
       // Create a sandbox wallet

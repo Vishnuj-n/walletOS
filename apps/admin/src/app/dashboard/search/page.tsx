@@ -5,9 +5,10 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { searchWallets, searchTransactions } from '../../../services/adminService';
 import type { TransactionSearchQuery, TransactionSearchResponse, WalletSearchResponse } from '@walletOS/types';
 import { Search, Wallet, ArrowLeftRight, Building2 } from 'lucide-react';
+import { PermissionGate } from '../../../components/PermissionGate';
 
 export default function GlobalSearchPage() {
-  const { isSuperadmin } = useAuth();
+  const { hasRole } = useAuth();
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'wallets' | 'transactions'>('wallets');
   const [walletResults, setWalletResults] = useState<WalletSearchResponse | null>(null);
@@ -54,7 +55,7 @@ export default function GlobalSearchPage() {
     }
   };
 
-  if (!isSuperadmin) {
+  if (!hasRole('superadmin')) {
     return (
       <div className="min-h-screen bg-slate-50 p-6">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -66,6 +67,7 @@ export default function GlobalSearchPage() {
   }
 
   return (
+    <PermissionGate minRole="superadmin">
       <div className="p-6">
         <div className="mb-4">
           <h1 className="text-lg font-semibold text-slate-900 mb-1">Global Search</h1>
@@ -301,5 +303,6 @@ export default function GlobalSearchPage() {
           )}
         </div>
       </div>
+    </PermissionGate>
   );
 }

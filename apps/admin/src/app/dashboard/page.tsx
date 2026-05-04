@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRequireAuth } from '../../hooks/useRequireAuth';
-import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { SuperadminOnly } from '../../components/SuperadminOnly';
 import { fetchSystemBalance } from '../../services/adminService';
@@ -97,8 +96,6 @@ function SystemBalanceWidget() {
     return null;
   }
 
-  const balanceCurrencyCode = balance.currency ?? balance.currency_code ?? 'USD';
-
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
       <div className="p-4 border-b border-slate-200 flex justify-between items-center">
@@ -116,21 +113,6 @@ function SystemBalanceWidget() {
       </div>
 
       <div className="p-4 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="rounded-lg border border-slate-200 p-3 bg-slate-50/60">
-            <p className="text-xs text-slate-500">Live Total</p>
-            <p className="text-lg font-semibold text-slate-900">
-              {formatCurrency(balance.total_live, balanceCurrencyCode)}
-            </p>
-          </div>
-          <div className="rounded-lg border border-slate-200 p-3 bg-slate-50/60">
-            <p className="text-xs text-slate-500">Sandbox Total</p>
-            <p className="text-lg font-semibold text-slate-900">
-              {formatCurrency(balance.total_sandbox, balanceCurrencyCode)}
-            </p>
-          </div>
-        </div>
-
         <div className="border border-slate-200 rounded-lg overflow-hidden">
           <div className="px-3 py-2 border-b border-slate-200 bg-slate-50">
             <p className="text-xs font-semibold text-slate-900">Currency Breakdown</p>

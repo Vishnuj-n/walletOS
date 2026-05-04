@@ -3,10 +3,11 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
+import type { AdminRole } from '@walletOS/types';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  minRole?: 'support' | 'finance' | 'superadmin';
+  minRole?: AdminRole;
   fallback?: React.ReactNode;
 }
 

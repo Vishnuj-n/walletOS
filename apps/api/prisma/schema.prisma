@@ -167,6 +167,7 @@ enum KeyScope {
 enum AdminRole {
   support
   finance
+  tenant_admin
   superadmin
 }
 
