@@ -46,3 +46,59 @@ Follow this order to test the API in Postman.
 | **3. Seed** | POST `/wallets` | Run this first to set the `walletId` for other tests. |
 
 The core ledger and concurrency logic are stable. You will build the admin dashboard in `apps/admin` next.
+
+### Creating a Superadmin User (Supabase Remote)
+
+Use magic links or the Supabase dashboard for secure account creation. Direct SQL insertion is not recommended for production use.
+
+#### 1) Insert user record (auth schema)
+
+```sql
+INSERT INTO auth.users (
+  id, aud, role, email, encrypted_password,
+  raw_user_meta_data, raw_app_meta_data,
+  created_at, updated_at
+) VALUES (
+  '<UUID>', 'authenticated', 'authenticated',
+  'admin@example.com', '', '{}',
+  '{"tenantId":"your-tenant-id"}', now(), now()
+);
+```
+
+Replace:
+- `<UUID>`: a valid UUID (e.g., `550e8400-e29b-41d4-a716-446655440000`)
+- `admin@example.com`: your admin email
+- `your-tenant-id`: the tenant ID (e.g., `default`)
+
+Note: For production, use Supabase dashboard or magic links to create users securely.
+
+#### 2) Mark email as confirmed (optional)
+
+```sql
+UPDATE auth.users
+SET email_confirmed_at = now()
+```
+
+#### 3) Create the AdminUser record (app database)
+
+```sql
+INSERT INTO "AdminUser" 
+  ("id", "tenantId", "supabaseUid", "email", "role", "isActive")
+VALUES 
+  ('<cuid-or-uuid>', 'your-tenant-id', '<UUID>', 'admin@example.com', 'superadmin', true);
+```
+
+Replace:
+- `<cuid-or-uuid>`: a unique identifier (CUID or UUID)
+- `your-tenant-id`: same tenant ID as above
+- `<UUID>`: the **same UUID** used in step 1
+- `admin@example.com`: same email
+
+**Important**: The `supabaseUid` must match the `id` you created in the Supabase auth user (step 1), otherwise authentication will fail.
+
+#### Recommended: Use Supabase Dashboard instead
+
+For production, prefer:
+1. **Supabase Dashboard** → Auth → Create user manually
+2. Add `tenantId` to `app_metadata` via the dashboard
+3. Run step 3 above to link the app DB record

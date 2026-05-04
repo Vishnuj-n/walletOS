@@ -13,6 +13,7 @@ import { userSessionAuthMiddleware } from '../middleware/userSessionAuth';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { prisma } from '../lib/prisma';
 
 const router = Router();
 
@@ -51,6 +52,7 @@ function serializeWallet(wallet: any) {
 router.post(
   '/wallets',
   apiKeyAuthMiddleware,
+  idempotencyMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
     const { external_user_id, currency, label, metadata } = req.body;
 
@@ -65,6 +67,26 @@ router.post(
       label,
       metadata,
       isSandbox: req.isSandbox || false,
+    });
+
+    // Create audit log for API wallet creation
+    await prisma.auditLog.create({
+      data: {
+        tenantId: req.tenantId!,
+        entityType: 'Wallet',
+        entityId: wallet.id,
+        action: 'wallet.created',
+        changes: {
+          external_user_id,
+          currency,
+          label,
+          metadata,
+          is_sandbox: req.isSandbox || false,
+        },
+        actorId: req.apiKeyId || 'api',
+        actorType: 'api_key',
+        isSandbox: req.isSandbox || false,
+      },
     });
 
     res.status(201).json(serializeWallet(wallet));

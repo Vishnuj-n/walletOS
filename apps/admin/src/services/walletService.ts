@@ -1,5 +1,16 @@
 import { supabase, API_BASE_URL } from '../lib/supabase';
 
+/**
+ * Generate UUID for idempotency key
+ */
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export interface Wallet {
   wallet_id: string;
   external_user_id: string;
@@ -36,8 +47,41 @@ export interface FreezeWalletRequest {
  * Get auth token from Supabase session
  */
 async function getAuthToken(): Promise<string | null> {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token || null;
+  try {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
+    if (error) {
+      await supabase.auth.signOut();
+      throw new Error('Session expired. Please sign in again.');
+    }
+
+    return session?.access_token || null;
+  } catch {
+    await supabase.auth.signOut();
+    throw new Error('Session expired. Please sign in again.');
+  }
+}
+
+async function parseApiError(response: Response, fallbackMessage: string): Promise<never> {
+  if (response.status === 401) {
+    await supabase.auth.signOut();
+    throw new Error('Session expired. Please sign in again.');
+  }
+
+  try {
+    const error = await response.json();
+    throw new Error(error.error?.message || error.message || fallbackMessage);
+  } catch (jsonError) {
+    if (jsonError instanceof SyntaxError) {
+      // JSON parse failed, read text for more descriptive error
+      const textError = await response.text();
+      throw new Error(textError || fallbackMessage);
+    }
+    throw jsonError;
+  }
 }
 
 /**
@@ -68,8 +112,7 @@ export async function fetchWallets(params: {
   );
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to fetch wallets');
+    return parseApiError(response, 'Failed to fetch wallets');
   }
 
   const data: WalletListResponse = await response.json();
@@ -93,8 +136,7 @@ export async function fetchWallet(walletId: string): Promise<Wallet> {
   );
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to fetch wallet');
+    return parseApiError(response, 'Failed to fetch wallet');
   }
 
   return await response.json();
@@ -114,14 +156,14 @@ export async function createWallet(data: CreateWalletRequest): Promise<Wallet> {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'Idempotency-Key': generateUUID(),
       },
       body: JSON.stringify(data),
     }
   );
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to create wallet');
+    return parseApiError(response, 'Failed to create wallet');
   }
 
   return await response.json();
@@ -150,8 +192,7 @@ export async function updateWallet(
   );
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to update wallet');
+    return parseApiError(response, 'Failed to update wallet');
   }
 
   return await response.json();
@@ -180,8 +221,7 @@ export async function closeWallet(
   );
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to close wallet');
+    return parseApiError(response, 'Failed to close wallet');
   }
 
   return await response.json();
@@ -210,8 +250,7 @@ export async function freezeWallet(
   );
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to freeze wallet');
+    return parseApiError(response, 'Failed to freeze wallet');
   }
 }
 
@@ -238,7 +277,6 @@ export async function unfreezeWallet(
   );
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to unfreeze wallet');
+    return parseApiError(response, 'Failed to unfreeze wallet');
   }
 }

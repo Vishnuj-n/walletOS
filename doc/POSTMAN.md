@@ -250,6 +250,10 @@ Examples from `apps/api/src/routes/admin.routes.ts`:
   - Create new tenants: `POST /api/v1/admin/tenants`
   - List all tenants: `GET /api/v1/admin/tenants`
   - Cross-tenant wallet creation is allowed only for superadmins (by passing `tenant_id`)
+  - View system balance: `GET /api/v1/admin/system/balance`
+  - Search across tenants: `GET /api/v1/admin/search/wallets` and `GET /api/v1/admin/search/transactions`
+  - Inspect cross-tenant admin activity: `GET /api/v1/admin/audit/admin-activity`
+  - Review recent system errors: `GET /api/v1/admin/system/errors`
 
 ### Superadmin: create a tenant (example)
 
@@ -271,6 +275,68 @@ Request:
 ```
 
 Response includes `live_key` and `test_key` for that tenant.
+
+### Superadmin: inspect system balance
+
+- **GET** `{{baseUrl}}/api/v1/admin/system/balance`
+- Headers:
+  - `Authorization: Bearer {{adminJwt}}`
+  - (optional) `X-Sandbox: true`
+
+Returns the total live and sandbox balances grouped by currency.
+
+### Superadmin: search across tenants
+
+- **GET** `{{baseUrl}}/api/v1/admin/search/wallets?q=<query>`
+- **GET** `{{baseUrl}}/api/v1/admin/search/transactions?transactionId=...`
+- Headers:
+  - `Authorization: Bearer {{adminJwt}}`
+
+These endpoints are superadmin-only.
+
+---
+
+## Setting up a Superadmin User
+
+Before you can test superadmin endpoints, create a superadmin in your Supabase remote database.
+
+### Quick setup (3 SQL commands)
+
+See `doc/DEVELOPER_GUIDE.md` for detailed instructions. Here's the summary:
+
+**Step 1: Create Supabase auth user** (recommended: use Supabase Dashboard or CLI)
+
+Recommended methods to create admin users:
+- **Supabase Dashboard**: Settings → Authentication → Users → Add user
+- **Supabase CLI**: `supabase auth create-user --email admin@example.com --password <secure-password>`
+- **Supabase Management API**: Use the authentication endpoint with proper password hashing
+
+If using SQL (not recommended for production), ensure the password is properly hashed:
+```sql
+INSERT INTO auth.users (id, aud, role, email, encrypted_password, raw_user_meta_data, raw_app_meta_data, created_at, updated_at)
+VALUES ('<UUID>', 'authenticated', 'authenticated', 'admin@example.com', '<properly-hashed-password>', '{}', '{"tenantId":"your-tenant-id"}', now(), now());
+```
+NOTE: Never use NULL for encrypted_password as it bypasses password authentication. See Supabase docs for password hashing algorithms.
+
+**Step 2: Create AdminUser record** (run against app database)
+```sql
+INSERT INTO "AdminUser" ("id", "tenantId", "supabaseUid", "email", "role", "isActive")
+VALUES ('<cuid-or-uuid>', 'your-tenant-id', '<UUID>', 'admin@example.com', 'superadmin', true);
+```
+
+Replace placeholders:
+- `<UUID>`: a valid UUID (e.g., `550e8400-e29b-41d4-a716-446655440000`)
+- `<cuid-or-uuid>`: a unique identifier
+- `your-tenant-id`: your tenant ID (e.g., `default`)
+- `admin@example.com`: the admin email
+
+**Critical**: The `supabaseUid` in step 2 **must match** the `id` from step 1.
+
+### Then in Postman
+
+1. Get the JWT from the Admin UI or Supabase Auth.
+2. Set `adminJwt` environment variable.
+3. Test superadmin endpoints (e.g., `POST /api/v1/admin/tenants`).
 
 ---
 

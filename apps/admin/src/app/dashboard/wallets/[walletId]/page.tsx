@@ -8,6 +8,7 @@ import {
   unfreezeWallet,
   type Wallet,
 } from '../../../../services/walletService';
+import { ArrowLeft, ArrowRightLeft, Snowflake, Sun } from 'lucide-react';
 
 export default function WalletDetailPage() {
   const { walletId } = useParams();
@@ -15,7 +16,7 @@ export default function WalletDetailPage() {
   
   // Validate walletId is a string
   if (typeof walletId !== 'string') {
-    return <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">Invalid wallet ID</div>;
+    return <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">Invalid wallet ID</div>;
   }
   
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -62,49 +63,49 @@ export default function WalletDetailPage() {
     }
   };
 
-  if (loading) return <div className="text-gray-600">Loading...</div>;
+  if (loading) return <div className="min-h-screen bg-slate-50 p-6 text-sm text-slate-500">Loading...</div>;
 
   if (error || !wallet) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
         {error || 'Wallet not found'}
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="min-h-screen bg-slate-50 p-6">
       <button
         onClick={() => router.back()}
-        className="text-indigo-600 hover:text-indigo-700 mb-4"
+        className="text-blue-600 hover:text-blue-700 mb-4 text-sm font-semibold inline-flex items-center gap-2"
       >
-        ← Back to Wallets
+        <ArrowLeft size={14} /> Back to Wallets
       </button>
       
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Wallet Details</h2>
+      <h2 className="text-lg font-semibold text-slate-900 mb-4">Wallet Details</h2>
       
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-6">
         <div className="grid grid-cols-2 gap-6">
           <div>
-            <p className="text-sm font-medium text-gray-500">Wallet ID</p>
-            <p className="text-lg text-gray-900">{wallet.wallet_id}</p>
+            <p className="text-xs text-slate-500">Wallet ID</p>
+            <p className="text-sm font-semibold text-slate-900 font-mono">{wallet.wallet_id}</p>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">External User ID</p>
-            <p className="text-lg text-gray-900">{wallet.external_user_id}</p>
+            <p className="text-xs text-slate-500">External User ID</p>
+            <p className="text-sm font-semibold text-slate-900">{wallet.external_user_id}</p>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">Label</p>
-            <p className="text-lg text-gray-900">{wallet.label || '-'}</p>
+            <p className="text-xs text-slate-500">Label</p>
+            <p className="text-sm font-semibold text-slate-900">{wallet.label || '-'}</p>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">Balance</p>
-            <p className="text-lg text-gray-900">
+            <p className="text-xs text-slate-500">Balance</p>
+            <p className="text-sm font-semibold text-slate-900">
               {wallet.currency} {wallet.balance}
             </p>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">Status</p>
+            <p className="text-xs text-slate-500">Status</p>
             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
               wallet.status === 'active' ? 'bg-green-100 text-green-800' :
               wallet.status === 'frozen' ? 'bg-red-100 text-red-800' :
@@ -114,45 +115,45 @@ export default function WalletDetailPage() {
             </span>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">Environment</p>
-            <p className="text-lg text-gray-900">
+            <p className="text-xs text-slate-500">Environment</p>
+            <p className="text-sm font-semibold text-slate-900">
               {wallet.is_sandbox ? 'Sandbox' : 'Live'}
             </p>
           </div>
         </div>
 
         <div className="mt-6 pt-6 border-t border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Account Controls</h3>
+          <h3 className="text-sm font-semibold text-slate-900 mb-4">Account Controls</h3>
           <div className="flex gap-4">
             {wallet.status === 'active' && (
               <button
                 onClick={handleFreeze}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold inline-flex items-center gap-2"
               >
-                Freeze Wallet
+                <Snowflake size={14} /> Freeze Wallet
               </button>
             )}
             {wallet.status === 'frozen' && (
               <button
                 onClick={handleUnfreeze}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-semibold inline-flex items-center gap-2"
               >
-                Unfreeze Wallet
+                <Sun size={14} /> Unfreeze Wallet
               </button>
             )}
             <button
               onClick={() => router.push(`/dashboard/actions?walletId=${wallet.wallet_id}`)}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold inline-flex items-center gap-2"
             >
-              Perform Manual Action
+              <ArrowRightLeft size={14} /> Perform Manual Action
             </button>
           </div>
         </div>
 
         {wallet.metadata && (
           <div className="mt-6 pt-6 border-t border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Metadata</h3>
-            <pre className="bg-gray-50 p-4 rounded-md overflow-auto text-sm">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">Metadata</h3>
+            <pre className="bg-slate-50 p-4 rounded-lg overflow-auto text-sm">
               {JSON.stringify(wallet.metadata, null, 2)}
             </pre>
           </div>

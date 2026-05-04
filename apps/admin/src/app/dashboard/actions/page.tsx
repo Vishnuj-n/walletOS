@@ -10,6 +10,7 @@ import {
   type DebitTransactionRequest,
   type ReversalTransactionRequest,
 } from '../../../services/adminService';
+import { ArrowRightLeft, BadgeDollarSign, RotateCcw, ShieldAlert } from 'lucide-react';
 
 export default function ManualActionsPage() {
   const searchParams = useSearchParams();
@@ -74,59 +75,59 @@ export default function ManualActionsPage() {
   };
 
   return (
-    <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Manual Actions</h2>
+    <div className="min-h-screen bg-slate-50 p-6">
+      <h2 className="text-lg font-semibold text-slate-900 mb-4">Manual Actions</h2>
       
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-4">
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm">
           {success}
         </div>
       )}
 
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-semibold text-slate-900 mb-2">
             Action Type
           </label>
           <div className="flex gap-4">
             <button
               type="button"
               onClick={() => setActionType('credit')}
-              className={`px-4 py-2 rounded-md ${
+              className={`px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2 ${
                 actionType === 'credit'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
-              Credit
+              <BadgeDollarSign size={16} /> Credit
             </button>
             <button
               type="button"
               onClick={() => setActionType('debit')}
-              className={`px-4 py-2 rounded-md ${
+              className={`px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2 ${
                 actionType === 'debit'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
-              Debit
+              <ArrowRightLeft size={16} /> Debit
             </button>
             <button
               type="button"
               onClick={() => setActionType('reversal')}
-              className={`px-4 py-2 rounded-md ${
+              className={`px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2 ${
                 actionType === 'reversal'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
-              Reversal
+              <RotateCcw size={16} /> Reversal
             </button>
           </div>
         </div>
@@ -135,7 +136,7 @@ export default function ManualActionsPage() {
           {actionType !== 'reversal' && (
             <>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-900 mb-2">
                   Wallet ID *
                 </label>
                 <input
@@ -143,13 +144,13 @@ export default function ManualActionsPage() {
                   required
                   value={walletId}
                   onChange={(e) => setWalletId(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter wallet ID"
                 />
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-900 mb-2">
                   Amount *
                 </label>
                 <input
@@ -159,13 +160,13 @@ export default function ManualActionsPage() {
                   required
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter amount"
                 />
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-900 mb-2">
                   Description *
                 </label>
                 <input
@@ -173,20 +174,20 @@ export default function ManualActionsPage() {
                   required
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter description"
                 />
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-900 mb-2">
                   Reference ID
                 </label>
                 <input
                   type="text"
                   value={referenceId}
                   onChange={(e) => setReferenceId(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter reference ID (optional)"
                 />
               </div>
@@ -195,7 +196,7 @@ export default function ManualActionsPage() {
 
           {actionType === 'reversal' && (
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-slate-900 mb-2">
                 Transaction ID *
               </label>
               <input
@@ -203,14 +204,14 @@ export default function ManualActionsPage() {
                 required
                 value={transactionId}
                 onChange={(e) => setTransactionId(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter transaction ID to reverse"
               />
             </div>
           )}
 
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-slate-900 mb-2">
               Reason * <span className="text-red-500">(Mandatory for audit)</span>
             </label>
             <textarea
@@ -218,7 +219,7 @@ export default function ManualActionsPage() {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter reason for this action"
             />
           </div>
@@ -226,18 +227,18 @@ export default function ManualActionsPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
           >
             {loading ? 'Processing...' : `Submit ${actionType}`}
           </button>
         </form>
       </div>
 
-      <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <h3 className="text-sm font-medium text-yellow-800 mb-2">
-          ⚠️ Important Notes
+      <div className="mt-4 bg-white border border-slate-200 rounded-xl shadow-sm p-4">
+        <h3 className="text-sm font-semibold text-slate-900 mb-2 inline-flex items-center gap-2">
+          <ShieldAlert size={16} className="text-amber-600" /> Important Notes
         </h3>
-        <ul className="text-sm text-yellow-700 list-disc list-inside space-y-1">
+        <ul className="text-xs text-slate-500 list-disc list-inside space-y-1">
           <li>All manual actions are logged with your email and reason</li>
           <li>Reason field is mandatory for audit compliance</li>
           <li>Credits and debits require the wallet to be in active status</li>

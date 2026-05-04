@@ -20,6 +20,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   hasRole: (minRole: AdminRole) => boolean;
+  isSuperadmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -36,17 +37,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [adminUser, setAdminUser] = useState<AdminUserInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchAdminUser = async (supabaseUser: User | null) => {
-    if (!supabaseUser) {
+  const fetchAdminUser = async (supabaseUser: User | null, accessToken?: string | null) => {
+    if (!supabaseUser || !accessToken) {
       setAdminUser(null);
       return;
     }
 
     try {
-      // Fetch admin user data from API
       const response = await fetch('/api/admin/me', {
         headers: {
-          Authorization: `Bearer ${await supabase.auth.getSession().then(({ data: { session } }) => session?.access_token || '')}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       });
 
@@ -56,33 +56,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setAdminUser(null);
       }
-    } catch (error) {
-      console.error('Failed to fetch admin user:', error);
+    } catch {
       setAdminUser(null);
     }
   };
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchAdminUser(session.user);
-      }
-      setLoading(false);
-    });
+    const initializeAuth = async () => {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
 
-    // Listen for auth changes
+        if (error) {
+          await supabase.auth.signOut();
+          setUser(null);
+          setAdminUser(null);
+          setLoading(false);
+          return;
+        }
+
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          await fetchAdminUser(session.user, session.access_token);
+        }
+      } catch {
+        await supabase.auth.signOut();
+        setUser(null);
+        setAdminUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        await fetchAdminUser(session.user);
+        await fetchAdminUser(session.user, session.access_token);
       } else {
         setAdminUser(null);
       }
-      setLoading(false);
+      // Note: loading is only set to false once during initial session check
     });
 
     return () => subscription.unsubscribe();
@@ -108,8 +127,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return userRoleRank >= requiredRank;
   };
 
+  const isSuperadmin = adminUser?.role === 'superadmin';
+
   return (
-    <AuthContext.Provider value={{ user, adminUser, loading, signIn, signOut, hasRole }}>
+    <AuthContext.Provider value={{ user, adminUser, loading, signIn, signOut, hasRole, isSuperadmin }}>
       {children}
     </AuthContext.Provider>
   );

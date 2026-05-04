@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import React from 'react';
+import { SuperadminOnly } from './SuperadminOnly';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -45,7 +46,9 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
             <div className="flex justify-between h-16">
               <div className="flex">
                 <div className="flex-shrink-0 flex items-center">
-                  <h1 className="text-xl font-bold text-gray-900">WalletOS Admin</h1>
+                  <Link href="/dashboard" className="text-xl font-bold text-gray-900 hover:text-gray-700">
+                    WalletOS Admin
+                  </Link>
                 </div>
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                   <Link
@@ -66,6 +69,14 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
                   >
                     Tenants
                   </Link>
+                  <SuperadminOnly>
+                    <Link
+                      href="/dashboard/search"
+                      className={getNavLinkClass('/dashboard/search')}
+                    >
+                      Global Search
+                    </Link>
+                  </SuperadminOnly>
                   <Link
                     href="/dashboard/audit"
                     className={getNavLinkClass('/dashboard/audit')}
