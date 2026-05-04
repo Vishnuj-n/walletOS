@@ -202,7 +202,9 @@ describe('AuditLogPage', () => {
   });
 
   it('should display loading state', () => {
-    (fetchAuditLogs as jest.Mock).mockReturnValue(new Promise(() => {}));
+    (fetchAuditLogs as jest.Mock).mockReturnValue(new Promise(() => {
+      // Never resolves to keep loading state
+    }));
     render(<AuditLogPage />);
     expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
@@ -272,11 +274,19 @@ describe('AuditLogPage', () => {
   it('should abort previous request when new filter is applied', async () => {
     const mockAbortController = {
       abort: jest.fn(),
-      signal: {},
+      signal: {
+        aborted: false,
+        onabort: null,
+        reason: undefined,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        dispatchEvent: jest.fn(),
+        throwIfAborted: jest.fn(),
+      },
     };
 
     jest.spyOn(global, 'AbortController').mockImplementation(
-      () => mockAbortController as any
+      () => mockAbortController as unknown as AbortController
     );
 
     (fetchAuditLogs as jest.Mock).mockResolvedValue([]);

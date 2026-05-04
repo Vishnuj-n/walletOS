@@ -24,7 +24,7 @@ export default function AuditLogPage() {
   const [actionFilter, setActionFilter] = useState('');
   const [debouncedWalletFilter, setDebouncedWalletFilter] = useState('');
   const [debouncedActionFilter, setDebouncedActionFilter] = useState('');
-  const abortControllerRef = React.useRef<AbortController | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Admin activity state
   const [adminLogs, setAdminLogs] = useState<AdminActivityLog[]>([]);
@@ -155,6 +155,13 @@ export default function AuditLogPage() {
       setErrorsLoading(false);
     }
   };
+
+  // Security: Reset to tenant tab if non-superadmin somehow has admin/errors tab active
+  useEffect(() => {
+    if (!isSuperadmin && (activeTab === 'admin' || activeTab === 'errors')) {
+      setActiveTab('tenant');
+    }
+  }, [isSuperadmin, activeTab]);
 
   if (loading && activeTab === 'tenant') return <div className="min-h-screen bg-slate-50 p-6 text-sm text-slate-500">Loading...</div>;
 

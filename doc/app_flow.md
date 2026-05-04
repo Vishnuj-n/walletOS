@@ -119,7 +119,7 @@ Admin user
        │   └─ Sets req.adminUser = { id, email, tenantId, role }
        │
        ├─ requireAdminRole middleware (where applicable)
-      │   └─ role rank: support(0) < finance(1) < tenant_admin(2) < superadmin(3)
+       │   └─ role rank: support(0) < finance(1) < tenant_admin(2) < superadmin(3)
        │
        └─ Admin-scoped route handlers
             ├─ Manual credit/debit → same prisma.$transaction path as API

@@ -145,9 +145,9 @@ export async function adminAuthMiddleware(
  * Role hierarchy: support(0) < finance(1) < tenant_admin(2) < superadmin(3)
  */
 export function requireAdminRole(minRole: 'support' | 'finance' | 'tenant_admin' | 'superadmin') {
+  return (req: Request, res: Response, next: NextFunction): void => {
   const roleRank: Record<string, number> = { support: 0, finance: 1, tenant_admin: 2, superadmin: 3 };
 
-  return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.adminUser) {
       return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Authentication required'));
     }

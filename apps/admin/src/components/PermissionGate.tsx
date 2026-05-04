@@ -10,7 +10,11 @@ interface PermissionGateProps {
 }
 
 export function PermissionGate({ children, minRole, fallback = null }: PermissionGateProps) {
-  const { hasRole } = useAuth();
+  const { hasRole, loading } = useAuth();
+
+  if (loading) {
+    return null;
+  }
 
   if (!hasRole(minRole)) {
     return <>{fallback}</>;

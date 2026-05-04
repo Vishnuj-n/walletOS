@@ -1893,13 +1893,20 @@ router.get(
 
     const { q, tenantId: requestedTenantId, includeCrossTenant } = parsedQuery.data;
     const isSuperadmin = req.adminUser!.role === 'superadmin';
-    const tenantBoundary = isSuperadmin && includeCrossTenant
+    
+    // Validate: if includeCrossTenant is requested, requestedTenantId must be provided
+    if (includeCrossTenant && !requestedTenantId) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'tenantId is required when includeCrossTenant is true');
+    }
+    
+    const tenantBoundary = (isSuperadmin && includeCrossTenant && requestedTenantId)
       ? requestedTenantId
       : req.adminUser!.tenantId;
 
     const wallets = await prisma.wallet.findMany({
       where: {
         tenantId: tenantBoundary,
+        isSandbox: req.isSandbox,
         OR: [
           { id: { contains: q, mode: 'insensitive' } },
           { externalUserId: { contains: q, mode: 'insensitive' } },
@@ -1951,11 +1958,20 @@ router.get(
     }
     const { transactionId, requestId, idempotencyKey, tenantId: requestedTenantId, includeCrossTenant } = parsedQuery.data;
     const isSuperadmin = req.adminUser!.role === 'superadmin';
-    const tenantBoundary = isSuperadmin && includeCrossTenant
+    
+    // Validate: if includeCrossTenant is requested, requestedTenantId must be provided
+    if (includeCrossTenant && !requestedTenantId) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'tenantId is required when includeCrossTenant is true');
+    }
+    
+    const tenantBoundary = (isSuperadmin && includeCrossTenant && requestedTenantId)
       ? requestedTenantId
       : req.adminUser!.tenantId;
 
-    const where: Prisma.TransactionWhereInput = { tenantId: tenantBoundary };
+    const where: Prisma.TransactionWhereInput = { 
+      tenantId: tenantBoundary,
+      isSandbox: req.isSandbox,
+    };
 
     if (transactionId) {
       where.id = Array.isArray(transactionId) ? transactionId[0] : transactionId;
@@ -1989,6 +2005,7 @@ router.get(
     const transactionIds = transactions.map(tx => tx.id);
     const auditLogs = await prisma.auditLog.findMany({
       where: {
+        isSandbox: req.isSandbox,
         entityType: 'transaction',
         entityId: { in: transactionIds },
       },

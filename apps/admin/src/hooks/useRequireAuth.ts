@@ -9,7 +9,7 @@ import type { AdminRole } from '@walletOS/types';
  * Custom hook to redirect unauthenticated users to login
  * Use this in pages that require authentication
  */
-export function useRequireAuth(redirectTo: string = '/login') {
+export function useRequireAuth(redirectTo = '/login') {
   const { user, loading, adminUser } = useAuth();
   const router = useRouter();
 
@@ -26,7 +26,7 @@ export function useRequireAuth(redirectTo: string = '/login') {
  * Custom hook to check if user has required role
  * Redirects to unauthorized page if role is insufficient
  */
-export function useRequireRole(minRole: AdminRole, redirectTo: string = '/unauthorized') {
+export function useRequireRole(minRole: AdminRole, redirectTo = '/unauthorized') {
   const { user, adminUser, loading, hasRole } = useAuth();
   const router = useRouter();
 

@@ -55,19 +55,19 @@ export default function GlobalSearchPage() {
     }
   };
 
-  if (!hasRole('support')) {
+  if (!hasRole('superadmin')) {
     return (
       <div className="min-h-screen bg-slate-50 p-6">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <h3 className="text-lg font-medium text-yellow-800">Access Denied</h3>
-          <p className="text-yellow-700 mt-2">This feature is only available to admins with search permission.</p>
+          <p className="text-yellow-700 mt-2">This feature is only available to superadmins.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <PermissionGate minRole="support">
+    <PermissionGate minRole="superadmin">
       <div className="p-6">
         <div className="mb-4">
           <h1 className="text-lg font-semibold text-slate-900 mb-1">Global Search</h1>

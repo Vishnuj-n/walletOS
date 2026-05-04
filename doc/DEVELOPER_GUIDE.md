@@ -82,13 +82,13 @@ SET email_confirmed_at = now()
 #### 3) Create the AdminUser record (app database)
 
 ```sql
-INSERT INTO "AdminUser" 
+INSERT INTO "AdminUser"
   ("id", "tenantId", "supabaseUid", "email", "role", "isActive")
-VALUES 
+VALUES
   ('<cuid-or-uuid>', 'your-tenant-id', '<UUID>', 'admin@example.com', 'superadmin', true);
+```
 
 **Valid roles:** `support`, `finance`, `tenant_admin`, `superadmin`
-```
 
 Replace:
 - `<cuid-or-uuid>`: a unique identifier (CUID or UUID)
