@@ -2,19 +2,9 @@
 
 import { useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { 
-  searchWallets, 
-  searchTransactions, 
-  WalletSearchResponse, 
-  TransactionSearchResponse 
-} from '../../../services/adminService';
+import { searchWallets, searchTransactions } from '../../../services/adminService';
+import type { TransactionSearchQuery, TransactionSearchResponse, WalletSearchResponse } from '@walletOS/types';
 import { Search, Wallet, ArrowLeftRight, Building2 } from 'lucide-react';
-
-interface SearchParams {
-  transactionId?: string;
-  requestId?: string;
-  idempotencyKey?: string;
-}
 
 export default function GlobalSearchPage() {
   const { isSuperadmin } = useAuth();
@@ -38,7 +28,7 @@ export default function GlobalSearchPage() {
         setTransactionResults(null);
       } else {
         // For transactions, determine if it's a transaction ID, request ID, or idempotency key
-        const searchParams: SearchParams = {};
+        const searchParams: TransactionSearchQuery = {};
         if (query.startsWith('tx_')) {
           searchParams.transactionId = query;
         } else if (query.startsWith('req_')) {

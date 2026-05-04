@@ -1,0 +1,105 @@
+import { API_BASE_URL, supabase } from './supabase';
+
+interface ApiRequestOptions {
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  body?: unknown;
+  query?: object;
+  signal?: AbortSignal;
+  requireIdempotencyKey?: boolean;
+  fallbackMessage: string;
+}
+
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function buildQueryString(query?: object): string {
+  if (!query) return '';
+
+  const queryParams = new URLSearchParams();
+  Object.entries(query as Record<string, unknown>).forEach(([key, value]) => {
+    if (
+      value === undefined ||
+      value === null ||
+      value === '' ||
+      (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean')
+    ) {
+      return;
+    }
+    queryParams.append(key, String(value));
+  });
+
+  const queryString = queryParams.toString();
+  return queryString ? `?${queryString}` : '';
+}
+
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
+    if (error) {
+      await supabase.auth.signOut();
+      throw new Error('Session expired. Please sign in again.');
+    }
+
+    return session?.access_token || null;
+  } catch (err) {
+    await supabase.auth.signOut();
+    throw err instanceof Error ? err : new Error('Session expired. Please sign in again.');
+  }
+}
+
+async function parseApiError(response: Response, fallbackMessage: string): Promise<never> {
+  if (response.status === 401) {
+    await supabase.auth.signOut();
+    throw new Error('Session expired. Please sign in again.');
+  }
+
+  try {
+    const error = await response.json();
+    throw new Error(error.error?.message || error.message || fallbackMessage);
+  } catch (jsonError) {
+    if (jsonError instanceof SyntaxError) {
+      throw new Error(fallbackMessage);
+    }
+    throw jsonError;
+  }
+}
+
+export async function apiRequest<T>(path: string, options: ApiRequestOptions): Promise<T> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('No active session');
+
+  const query = buildQueryString(options.query);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  if (options.requireIdempotencyKey) {
+    headers['Idempotency-Key'] = generateUUID();
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}${query}`, {
+    method: options.method ?? 'GET',
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    return parseApiError(response, options.fallbackMessage);
+  }
+
+  return (await response.json()) as T;
+}

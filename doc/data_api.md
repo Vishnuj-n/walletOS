@@ -244,6 +244,16 @@ Selected routes:
 - `GET /admin/search/transactions` - transaction tracer, superadmin only
 - `GET /admin/system/balance` - total live and sandbox balances across all tenants, superadmin only
 
+`GET /admin/search/transactions` query params are `transactionId`, `requestId`, and `idempotencyKey`.
+`GET /admin/audit/admin-activity` query params are `adminEmail`, `actionType`, `limit`, and `after`.
+
+### POST /admin/wallets
+
+Idempotent wallet create endpoint for admin tooling. A repeated request with the same idempotency key returns the previously created resource.
+
+- `201 Created`: wallet newly created
+- `200 OK`: wallet already existed for that idempotency key/request
+
 Sandbox mode for admin routes is controlled with `X-Sandbox: true`.
 
 ---

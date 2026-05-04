@@ -6,10 +6,12 @@ import {
   creditWallet,
   debitWallet,
   reverseTransaction,
-  type CreditTransactionRequest,
-  type DebitTransactionRequest,
-  type ReversalTransactionRequest,
 } from '../../../services/adminService';
+import type {
+  CreditTransactionRequest,
+  DebitTransactionRequest,
+  ReversalTransactionRequest,
+} from '@walletOS/types';
 import { ArrowRightLeft, BadgeDollarSign, RotateCcw, ShieldAlert } from 'lucide-react';
 
 export default function ManualActionsPage() {

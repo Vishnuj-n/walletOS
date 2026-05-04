@@ -9,12 +9,8 @@ import {
   rotateTenantKey, 
   fetchTenantUsage, 
   revokeTenantKey,
-  Tenant,
-  CreatedTenantResponse,
-  RotateKeyRequest,
-  TenantUsageResponse,
-  RevokeKeyRequest
 } from '../../../services/adminService';
+import type { CreatedTenantResponse, Tenant, TenantUsageResponse } from '@walletOS/types';
 import { Building2, KeyRound, Plus, ShieldAlert } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 

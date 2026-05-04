@@ -122,6 +122,7 @@ export interface TransactionRequest {
   amount: string;
   description: string;
   reference_id?: string;
+  reason?: string;
   metadata?: Record<string, any>;
 }
 
@@ -140,4 +141,208 @@ export type DebitTransactionRequest = TransactionRequest;
  */
 export interface ReversalTransactionRequest {
   reason: string;
+}
+
+/**
+ * Admin role hierarchy
+ */
+export type AdminRole = 'support' | 'finance' | 'superadmin';
+
+/**
+ * Current admin user record used by admin UI
+ */
+export interface AdminUserInfo {
+  id: string;
+  email: string;
+  tenantId: string;
+  role: AdminRole;
+}
+
+/**
+ * /admin/me response shape proxied by admin app
+ */
+export interface AdminMeResponse {
+  adminUser: AdminUserInfo;
+}
+
+/**
+ * Tenant entity used in admin console
+ */
+export interface Tenant {
+  tenant_id: string;
+  name: string;
+  contact_email: string;
+  created_at: string;
+  wallet_count: number;
+  admin_count: number;
+}
+
+export interface TenantListResponse {
+  data: Tenant[];
+}
+
+export interface RotateKeyRequest {
+  scope: 'live' | 'test';
+}
+
+export interface RotateKeyResponse {
+  api_key: string;
+  scope: string;
+  tenant_id: string;
+  created_at: string;
+}
+
+export interface TenantUsageResponse {
+  tenant_id: string;
+  hours: number;
+  usage: Array<{
+    hour: string;
+    requests: number;
+  }>;
+}
+
+export interface RevokeKeyRequest {
+  scope: 'live' | 'test';
+}
+
+export interface RevokeKeyResponse {
+  tenant_id: string;
+  scope: string;
+  keys_deactivated: number;
+}
+
+export interface CreateTenantRequest {
+  name: string;
+  contact_email?: string;
+}
+
+export interface CreatedTenantResponse {
+  tenant_id: string;
+  name: string;
+  contact_email: string | null;
+  live_key: string;
+  test_key: string;
+  created_at: string;
+}
+
+export interface WalletSearchResult {
+  wallet_id: string;
+  external_user_id: string;
+  label: string;
+  balance: string;
+  currency: string;
+  status: string;
+  is_sandbox: boolean;
+  tenant: {
+    tenant_id: string;
+    name: string;
+  };
+  created_at: string;
+}
+
+export interface WalletSearchResponse {
+  query: string;
+  results: WalletSearchResult[];
+}
+
+export interface TransactionSearchResult {
+  transaction_id: string;
+  type: string;
+  amount: string;
+  currency: string;
+  balance_before: string;
+  balance_after: string;
+  reference_id: string | null;
+  idempotency_key: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  wallet: {
+    wallet_id: string;
+    external_user_id: string;
+    tenant: {
+      tenant_id: string;
+      name: string;
+    };
+  };
+  audit_trail: Array<{
+    id: string;
+    action: string;
+    actor: string;
+    changes: Record<string, unknown>;
+    timestamp: string;
+  }>;
+}
+
+export interface TransactionSearchQuery {
+  transactionId?: string;
+  requestId?: string;
+  idempotencyKey?: string;
+}
+
+export interface TransactionSearchResponse {
+  query: TransactionSearchQuery;
+  results: TransactionSearchResult[];
+}
+
+export interface SystemBalanceResponse {
+  total_live: string;
+  total_sandbox: string;
+  currency_breakdown: Record<string, { live: string; sandbox: string }>;
+  calculated_at: string;
+  currency?: string;
+  currency_code?: string;
+}
+
+export interface AdminActivityLog {
+  id: string;
+  tenant: {
+    tenant_id: string;
+    name: string;
+  };
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  actor: string;
+  changes: Record<string, unknown>;
+  timestamp: string;
+  is_sandbox: boolean;
+}
+
+export interface AdminActivityResponse {
+  data: AdminActivityLog[];
+  next_cursor?: string;
+}
+
+export interface SystemError {
+  id: string;
+  timestamp: string;
+  tenant: {
+    tenant_id: string;
+    name: string;
+  };
+  error_type: string;
+  message: string;
+  endpoint: string;
+  request_id: string | null;
+  actor: string;
+  is_sandbox: boolean;
+}
+
+export interface SystemErrorsResponse {
+  data: SystemError[];
+  total_count: number;
+}
+
+export interface AdminAuditQuery {
+  wallet_id?: string;
+  action?: string;
+  limit?: number;
+  after?: string;
+}
+
+export interface AdminActivityQuery {
+  adminEmail?: string;
+  actionType?: string;
+  limit?: number;
+  after?: string;
 }

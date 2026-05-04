@@ -12,7 +12,7 @@ import {
   type Wallet,
   type CreateWalletRequest,
 } from '../../../services/walletService';
-import { Plus, Search, Wallet } from 'lucide-react';
+import { Plus, Search, Wallet as WalletIcon } from 'lucide-react';
 
 export default function WalletsPage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -270,7 +270,7 @@ export default function WalletsPage() {
       {showCreateModal && (
         <div className="fixed inset-0 bg-slate-900/40 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border border-slate-200 w-96 shadow-xl rounded-xl bg-white">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4 inline-flex items-center gap-2"><Wallet size={16} /> Create New Wallet</h3>
+            <h3 className="text-sm font-semibold text-slate-900 mb-4 inline-flex items-center gap-2"><WalletIcon size={16} /> Create New Wallet</h3>
             <form
               onSubmit={(e) => {
                 e.preventDefault();

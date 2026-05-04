@@ -5,7 +5,8 @@ import { useRequireAuth } from '../../hooks/useRequireAuth';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { SuperadminOnly } from '../../components/SuperadminOnly';
-import { fetchSystemBalance, type SystemBalanceResponse } from '../../services/adminService';
+import { fetchSystemBalance } from '../../services/adminService';
+import type { SystemBalanceResponse } from '@walletOS/types';
 import {
   Activity,
   ArrowRight,

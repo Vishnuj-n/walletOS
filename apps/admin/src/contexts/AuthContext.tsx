@@ -3,14 +3,25 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
+import type { AdminMeResponse, AdminRole, AdminUserInfo } from '@walletOS/types';
 
-type AdminRole = 'support' | 'finance' | 'superadmin';
+function isAdminRole(value: unknown): value is AdminRole {
+  return value === 'support' || value === 'finance' || value === 'superadmin';
+}
 
-interface AdminUserInfo {
-  id: string;
-  email: string;
-  tenantId: string;
-  role: AdminRole;
+function isAdminMeResponse(value: unknown): value is AdminMeResponse {
+  if (!value || typeof value !== 'object') return false;
+  const payload = value as Record<string, unknown>;
+  const adminUser = payload.adminUser;
+  if (!adminUser || typeof adminUser !== 'object') return false;
+  const user = adminUser as Record<string, unknown>;
+
+  return (
+    typeof user.id === 'string' &&
+    typeof user.email === 'string' &&
+    typeof user.tenantId === 'string' &&
+    isAdminRole(user.role)
+  );
 }
 
 interface AuthContextType {
@@ -51,8 +62,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setAdminUser(data.adminUser);
+        const data: unknown = await response.json();
+        if (isAdminMeResponse(data)) {
+          setAdminUser(data.adminUser);
+        } else {
+          setAdminUser(null);
+        }
       } else {
         setAdminUser(null);
       }
