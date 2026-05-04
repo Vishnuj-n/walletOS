@@ -1,5 +1,5 @@
 import React from 'react';
-import { WalletDto } from '../../types/wallet';
+import { Wallet as WalletDto } from '@walletOS/types';
 import { Skeleton } from '../common/Skeleton';
 
 export function BalanceCard({
@@ -23,7 +23,7 @@ export function BalanceCard({
   return (
     <div className="card">
       <p className="mb-2 text-sm text-muted">Current Ledger Balance</p>
-      <h2 className="text-safe-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+      <h2 className="text-safe-balance text-3xl font-semibold tracking-tight sm:text-4xl truncate">
         {wallet.currency} {wallet.balance}
       </h2>
       <p className="mt-3 text-sm text-muted">Status: {wallet.status}</p>

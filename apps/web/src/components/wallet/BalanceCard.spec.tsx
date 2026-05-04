@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { BalanceCard } from './BalanceCard';
-import { WalletDto } from '../../types/wallet';
+import { Wallet as WalletDto } from '@walletOS/types';
 
 describe('BalanceCard', () => {
   it('should render loading state', () => {

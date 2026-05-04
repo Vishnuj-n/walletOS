@@ -1,25 +1,33 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { LedgerActivityTable } from './LedgerActivityTable';
-import { LedgerActivityDto } from '../../types/wallet';
+import { TransactionResponse as LedgerActivityDto } from '@walletOS/types';
 
 describe('LedgerActivityTable', () => {
   const mockActivities: LedgerActivityDto[] = [
     {
-      transaction_id: 'tx_1',
+      transaction_id: 'tx_123',
       wallet_id: 'wallet_123',
       type: 'credit',
-      amount: '100.0000',
-      description: 'Test credit',
-      created_at: new Date('2024-01-01T00:00:00Z').toISOString(),
+      amount: '50.0000',
+      description: 'Deposit',
+      created_at: new Date('2024-01-01T10:00:00Z').toISOString(),
+      balance_before: '0.0000',
+      balance_after: '50.0000',
+      is_sandbox: true,
+      metadata: {},
     },
     {
-      transaction_id: 'tx_2',
+      transaction_id: 'tx_456',
       wallet_id: 'wallet_123',
       type: 'debit',
-      amount: '50.0000',
-      description: 'Test debit',
-      created_at: new Date('2024-01-02T00:00:00Z').toISOString(),
+      amount: '20.0000',
+      description: 'Withdrawal',
+      created_at: new Date('2024-01-02T10:00:00Z').toISOString(),
+      balance_before: '50.0000',
+      balance_after: '30.0000',
+      is_sandbox: true,
+      metadata: {},
     },
   ];
 
@@ -64,8 +72,8 @@ describe('LedgerActivityTable', () => {
     expect(screen.getByText('Recent Ledger Activity')).toBeInTheDocument();
     expect(screen.getByText('credit')).toBeInTheDocument();
     expect(screen.getByText('debit')).toBeInTheDocument();
-    expect(screen.getByText('Test credit')).toBeInTheDocument();
-    expect(screen.getByText('Test debit')).toBeInTheDocument();
+    expect(screen.getByText('Deposit')).toBeInTheDocument();
+    expect(screen.getByText('Withdrawal')).toBeInTheDocument();
   });
 
   it('should render empty state when no activities', () => {

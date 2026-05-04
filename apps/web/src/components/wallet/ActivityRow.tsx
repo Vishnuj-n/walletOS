@@ -1,5 +1,5 @@
 import React from 'react';
-import { LedgerActivityDto } from '../../types/wallet';
+import { TransactionResponse as LedgerActivityDto } from '@walletOS/types';
 
 export function ActivityRow({ activity }: { activity: LedgerActivityDto }) {
   const toneClass =

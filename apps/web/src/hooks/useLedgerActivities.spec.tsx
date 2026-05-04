@@ -38,6 +38,7 @@ describe('useLedgerActivities', () => {
           idempotency_key: 'idem_1',
           metadata: {},
           created_at: new Date().toISOString(),
+          is_sandbox: true,
         },
       ],
       next_cursor: 'cursor_123',
@@ -119,14 +120,12 @@ describe('useLedgerActivities', () => {
 
   it('should keep previous data when refetching', async () => {
     const mockActivities1 = {
-      data: [{ transaction_id: 'tx_1' }],
+      data: [{ transaction_id: 'tx_1' } as any],
       next_cursor: 'cursor_1',
-      total: 1,
     };
     const mockActivities2 = {
-      data: [{ transaction_id: 'tx_2' }],
+      data: [{ transaction_id: 'tx_2' } as any],
       next_cursor: 'cursor_2',
-      total: 1,
     };
     mockedFetchLedgerActivities
       .mockResolvedValueOnce(mockActivities1)

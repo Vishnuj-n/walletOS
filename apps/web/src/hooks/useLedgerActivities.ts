@@ -9,6 +9,7 @@ export function useLedgerActivities(walletId: string, token?: string, cursor: st
     queryKey: walletQueryKeys.activities(walletId, cursor),
     queryFn: () => fetchLedgerActivities(walletId, token!, cursor, 20),
     enabled: Boolean(walletId && token),
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
+    refetchInterval: 30000,
   });
 }

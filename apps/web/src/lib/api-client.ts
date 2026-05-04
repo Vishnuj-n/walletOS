@@ -1,4 +1,5 @@
-import { LedgerActivityListDto, SessionDto, WalletDto } from '../types/wallet';
+import { SessionResponse as SessionDto, TransactionListResponse as LedgerActivityListDto } from '../types/wallet';
+import { Wallet as WalletDto } from '@walletOS/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -31,7 +32,12 @@ async function requestJson<T>(
 }
 
 export async function fetchSessionForWallet(walletId: string): Promise<SessionDto> {
-  const response = await fetch(`/api/demo/session?walletId=${encodeURIComponent(walletId)}`, {
+  const response = await fetch('/api/auth/session', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ wallet_id: walletId }),
     cache: 'no-store',
   });
 
@@ -44,7 +50,11 @@ export async function fetchSessionForWallet(walletId: string): Promise<SessionDt
 }
 
 export function fetchWallet(walletId: string, token: string): Promise<WalletDto> {
-  return requestJson<WalletDto>(`/wallets/${walletId}`, undefined, token);
+  return requestJson<WalletDto>(`/wallets/${walletId}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  }, token);
 }
 
 export function fetchLedgerActivities(
@@ -56,5 +66,9 @@ export function fetchLedgerActivities(
   const params = new URLSearchParams({ wallet_id: walletId, limit: String(limit) });
   if (cursor) params.set('after', cursor);
 
-  return requestJson<LedgerActivityListDto>(`/transactions?${params.toString()}`, undefined, token);
+  return requestJson<LedgerActivityListDto>(`/transactions?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  }, token);
 }

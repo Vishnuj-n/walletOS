@@ -1,5 +1,5 @@
 import React from 'react';
-import { LedgerActivityDto } from '../../types/wallet';
+import { TransactionResponse as LedgerActivityDto } from '@walletOS/types';
 import { Skeleton } from '../common/Skeleton';
 import { ActivityRow } from './ActivityRow';
 
