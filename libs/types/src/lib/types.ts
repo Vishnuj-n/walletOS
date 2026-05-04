@@ -122,18 +122,18 @@ export interface TransactionRequest {
   amount: string;
   description: string;
   reference_id?: string;
-  reason: string;
+  metadata?: Record<string, any>;
 }
 
 /**
  * Credit transaction request
  */
-export interface CreditTransactionRequest extends TransactionRequest {}
+export type CreditTransactionRequest = TransactionRequest;
 
 /**
  * Debit transaction request
  */
-export interface DebitTransactionRequest extends TransactionRequest {}
+export type DebitTransactionRequest = TransactionRequest;
 
 /**
  * Reversal transaction request

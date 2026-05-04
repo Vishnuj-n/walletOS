@@ -433,6 +433,7 @@ export async function createTenant(request: CreateTenantRequest): Promise<Create
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'Idempotency-Key': generateUUID(),
       },
       body: JSON.stringify(request),
       signal: controller.signal,
