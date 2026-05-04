@@ -181,7 +181,10 @@ export default function DashboardPage() {
           <h1 className="text-lg font-semibold text-slate-900">Governance Console</h1>
           <p className="text-xs text-slate-500">Manage your WalletOS administration</p>
         </div>
-        <button className="p-2 rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+        <button
+          onClick={() => router.refresh()}
+          className="p-2 rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+        >
           <RefreshCcw size={16} />
         </button>
       </div>

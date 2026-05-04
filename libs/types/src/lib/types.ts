@@ -27,7 +27,7 @@ export interface TransactionResponse {
   created_by?: string;
   is_sandbox: boolean;
   metadata: TransactionMetadata;
-  created_at: Date;
+  created_at: string;
 }
 
 /**
@@ -72,6 +72,7 @@ export interface WalletListResponse {
  */
 export interface CreateWalletRequest {
   external_user_id: string;
+  tenant_id?: string;
   currency: string;
   label?: string;
   metadata?: Record<string, unknown>;
@@ -114,9 +115,9 @@ export interface AuditLogListResponse {
 }
 
 /**
- * Credit transaction request
+ * Base transaction request fields
  */
-export interface CreditTransactionRequest {
+export interface TransactionRequest {
   wallet_id: string;
   amount: string;
   description: string;
@@ -125,15 +126,14 @@ export interface CreditTransactionRequest {
 }
 
 /**
+ * Credit transaction request
+ */
+export interface CreditTransactionRequest extends TransactionRequest {}
+
+/**
  * Debit transaction request
  */
-export interface DebitTransactionRequest {
-  wallet_id: string;
-  amount: string;
-  description: string;
-  reference_id?: string;
-  reason: string;
-}
+export interface DebitTransactionRequest extends TransactionRequest {}
 
 /**
  * Reversal transaction request

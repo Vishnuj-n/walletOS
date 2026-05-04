@@ -52,6 +52,7 @@ function serializeWallet(wallet: any) {
 router.post(
   '/wallets',
   apiKeyAuthMiddleware,
+  idempotencyMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
     const { external_user_id, currency, label, metadata } = req.body;
 

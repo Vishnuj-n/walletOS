@@ -205,7 +205,6 @@ export default function TenantsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usageModal, setUsageModal] = useState<{ tenantId: string; tenantName: string } | null>(null);
-  const [apiKeyModal, setApiKeyModal] = useState<{ apiKey: string; scope: string; tenantName: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [alertModal, setAlertModal] = useState<{ message: string; type: 'success' | 'error' } | null>(null);

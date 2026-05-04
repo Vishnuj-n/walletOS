@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:3333/api/v1"; // Your Backend API
+const API_BASE = process.env.API_BASE || "http://localhost:3333/api/v1"; // Your Backend API
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || ""; // Get this from browser localStorage after admin login
 
 if (!ADMIN_TOKEN) {
@@ -30,9 +30,9 @@ async function seed() {
           },
           body: JSON.stringify({
             external_user_id: externalId,
+            tenant_id: group.tenant,
             currency: "INR",
-            label: `${externalId} Primary Wallet`,
-            is_sandbox: false
+            label: `${externalId} Primary Wallet`
           })
         });
 
@@ -43,7 +43,7 @@ async function seed() {
 
           // 2. Add a random Credit transaction to make the charts look good
           const amount = (Math.random() * 5000 + 100).toFixed(2);
-          await fetch(`${API_BASE}/admin/transactions/credit`, {
+          const txResponse = await fetch(`${API_BASE}/admin/transactions/credit`, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${ADMIN_TOKEN}`,
@@ -57,7 +57,12 @@ async function seed() {
               reason: "System Initialization"
             })
           });
-          console.log(`   💰 Credited ₹${amount} to ${externalId}`);
+          if (txResponse.ok) {
+            console.log(`   💰 Credited ₹${amount} to ${externalId}`);
+          } else {
+            const errorText = await txResponse.text();
+            console.error(`   ❌ Failed to credit ₹${amount} to ${externalId}: ${txResponse.status} ${errorText}`);
+          }
         } else {
           console.error(`❌ Failed for ${externalId}:`, wallet.error);
         }

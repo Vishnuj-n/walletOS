@@ -1516,24 +1516,16 @@ router.get(
     const startTime = new Date();
     startTime.setHours(startTime.getHours() - hours);
 
-    const usage = await prisma.auditLog.groupBy({
-      by: ['timestamp'],
-      where: {
-        tenantId,
-        timestamp: {
-          gte: startTime,
-        },
-        action: {
-          startsWith: 'api.',
-        },
-      },
-      _count: {
-        id: true,
-      },
-      orderBy: {
-        timestamp: 'desc',
-      },
-    });
+    // Use raw query for hourly bucketing with date_trunc
+    const usage = await prisma.$queryRaw`
+      SELECT date_trunc('hour', timestamp) as hour, COUNT(*) as count
+      FROM "AuditLog"
+      WHERE "tenantId" = ${tenantId}
+        AND timestamp >= ${startTime}
+        AND action LIKE 'api.%'
+      GROUP BY date_trunc('hour', timestamp)
+      ORDER BY hour DESC
+    ` as Array<{ hour: Date; count: bigint }>;
 
     // Group by hour
     const hourlyUsage = new Map<string, number>();
@@ -1545,8 +1537,8 @@ router.get(
     }
 
     usage.forEach(item => {
-      const hourKey = item.timestamp.toISOString().substring(0, 13) + ':00:00.000Z';
-      hourlyUsage.set(hourKey, (hourlyUsage.get(hourKey) || 0) + item._count.id);
+      const hourKey = item.hour.toISOString().substring(0, 13) + ':00:00.000Z';
+      hourlyUsage.set(hourKey, (hourlyUsage.get(hourKey) || 0) + Number(item.count));
     });
 
     res.json({

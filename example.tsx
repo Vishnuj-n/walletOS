@@ -75,6 +75,29 @@ const colorMap: Record<string, string> = {
   amber: "bg-amber-50 text-amber-600",
 }
 
+/* ------------------ Type Definitions ------------------ */
+
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  icon: React.ComponentType<{ size?: number }>;
+  trend?: string | number;
+  color?: string;
+}
+
+interface NavItemProps {
+  icon: React.ComponentType<{ size?: number }>;
+  label: string;
+  active?: boolean;
+  onClick?: () => void;
+}
+
+interface ActionButtonProps {
+  icon: React.ComponentType<{ size?: number }>;
+  label: string;
+  onClick?: () => void;
+}
+
 /* ------------------ Components ------------------ */
 
 function StatCard({
@@ -83,7 +106,7 @@ function StatCard({
   icon: Icon,
   trend,
   color = "blue",
-}: any) {
+}: StatCardProps) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
       <div className="flex justify-between mb-3">
@@ -103,7 +126,7 @@ function StatCard({
   )
 }
 
-function NavItem({ icon: Icon, label, active, onClick }: any) {
+function NavItem({ icon: Icon, label, active, onClick }: NavItemProps) {
   return (
     <button
       onClick={onClick}
@@ -119,9 +142,12 @@ function NavItem({ icon: Icon, label, active, onClick }: any) {
   )
 }
 
-function ActionButton({ icon: Icon, label }: any) {
+function ActionButton({ icon: Icon, label, onClick }: ActionButtonProps) {
   return (
-    <button className="p-3 rounded-lg bg-white/10 hover:bg-white/20 flex flex-col items-center gap-1">
+    <button
+      onClick={onClick}
+      className="p-3 rounded-lg bg-white/10 hover:bg-white/20 flex flex-col items-center gap-1"
+    >
       <Icon size={16} />
       <span className="text-[10px]">{label}</span>
     </button>

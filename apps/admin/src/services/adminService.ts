@@ -16,9 +16,9 @@ async function getAuthToken(): Promise<string | null> {
     }
 
     return session?.access_token || null;
-  } catch {
+  } catch (err) {
     await supabase.auth.signOut();
-    throw new Error('Session expired. Please sign in again.');
+    throw err instanceof Error ? err : new Error('Session expired. Please sign in again.');
   }
 }
 
@@ -662,7 +662,7 @@ export async function fetchAdminActivity(params: {
 /**
  * Fetch recent system errors
  */
-export async function fetchSystemErrors(limit: number = 50): Promise<SystemErrorsResponse> {
+export async function fetchSystemErrors(limit = 50): Promise<SystemErrorsResponse> {
   const token = await getAuthToken();
   if (!token) throw new Error('No active session');
 
