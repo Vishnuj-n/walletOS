@@ -146,7 +146,7 @@ export interface ReversalTransactionRequest {
 /**
  * Admin role hierarchy
  */
-export type AdminRole = 'support' | 'finance' | 'superadmin';
+export type AdminRole = 'support' | 'finance' | 'tenant_admin' | 'superadmin';
 
 /**
  * Current admin user record used by admin UI

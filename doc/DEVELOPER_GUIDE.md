@@ -86,6 +86,8 @@ INSERT INTO "AdminUser"
   ("id", "tenantId", "supabaseUid", "email", "role", "isActive")
 VALUES 
   ('<cuid-or-uuid>', 'your-tenant-id', '<UUID>', 'admin@example.com', 'superadmin', true);
+
+**Valid roles:** `support`, `finance`, `tenant_admin`, `superadmin`
 ```
 
 Replace:

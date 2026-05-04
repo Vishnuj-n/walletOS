@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { SuperadminOnly } from '../../../components/SuperadminOnly';
+import { PermissionGate } from '../../../components/PermissionGate';
 import { 
   createTenant,
   fetchTenants, 
@@ -196,7 +196,7 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
 }
 
 export default function TenantsPage() {
-  const { isSuperadmin } = useAuth();
+  const { hasRole } = useAuth();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -330,7 +330,7 @@ export default function TenantsPage() {
     }
   };
 
-  if (!isSuperadmin) {
+  if (!hasRole('superadmin')) {
     return (
       <div className="p-6">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -342,7 +342,7 @@ export default function TenantsPage() {
   }
 
   return (
-    <SuperadminOnly>
+    <PermissionGate minRole="superadmin">
       <div className="min-h-screen bg-slate-50 p-6">
         <div className="mb-6 flex justify-between items-center">
           <div>
@@ -623,6 +623,6 @@ export default function TenantsPage() {
           />
         )}
       </div>
-    </SuperadminOnly>
+    </PermissionGate>
   );
 }

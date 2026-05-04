@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuth } from '../contexts/AuthContext';
+import { PermissionGate } from './PermissionGate';
 
 interface SuperadminOnlyProps {
   children: React.ReactNode;
@@ -8,11 +8,5 @@ interface SuperadminOnlyProps {
 }
 
 export function SuperadminOnly({ children, fallback = null }: SuperadminOnlyProps) {
-  const { isSuperadmin } = useAuth();
-
-  if (!isSuperadmin) {
-    return <>{fallback}</>;
-  }
-
-  return <>{children}</>;
+  return <PermissionGate minRole="superadmin" fallback={fallback}>{children}</PermissionGate>;
 }

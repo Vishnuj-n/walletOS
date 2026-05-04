@@ -142,10 +142,10 @@ export async function adminAuthMiddleware(
 /**
  * Role-based access control middleware
  * Checks if admin user has required role or higher
- * Role hierarchy: support(0) < finance(1) < superadmin(2)
+ * Role hierarchy: support(0) < finance(1) < tenant_admin(2) < superadmin(3)
  */
-export function requireAdminRole(minRole: 'support' | 'finance' | 'superadmin') {
-  const roleRank = { support: 0, finance: 1, superadmin: 2 };
+export function requireAdminRole(minRole: 'support' | 'finance' | 'tenant_admin' | 'superadmin') {
+  const roleRank: Record<string, number> = { support: 0, finance: 1, tenant_admin: 2, superadmin: 3 };
 
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.adminUser) {
