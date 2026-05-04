@@ -74,7 +74,7 @@ Deliver internal tools for support and operations staff.
 **Docs / Context:** APP FLOW.md, Requirements.md, Data API.md
 
 
-# Sprint 4: Advanced Governance, RBAC & Scoped Dashboards
+# Sprint 4: Advanced Governance, RBAC & Scoped Dashboards [IN PROGRESS]
 
 ## Goal
 Transition from a single-admin MVP to a professional Multi-Tenant platform using Hierarchical RBAC, strict type contracts, and scoped data visibility.
