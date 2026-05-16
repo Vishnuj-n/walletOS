@@ -54,7 +54,7 @@ export function fetchWallet(walletId: string, token: string): Promise<WalletDto>
     headers: {
       Authorization: `Bearer ${token}`,
     },
-  }, token);
+  });
 }
 
 export function fetchLedgerActivities(
@@ -70,5 +70,5 @@ export function fetchLedgerActivities(
     headers: {
       Authorization: `Bearer ${token}`,
     },
-  }, token);
+  });
 }

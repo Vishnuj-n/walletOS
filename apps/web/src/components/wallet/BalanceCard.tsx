@@ -23,7 +23,7 @@ export function BalanceCard({
   return (
     <div className="card">
       <p className="mb-2 text-sm text-muted">Current Ledger Balance</p>
-      <h2 className="text-safe-balance text-3xl font-semibold tracking-tight sm:text-4xl truncate">
+      <h2 className="text-safe-balance text-3xl font-semibold tracking-tight sm:text-4xl">
         {wallet.currency} {wallet.balance}
       </h2>
       <p className="mt-3 text-sm text-muted">Status: {wallet.status}</p>

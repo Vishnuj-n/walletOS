@@ -13,7 +13,6 @@ import { userSessionAuthMiddleware } from '../middleware/userSessionAuth';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { prisma } from '../lib/prisma';
 
 const router = Router();
 
@@ -52,7 +51,6 @@ function serializeWallet(wallet: any) {
 router.post(
   '/wallets',
   apiKeyAuthMiddleware,
-  idempotencyMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
     const { external_user_id, currency, label, metadata } = req.body;
 
@@ -60,54 +58,13 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'external_user_id and currency are required');
     }
 
-    const wallet = await prisma.$transaction(async (tx) => {
-      // Check if wallet already exists
-      const existingWallet = await tx.wallet.findFirst({
-        where: {
-          tenantId: req.tenantId!,
-          externalUserId: external_user_id,
-          isSandbox: req.isSandbox || false,
-        },
-      });
-
-      if (existingWallet) {
-        throw new AppError(409, ErrorCode.WALLET_ALREADY_EXISTS, 'Wallet already exists for this user in this tenant and environment');
-      }
-
-      // Create wallet within transaction
-      const newWallet = await tx.wallet.create({
-        data: {
-          tenantId: req.tenantId!,
-          externalUserId: external_user_id,
-          currency,
-          label,
-          metadata,
-          isSandbox: req.isSandbox || false,
-          balance: 0,
-        },
-      });
-
-      // Create audit log for API wallet creation within same transaction
-      await tx.auditLog.create({
-        data: {
-          tenantId: req.tenantId!,
-          entityType: 'Wallet',
-          entityId: newWallet.id,
-          action: 'wallet.created',
-          changes: {
-            external_user_id,
-            currency,
-            label,
-            metadata,
-            is_sandbox: req.isSandbox || false,
-          },
-          actorId: req.apiKeyId || 'api',
-          actorType: 'api_key',
-          isSandbox: req.isSandbox || false,
-        },
-      });
-
-      return newWallet;
+    const wallet = await createWallet({
+      tenantId: req.tenantId!,
+      externalUserId: external_user_id,
+      currency,
+      label,
+      metadata,
+      isSandbox: req.isSandbox || false,
     });
 
     res.status(201).json(serializeWallet(wallet));

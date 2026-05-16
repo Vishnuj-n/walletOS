@@ -53,7 +53,7 @@ describe('Audit Tests', () => {
       expect(auditLog).toHaveProperty('action', 'wallet.created');
       expect(auditLog).toHaveProperty('entityType', 'Wallet');
       expect(auditLog).toHaveProperty('entityId', walletId);
-      expect(auditLog.changes).toHaveProperty('externalUserId', walletUserId);
+      expect(auditLog.changes).toHaveProperty('external_user_id', walletUserId);
 
       await cleanupTestData(tenant.id);
     });

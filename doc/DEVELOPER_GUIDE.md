@@ -5,6 +5,7 @@ Use these tables to navigate the WalletOS monorepo.
 | Task | Command | Result |
 | :--- | :--- | :--- |
 | **Start API Server** | `npx nx serve api` | Launches the backend on port 3333. |
+| **Start Web Wallet App** | `npx nx serve web` | Launches the user-facing wallet app on port 3000. |
 | **Start Admin Dashboard** | `npx nx dev admin` | Launches the admin dashboard on port 4200. |
 | **Sync Database** | `npx nx db-push api` | Pushes Prisma schema changes to your local DB. |
 | **Generate Prisma Client** | `npx nx prisma generate api` | Generates TypeScript types from Prisma schema. |
@@ -21,6 +22,8 @@ You run these commands to verify logic without altering your development data.
 | **API Test Suite** | `npx dotenv-cli -e .env.test -- npx nx test api --runInBand` | Use `runInBand` to prevent WSL port conflicts. |
 | **Schema Sync** | `npx nx db-push api --configuration=test` | Targets the test database specifically. |
 | **Generate Key** | `npx dotenv-cli -e .env.test -- npx ts-node apps/api/src/scripts/generate-key.ts` | Creates a valid API key for your test headers. |
+
+The web app expects `NEXT_PUBLIC_API_URL` in the environment. When running locally, keep it pointed at the API server, usually `http://localhost:3333/api/v1`.
 
 
 

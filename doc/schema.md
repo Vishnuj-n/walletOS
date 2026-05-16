@@ -195,6 +195,10 @@ Ensures one admin per Supabase user per tenant.
 ## Notes
 
 - **Authentication**: Admin users authenticate via Supabase JWT (not API keys)
-- **Role hierarchy**: support < finance < superadmin
-- **Superadmin tasks**: cross-tenant wallets, create tenants, view system balance, audit logs
+- **Role hierarchy**: support < finance < tenant_admin < superadmin
+- **Superadmin tasks**: cross-tenant wallets, create tenants, view system balance
+- **Audit log access**: 
+  - Tenant Activity: accessible by all admin roles (support, finance, tenant_admin, superadmin)
+  - Admin Activity: superadmin-only
+  - System Errors: superadmin-only
 - **Setup**: Create Supabase auth user first, then insert AdminUser record with matching `supabaseUid`
