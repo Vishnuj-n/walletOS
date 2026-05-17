@@ -18,6 +18,7 @@ You run these commands to verify logic without altering your development data.
 
 | Action | Command | Note |
 | :--- | :--- | :--- |
+| **Admin Test Suite** | `npx nx test admin` | Runs Jest + React Testing Library specs for the admin dashboard. |
 | **API Test Suite** | `npx dotenv-cli -e .env.test -- npx nx test api --runInBand` | Use `runInBand` to prevent WSL port conflicts. |
 | **Schema Sync** | `npx nx db-push api --configuration=test` | Targets the test database specifically. |
 | **Generate Key** | `npx dotenv-cli -e .env.test -- npx ts-node apps/api/src/scripts/generate-key.ts` | Creates a valid API key for your test headers. |

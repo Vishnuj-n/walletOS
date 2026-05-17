@@ -211,6 +211,11 @@ The API will be available at `http://localhost:3333`
 
 ## Testing
 
+**Run admin dashboard tests:**
+```bash
+npx nx test admin
+```
+
 **Run all API tests:**
 ```bash
 npx dotenv-cli -e .env.test -- npx nx test api --silent
