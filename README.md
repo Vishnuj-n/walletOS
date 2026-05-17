@@ -58,6 +58,7 @@ SUPABASE_SERVICE_ROLE_KEY=...
 NEXT_PUBLIC_SUPABASE_URL=https://[ref].supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 NEXT_PUBLIC_API_URL=http://localhost:3333/api/v1
+NEXT_PUBLIC_DEMO_WALLET_ID=wlt_demo_xxx
 NODE_ENV=development
 ```
 

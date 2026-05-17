@@ -13,6 +13,7 @@ import { userSessionAuthMiddleware } from '../middleware/userSessionAuth';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { prisma } from '../lib/prisma';
 
 const router = Router();
 
@@ -58,13 +59,36 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'external_user_id and currency are required');
     }
 
-    const wallet = await createWallet({
-      tenantId: req.tenantId!,
-      externalUserId: external_user_id,
-      currency,
-      label,
-      metadata,
-      isSandbox: req.isSandbox || false,
+    // Create wallet and audit log in a transaction
+    const wallet = await prisma.$transaction(async (tx) => {
+      const newWallet = await createWallet({
+        tenantId: req.tenantId!,
+        externalUserId: external_user_id,
+        currency,
+        label,
+        metadata,
+        isSandbox: req.isSandbox || false,
+      });
+
+      // Create audit log for wallet creation
+      await tx.auditLog.create({
+        data: {
+          tenantId: req.tenantId!,
+          entityType: 'Wallet',
+          entityId: newWallet.id,
+          action: 'wallet.created',
+          actorId: `api_key:${req.tenantId}`,
+          actorType: 'api_key',
+          changes: {
+            external_user_id,
+            currency,
+            label,
+            metadata,
+          },
+        },
+      });
+
+      return newWallet;
     });
 
     res.status(201).json(serializeWallet(wallet));

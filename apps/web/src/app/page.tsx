@@ -27,7 +27,7 @@ export default function Index() {
     return (
       <main className="page-shell">
         <div className="card text-sm text-danger">
-          Missing `wallet_id` in URL and `NEXT_PUBLIC_DEMO_WALLET_ID` in environment.
+          Provide a `wallet_id` in the URL or set `NEXT_PUBLIC_DEMO_WALLET_ID` for the web app.
         </div>
       </main>
     );
