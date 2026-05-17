@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRequireAuth } from '../../hooks/useRequireAuth';
 import { useRouter } from 'next/navigation';
-import { SuperadminOnly } from '../../components/SuperadminOnly';
+import { PermissionGate } from '../../components/PermissionGate';
+import { DASHBOARD_CAPABILITIES, getDashboardCapability } from '../../components/dashboardCapabilities';
 import { fetchSystemBalance } from '../../services/adminService';
 import type { SystemBalanceResponse } from '@walletOS/types';
 import {
@@ -11,6 +12,7 @@ import {
   ArrowRight,
   Building2,
   Clock3,
+  Cog,
   HandCoins,
   RefreshCcw,
   Search,
@@ -149,9 +151,38 @@ function SystemBalanceWidget() {
   );
 }
 
+const capabilityIcons = {
+  wallets: Wallet,
+  actions: HandCoins,
+  audit: ShieldCheck,
+  settings: Cog,
+  tenants: Building2,
+  search: Search,
+} as const;
+
+const capabilityAccent = {
+  wallets: 'bg-blue-50 text-blue-600',
+  actions: 'bg-emerald-50 text-emerald-600',
+  audit: 'bg-amber-50 text-amber-600',
+  settings: 'bg-slate-100 text-slate-700',
+  tenants: 'bg-indigo-50 text-indigo-600',
+  search: 'bg-cyan-50 text-cyan-600',
+} as const;
+
+const capabilityActionLabel = {
+  wallets: 'Manage Wallets',
+  actions: 'Open Actions',
+  audit: 'View Audit Logs',
+  settings: 'Open Settings',
+  tenants: 'Manage Tenants',
+  search: 'Open Search',
+} as const;
+
 export default function DashboardPage() {
   const { adminUser, loading } = useRequireAuth();
   const router = useRouter();
+
+  const visibleCapabilities = adminUser ? DASHBOARD_CAPABILITIES : [];
 
   if (loading) {
     return <div className="min-h-screen bg-slate-50 p-6 text-sm text-slate-500">Loading...</div>;
@@ -173,73 +204,35 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
-              <Wallet size={18} />
-            </div>
-            <span className="text-[11px] font-mono text-slate-400">/wallets</span>
-          </div>
-          <h3 className="text-sm font-semibold text-slate-900 mb-1">Wallet Management</h3>
-          <p className="text-xs text-slate-500 mb-4">Search, view, and manage user wallets</p>
-          <button
-            onClick={() => router.push('/dashboard/wallets')}
-            className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
-          >
-            Manage Wallets <ArrowRight size={14} />
-          </button>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
-              <HandCoins size={18} />
-            </div>
-            <span className="text-[11px] font-mono text-slate-400">/actions</span>
-          </div>
-          <h3 className="text-sm font-semibold text-slate-900 mb-1">Manual Actions</h3>
-          <p className="text-xs text-slate-500 mb-4">Perform manual credits, debits, and reversals</p>
-          <button
-            onClick={() => router.push('/dashboard/actions')}
-            className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
-          >
-            Perform Actions <ArrowRight size={14} />
-          </button>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
-              <Building2 size={18} />
-            </div>
-            <span className="text-[11px] font-mono text-slate-400">/tenants</span>
-          </div>
-          <h3 className="text-sm font-semibold text-slate-900 mb-1">Tenant Management</h3>
-          <p className="text-xs text-slate-500 mb-4">Create and manage tenants with API keys</p>
-          <button
-            onClick={() => router.push('/dashboard/tenants')}
-            className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
-          >
-            Manage Tenants <ArrowRight size={14} />
-          </button>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
-              <ShieldCheck size={18} />
-            </div>
-            <span className="text-[11px] font-mono text-slate-400">/audit</span>
-          </div>
-          <h3 className="text-sm font-semibold text-slate-900 mb-1">Audit Logs</h3>
-          <p className="text-xs text-slate-500 mb-4">View system activity and audit trails</p>
-          <button
-            onClick={() => router.push('/dashboard/audit')}
-            className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
-          >
-            View Logs <ArrowRight size={14} />
-          </button>
-        </div>
+        {visibleCapabilities.map((capability) => {
+          const Icon = capabilityIcons[capability.id as keyof typeof capabilityIcons];
+          const accent = capabilityAccent[capability.id as keyof typeof capabilityAccent];
+          const actionLabel = capabilityActionLabel[capability.id as keyof typeof capabilityActionLabel];
+
+          return (
+            <PermissionGate key={capability.id} minRole={capability.minRole}>
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`p-2 rounded-lg ${accent}`}>
+                    <Icon size={18} />
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-400">{capability.href.replace('/dashboard', '')}</span>
+                </div>
+                <h3 className="text-sm font-semibold text-slate-900 mb-1">{capability.label}</h3>
+                <p className="text-xs text-slate-500 mb-4">{capability.description}</p>
+                <button
+                  onClick={() => router.push(capability.href)}
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                >
+                  {actionLabel} <ArrowRight size={14} />
+                </button>
+              </div>
+            </PermissionGate>
+          );
+        })}
       </div>
 
-      <SuperadminOnly>
+      <PermissionGate minRole="superadmin">
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-slate-900">Superadmin Tools</h2>
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -249,14 +242,14 @@ export default function DashboardPage() {
                 <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
                   <Search size={18} />
                 </div>
-                <span className="text-[11px] font-mono text-slate-400">/search</span>
+                <span className="text-[11px] font-mono text-slate-400">{getDashboardCapability('search')?.href.replace('/dashboard', '')}</span>
               </div>
-              <h3 className="text-sm font-semibold text-slate-900 mb-1">Global Search</h3>
+              <h3 className="text-sm font-semibold text-slate-900 mb-1">{getDashboardCapability('search')?.label}</h3>
               <p className="text-xs text-slate-500 mb-4">
-                Search wallets and transactions across all tenants
+                {getDashboardCapability('search')?.description}
               </p>
               <button
-                onClick={() => router.push('/dashboard/search')}
+                onClick={() => router.push(getDashboardCapability('search')?.href ?? '/dashboard/search')}
                 className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3 py-2 rounded-lg inline-flex items-center gap-2"
               >
                 Open Search <ArrowRight size={14} />
@@ -264,7 +257,7 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-      </SuperadminOnly>
+      </PermissionGate>
 
       {adminUser && (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex items-center gap-2">

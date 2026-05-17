@@ -4,7 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import React from 'react';
-import { SuperadminOnly } from './SuperadminOnly';
+import { PermissionGate } from './PermissionGate';
+import { DASHBOARD_CAPABILITIES } from './dashboardCapabilities';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -32,7 +33,7 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
   };
 
   const getNavLinkClass = (href: string) => {
-    const isActive = pathname === href;
+    const isActive = pathname === href || pathname.startsWith(`${href}/`);
     return isActive
       ? 'inline-flex items-center px-1 pt-1 border-b-2 border-indigo-500 text-sm font-medium text-gray-900'
       : 'inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300';
@@ -51,38 +52,13 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
                   </Link>
                 </div>
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                  <Link
-                    href="/dashboard/wallets"
-                    className={getNavLinkClass('/dashboard/wallets')}
-                  >
-                    Wallets
-                  </Link>
-                  <Link
-                    href="/dashboard/actions"
-                    className={getNavLinkClass('/dashboard/actions')}
-                  >
-                    Manual Actions
-                  </Link>
-                  <Link
-                    href="/dashboard/tenants"
-                    className={getNavLinkClass('/dashboard/tenants')}
-                  >
-                    Tenants
-                  </Link>
-                  <SuperadminOnly>
-                    <Link
-                      href="/dashboard/search"
-                      className={getNavLinkClass('/dashboard/search')}
-                    >
-                      Global Search
-                    </Link>
-                  </SuperadminOnly>
-                  <Link
-                    href="/dashboard/audit"
-                    className={getNavLinkClass('/dashboard/audit')}
-                  >
-                    Audit Log
-                  </Link>
+                  {DASHBOARD_CAPABILITIES.map((capability) => (
+                    <PermissionGate key={capability.id} minRole={capability.minRole}>
+                      <Link href={capability.href} className={getNavLinkClass(capability.href)}>
+                        {capability.label}
+                      </Link>
+                    </PermissionGate>
+                  ))}
                 </div>
               </div>
               <div className="flex items-center">

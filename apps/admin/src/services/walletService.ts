@@ -1,15 +1,5 @@
-import { supabase, API_BASE_URL } from '../lib/supabase';
-
-/**
- * Generate UUID for idempotency key
- */
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
+import { apiRequest } from '../lib/apiClient';
+import { requireActiveTenantId, withActiveTenantScope } from '../lib/adminSession';
 
 export interface Wallet {
   wallet_id: string;
@@ -29,6 +19,7 @@ export interface WalletListResponse {
 
 export interface CreateWalletRequest {
   external_user_id: string;
+  tenant_id?: string;
   currency: string;
   label?: string;
   metadata?: Record<string, unknown>;
@@ -43,240 +34,69 @@ export interface FreezeWalletRequest {
   reason: string;
 }
 
-/**
- * Get auth token from Supabase session
- */
-async function getAuthToken(): Promise<string | null> {
-  try {
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession();
-
-    if (error) {
-      await supabase.auth.signOut();
-      throw new Error('Session expired. Please sign in again.');
-    }
-
-    return session?.access_token || null;
-  } catch {
-    await supabase.auth.signOut();
-    throw new Error('Session expired. Please sign in again.');
-  }
-}
-
-async function parseApiError(response: Response, fallbackMessage: string): Promise<never> {
-  if (response.status === 401) {
-    await supabase.auth.signOut();
-    throw new Error('Session expired. Please sign in again.');
-  }
-
-  try {
-    const error = await response.json();
-    throw new Error(error.error?.message || error.message || fallbackMessage);
-  } catch (jsonError) {
-    if (jsonError instanceof SyntaxError) {
-      // JSON parse failed, read text for more descriptive error
-      const textError = await response.text();
-      throw new Error(textError || fallbackMessage);
-    }
-    throw jsonError;
-  }
-}
-
-/**
- * Fetch all wallets with optional filters
- */
 export async function fetchWallets(params: {
   search?: string;
   status?: string;
   limit?: number;
   after?: string;
 }): Promise<Wallet[]> {
-  const token = await getAuthToken();
-  if (!token) throw new Error('No active session');
+  const response = await apiRequest<WalletListResponse>('/admin/wallets', {
+    query: withActiveTenantScope(params),
+    fallbackMessage: 'Failed to fetch wallets',
+  });
 
-  const queryParams = new URLSearchParams();
-  if (params.search) queryParams.append('search', params.search);
-  if (params.status) queryParams.append('status', params.status);
-  if (params.limit) queryParams.append('limit', params.limit.toString());
-  if (params.after) queryParams.append('after', params.after);
-
-  const response = await fetch(
-    `${API_BASE_URL}/admin/wallets?${queryParams.toString()}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    return parseApiError(response, 'Failed to fetch wallets');
-  }
-
-  const data: WalletListResponse = await response.json();
-  return data.data;
+  return response.data;
 }
 
-/**
- * Fetch a single wallet by ID
- */
 export async function fetchWallet(walletId: string): Promise<Wallet> {
-  const token = await getAuthToken();
-  if (!token) throw new Error('No active session');
-
-  const response = await fetch(
-    `${API_BASE_URL}/admin/wallets/${walletId}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    return parseApiError(response, 'Failed to fetch wallet');
-  }
-
-  return await response.json();
+  return apiRequest<Wallet>(`/admin/wallets/${walletId}`, {
+    fallbackMessage: 'Failed to fetch wallet',
+  });
 }
 
-/**
- * Create a new wallet
- */
 export async function createWallet(data: CreateWalletRequest): Promise<Wallet> {
-  const token = await getAuthToken();
-  if (!token) throw new Error('No active session');
+  const tenantId = data.tenant_id ?? requireActiveTenantId('Active tenant is required to create a wallet');
+  const scopedRequest = data.tenant_id ? data : {
+    ...data,
+    tenant_id: tenantId,
+  };
 
-  const response = await fetch(
-    `${API_BASE_URL}/admin/wallets`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        'Idempotency-Key': generateUUID(),
-      },
-      body: JSON.stringify(data),
-    }
-  );
-
-  if (!response.ok) {
-    return parseApiError(response, 'Failed to create wallet');
-  }
-
-  return await response.json();
+  return apiRequest<Wallet>('/admin/wallets', {
+    method: 'POST',
+    body: scopedRequest,
+    requireIdempotencyKey: true,
+    fallbackMessage: 'Failed to create wallet',
+  });
 }
 
-/**
- * Update wallet label or metadata
- */
-export async function updateWallet(
-  walletId: string,
-  data: UpdateWalletRequest
-): Promise<Wallet> {
-  const token = await getAuthToken();
-  if (!token) throw new Error('No active session');
-
-  const response = await fetch(
-    `${API_BASE_URL}/admin/wallets/${walletId}`,
-    {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
-    }
-  );
-
-  if (!response.ok) {
-    return parseApiError(response, 'Failed to update wallet');
-  }
-
-  return await response.json();
+export async function updateWallet(walletId: string, data: UpdateWalletRequest): Promise<Wallet> {
+  return apiRequest<Wallet>(`/admin/wallets/${walletId}`, {
+    method: 'PATCH',
+    body: data,
+    fallbackMessage: 'Failed to update wallet',
+  });
 }
 
-/**
- * Close a wallet
- */
-export async function closeWallet(
-  walletId: string,
-  reason: string
-): Promise<Wallet> {
-  const token = await getAuthToken();
-  if (!token) throw new Error('No active session');
-
-  const response = await fetch(
-    `${API_BASE_URL}/admin/wallets/${walletId}`,
-    {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ reason }),
-    }
-  );
-
-  if (!response.ok) {
-    return parseApiError(response, 'Failed to close wallet');
-  }
-
-  return await response.json();
+export async function closeWallet(walletId: string, reason: string): Promise<Wallet> {
+  return apiRequest<Wallet>(`/admin/wallets/${walletId}`, {
+    method: 'DELETE',
+    body: { reason },
+    fallbackMessage: 'Failed to close wallet',
+  });
 }
 
-/**
- * Freeze a wallet
- */
-export async function freezeWallet(
-  walletId: string,
-  reason: string
-): Promise<void> {
-  const token = await getAuthToken();
-  if (!token) throw new Error('No active session');
-
-  const response = await fetch(
-    `${API_BASE_URL}/admin/wallets/${walletId}/freeze`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ reason }),
-    }
-  );
-
-  if (!response.ok) {
-    return parseApiError(response, 'Failed to freeze wallet');
-  }
+export async function freezeWallet(walletId: string, reason: string): Promise<void> {
+  await apiRequest<void>(`/admin/wallets/${walletId}/freeze`, {
+    method: 'POST',
+    body: { reason },
+    fallbackMessage: 'Failed to freeze wallet',
+  });
 }
 
-/**
- * Unfreeze a wallet
- */
-export async function unfreezeWallet(
-  walletId: string,
-  reason: string
-): Promise<void> {
-  const token = await getAuthToken();
-  if (!token) throw new Error('No active session');
-
-  const response = await fetch(
-    `${API_BASE_URL}/admin/wallets/${walletId}/unfreeze`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ reason }),
-    }
-  );
-
-  if (!response.ok) {
-    return parseApiError(response, 'Failed to unfreeze wallet');
-  }
+export async function unfreezeWallet(walletId: string, reason: string): Promise<void> {
+  await apiRequest<void>(`/admin/wallets/${walletId}/unfreeze`, {
+    method: 'POST',
+    body: { reason },
+    fallbackMessage: 'Failed to unfreeze wallet',
+  });
 }

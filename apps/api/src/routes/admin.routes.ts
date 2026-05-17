@@ -42,6 +42,243 @@ const walletSearchSchema = z.object({
     .transform((value) => value === 'true'),
 });
 
+const tenantScopeSchema = z.object({
+  tenantId: z.string().min(1).max(255).optional(),
+});
+
+const adminApiKeyRotationRequestSchema = z.object({
+  scope: z.enum(['live', 'test']),
+});
+
+type AdminApiKeyRotationResponse = {
+  api_key: string;
+  scope: 'live' | 'test';
+  tenant_id: string;
+  created_at: string;
+};
+
+const adminApiKeyRotationResponseCache = new Map<
+  string,
+  { response: AdminApiKeyRotationResponse; expiresAt: number }
+>();
+const ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const ADMIN_API_KEY_ROTATION_CACHE_TTL_MS = ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS;
+
+function getValidatedIdempotencyKey(idempotencyKeyHeader: string | string[] | undefined): string {
+  const idempotencyKey = Array.isArray(idempotencyKeyHeader) ? idempotencyKeyHeader[0] : idempotencyKeyHeader;
+
+  if (!idempotencyKey || typeof idempotencyKey !== 'string') {
+    throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key header is required');
+  }
+
+  if (idempotencyKey.length > 255) {
+    throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key must be at most 255 characters');
+  }
+
+  return idempotencyKey;
+}
+
+function getAdminApiKeyRotationCacheKey(tenantId: string, auditAction: string, idempotencyKey: string): string {
+  return `${tenantId}:${auditAction}:${idempotencyKey}`;
+}
+
+function getCachedAdminApiKeyRotationResponse(cacheKey: string): AdminApiKeyRotationResponse | undefined {
+  const cachedEntry = adminApiKeyRotationResponseCache.get(cacheKey);
+
+  if (!cachedEntry) {
+    return undefined;
+  }
+
+  if (cachedEntry.expiresAt <= Date.now()) {
+    adminApiKeyRotationResponseCache.delete(cacheKey);
+    return undefined;
+  }
+
+  return cachedEntry.response;
+}
+
+function cacheAdminApiKeyRotationResponse(cacheKey: string, response: AdminApiKeyRotationResponse): void {
+  adminApiKeyRotationResponseCache.set(cacheKey, {
+    response,
+    expiresAt: Date.now() + ADMIN_API_KEY_ROTATION_CACHE_TTL_MS,
+  });
+}
+
+function redactApiKeyForAudit(apiKey: string): string {
+  return `${apiKey.slice(0, 15)}...[redacted]`;
+}
+
+async function resolveAdminTenantScope(
+  req: Express.Request,
+  requestedTenantId?: string,
+  options?: { allowSuperadminOverride?: boolean }
+): Promise<string> {
+  const sessionTenantId = req.adminUser!.tenantId;
+  const isSuperadmin = req.adminUser!.role === 'superadmin';
+  const tenantId = requestedTenantId ?? sessionTenantId;
+
+  if (tenantId === sessionTenantId) {
+    return tenantId;
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true },
+  });
+
+  if (!tenant) {
+    throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
+  }
+
+  if (!isSuperadmin) {
+    throw new AppError(403, ErrorCode.FORBIDDEN, 'Tenant scope is limited to your assigned tenant');
+  }
+
+  if (!options?.allowSuperadminOverride) {
+    throw new AppError(403, ErrorCode.FORBIDDEN, 'Cross-tenant scope is not allowed for this route');
+  }
+
+  return tenant.id;
+}
+
+async function rotateAdminApiKeyForTenant(params: {
+  tenantId: string;
+  scope: 'live' | 'test';
+  adminEmail: string;
+  idempotencyKey: string;
+  auditAction: 'tenant.key_rotated';
+  isAuditSandbox: boolean;
+}): Promise<{
+  apiKey: { createdAt: Date };
+  cachedResponse: AdminApiKeyRotationResponse;
+  status: number;
+}> {
+  const { tenantId, scope, adminEmail, idempotencyKey, auditAction, isAuditSandbox } = params;
+  const idempotencyWindowStart = new Date(Date.now() - ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS);
+  const isSandbox = scope === 'test';
+  const cacheKey = getAdminApiKeyRotationCacheKey(tenantId, auditAction, idempotencyKey);
+
+  const cachedResponse = getCachedAdminApiKeyRotationResponse(cacheKey);
+  if (cachedResponse) {
+    return {
+      apiKey: {
+        createdAt: new Date(cachedResponse.created_at),
+      },
+      cachedResponse,
+      status: 201,
+    };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${tenantId}:${idempotencyKey}:${auditAction}`}));`;
+
+    const cachedAudit = await tx.auditLog.findFirst({
+      where: {
+        tenantId,
+        entityType: 'tenant',
+        entityId: tenantId,
+        action: auditAction,
+        timestamp: {
+          gte: idempotencyWindowStart,
+        },
+        changes: {
+          path: ['idempotency_key'],
+          equals: idempotencyKey,
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+    });
+
+    if (cachedAudit) {
+      const cachedChanges = (cachedAudit.changes as Record<string, unknown> | null) ?? {};
+      const cachedResponse = cachedChanges.response as
+        | AdminApiKeyRotationResponse
+        | undefined;
+
+      if (cachedResponse) {
+        if (!cachedResponse.api_key.includes('[redacted]')) {
+          cacheAdminApiKeyRotationResponse(cacheKey, cachedResponse);
+        }
+
+        return {
+          apiKey: {
+            createdAt: new Date(cachedResponse.created_at),
+          },
+          cachedResponse,
+          status: (cachedChanges.response_status as number) || 201,
+        };
+      }
+    }
+
+    const newKey = `wlt_${scope}_${randomBytes(24).toString('hex')}`;
+    const newKeyHash = createHash('sha256').update(newKey).digest('hex');
+
+    const deactivatedKeys = await tx.apiKey.updateMany({
+      where: {
+        tenantId,
+        scope: 'admin',
+        isSandbox,
+      },
+      data: {
+        isActive: false,
+      },
+    });
+
+    const apiKey = await tx.apiKey.create({
+      data: {
+        tenantId,
+        keyHash: newKeyHash,
+        prefix: newKey.substring(0, 15),
+        scope: 'admin',
+        isSandbox,
+      },
+    });
+
+    const response: AdminApiKeyRotationResponse = {
+      api_key: newKey,
+      scope,
+      tenant_id: tenantId,
+      created_at: apiKey.createdAt.toISOString(),
+    };
+
+    cacheAdminApiKeyRotationResponse(cacheKey, response);
+
+    await tx.auditLog.create({
+      data: {
+        tenantId,
+        entityType: 'tenant',
+        entityId: tenantId,
+        action: auditAction,
+        changes: {
+          scope,
+          key_prefix: newKey.substring(0, 15),
+          rotated_by: adminEmail,
+          idempotency_key: idempotencyKey,
+          had_active_key: deactivatedKeys.count > 0,
+          response: {
+            api_key: redactApiKeyForAudit(newKey),
+            scope,
+            tenant_id: tenantId,
+            created_at: apiKey.createdAt.toISOString(),
+          },
+          response_status: 201,
+        },
+        actorId: adminEmail,
+        actorType: 'admin',
+        isSandbox: isAuditSandbox,
+      },
+    });
+
+    return {
+      apiKey,
+      cachedResponse: response,
+      status: 201,
+    };
+  });
+}
+
 // Apply admin auth to all routes
 router.use(adminAuthMiddleware);
 
@@ -385,7 +622,12 @@ router.get(
   requireAdminRole('support'),
   asyncHandler(async (req, res) => {
     const { status, currency, search, limit = 20, after } = req.query;
-    const tenantId = req.adminUser!.tenantId;
+    const parsedTenantScope = tenantScopeSchema.safeParse(req.query);
+    if (!parsedTenantScope.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid tenant scope');
+    }
+
+    const tenantId = await resolveAdminTenantScope(req, parsedTenantScope.data.tenantId);
     const isSandbox = req.isSandbox || false;
 
     const where: Prisma.WalletWhereInput = { tenantId, isSandbox };
@@ -1226,7 +1468,12 @@ router.get(
   requireAdminRole('support'),
   asyncHandler(async (req, res) => {
     const { wallet_id, actor, action, from, to, limit = 20, after } = req.query;
-    const tenantId = req.adminUser!.tenantId;
+    const parsedTenantScope = tenantScopeSchema.safeParse(req.query);
+    if (!parsedTenantScope.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid tenant scope');
+    }
+
+    const tenantId = await resolveAdminTenantScope(req, parsedTenantScope.data.tenantId);
     const isSandbox = req.isSandbox || false;
 
     const where: Prisma.AuditLogWhereInput = { tenantId, isSandbox };
@@ -1305,6 +1552,97 @@ router.get(
 );
 
 /**
+ * GET /admin/account/api-keys
+ * Get current tenant API key metadata for the active admin session
+ */
+router.get(
+  '/account/api-keys',
+  requireAdminRole('support'),
+  asyncHandler(async (req, res) => {
+    const tenantId = req.adminUser!.tenantId;
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    if (!tenant) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
+    }
+
+    const apiKeys = await prisma.apiKey.findMany({
+      where: {
+        tenantId,
+        scope: 'admin',
+        isActive: true,
+      },
+      orderBy: [{ isSandbox: 'asc' }, { createdAt: 'desc' }],
+    });
+
+    const latestKeyByEnvironment = new Map<boolean, (typeof apiKeys)[number]>();
+    for (const apiKey of apiKeys) {
+      if (!latestKeyByEnvironment.has(apiKey.isSandbox)) {
+        latestKeyByEnvironment.set(apiKey.isSandbox, apiKey);
+      }
+    }
+
+    res.json({
+      tenant_id: tenant.id,
+      tenant_name: tenant.name,
+      keys: [false, true]
+        .map((isSandbox) => latestKeyByEnvironment.get(isSandbox))
+        .filter((apiKey): apiKey is NonNullable<typeof apiKey> => Boolean(apiKey))
+        .map((apiKey) => ({
+          key_id: apiKey.id,
+          scope: apiKey.isSandbox ? 'test' : 'live',
+          prefix: apiKey.prefix,
+          created_at: apiKey.createdAt,
+          last_used_at: null,
+          is_active: apiKey.isActive,
+        })),
+    });
+  })
+);
+
+/**
+ * POST /admin/account/api-keys/rotate
+ * Rotate API keys for the current tenant
+ */
+router.post(
+  '/account/api-keys/rotate',
+  requireAdminRole('tenant_admin'),
+  asyncHandler(async (req, res) => {
+    const parsedBody = adminApiKeyRotationRequestSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'scope must be "live" or "test"');
+    }
+
+    const { scope } = parsedBody.data;
+    const tenantId = req.adminUser!.tenantId;
+    const adminEmail = req.adminUser!.email;
+
+    const result = await rotateAdminApiKeyForTenant({
+      tenantId,
+      scope,
+      adminEmail,
+      idempotencyKey: getValidatedIdempotencyKey(req.headers['idempotency-key']),
+      auditAction: 'tenant.key_rotated',
+      isAuditSandbox: req.isSandbox || false,
+    });
+
+    res.status(result.status).json({
+      api_key: result.cachedResponse.api_key,
+      scope,
+      tenant_id: tenantId,
+      created_at: result.apiKey.createdAt,
+    });
+  })
+);
+
+/**
  * GET /admin/tenants
  * List all available tenants (superadmin only)
  */
@@ -1352,20 +1690,9 @@ router.post(
     const { tenantId } = req.params;
     const { scope } = req.body;
     const adminEmail = req.adminUser!.email;
-    const idempotencyKeyHeader = req.headers['idempotency-key'];
-    const idempotencyKey = Array.isArray(idempotencyKeyHeader) ? idempotencyKeyHeader[0] : idempotencyKeyHeader;
-    const idempotencyWindowStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     if (!scope || !['live', 'test'].includes(scope)) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'scope must be "live" or "test"');
-    }
-
-    if (!idempotencyKey || typeof idempotencyKey !== 'string') {
-      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key header is required');
-    }
-
-    if (idempotencyKey.length > 255) {
-      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key must be at most 255 characters');
     }
 
     const tenant = await prisma.tenant.findUnique({
@@ -1376,143 +1703,13 @@ router.post(
       throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
     }
 
-    const isSandbox = scope === 'test';
-
-    const existingAudit = await prisma.auditLog.findFirst({
-      where: {
-        tenantId,
-        entityType: 'tenant',
-        entityId: tenantId,
-        action: 'tenant.key_rotated',
-        timestamp: {
-          gte: idempotencyWindowStart,
-        },
-        changes: {
-          path: ['idempotency_key'],
-          equals: idempotencyKey,
-        },
-      },
-      orderBy: {
-        timestamp: 'desc',
-      },
-    });
-
-    if (existingAudit) {
-      const changes = (existingAudit.changes as Record<string, unknown> | null) ?? {};
-      const cachedResponse = changes.response as
-        | { api_key: string; scope: string; tenant_id: string; created_at: string }
-        | undefined;
-
-      if (cachedResponse) {
-        return res.status((changes.response_status as number) || 201).json(cachedResponse);
-      }
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${tenantId}:${idempotencyKey}:tenant.key_rotated`}));`;
-
-      const cachedAudit = await tx.auditLog.findFirst({
-        where: {
-          tenantId,
-          entityType: 'tenant',
-          entityId: tenantId,
-          action: 'tenant.key_rotated',
-          timestamp: {
-            gte: idempotencyWindowStart,
-          },
-          changes: {
-            path: ['idempotency_key'],
-            equals: idempotencyKey,
-          },
-        },
-        orderBy: {
-          timestamp: 'desc',
-        },
-      });
-
-      if (cachedAudit) {
-        const cachedChanges = (cachedAudit.changes as Record<string, unknown> | null) ?? {};
-        const cachedResponse = cachedChanges.response as
-          | { api_key: string; scope: string; tenant_id: string; created_at: string }
-          | undefined;
-
-        if (cachedResponse) {
-          return {
-            apiKey: {
-              createdAt: new Date(cachedResponse.created_at),
-            },
-            newKey: cachedResponse.api_key,
-            cachedResponse,
-            status: (cachedChanges.response_status as number) || 201,
-          };
-        }
-      }
-
-      // Generate new API key
-      const newKey = `wlt_${scope}_${randomBytes(24).toString('hex')}`;
-      const newKeyHash = createHash('sha256').update(newKey).digest('hex');
-
-      // Deactivate old key
-      await tx.apiKey.updateMany({
-        where: {
-          tenantId,
-          scope: 'admin',
-          isSandbox,
-        },
-        data: {
-          isActive: false,
-        },
-      });
-
-      // Create new key
-      const apiKey = await tx.apiKey.create({
-        data: {
-          tenantId,
-          keyHash: newKeyHash,
-          prefix: newKey.substring(0, 15),
-          scope: 'admin',
-          isSandbox,
-        },
-      });
-
-      // Create audit log
-      await tx.auditLog.create({
-        data: {
-          tenantId,
-          entityType: 'tenant',
-          entityId: tenantId,
-          action: 'tenant.key_rotated',
-          changes: {
-            scope,
-            key_prefix: newKey.substring(0, 15),
-            rotated_by: adminEmail,
-            idempotency_key: idempotencyKey,
-            response: {
-              api_key_masked: `${newKey.substring(0, 8)}...${newKey.substring(newKey.length - 4)}`,
-              key_returned: true,
-              scope,
-              tenant_id: tenantId,
-              created_at: apiKey.createdAt.toISOString(),
-            },
-            response_status: 201,
-          },
-          actorId: adminEmail,
-          actorType: 'admin',
-          isSandbox: req.isSandbox || false,
-        },
-      });
-
-      return {
-        apiKey,
-        newKey,
-        cachedResponse: {
-          api_key: newKey,
-          scope,
-          tenant_id: tenantId,
-          created_at: apiKey.createdAt.toISOString(),
-        },
-        status: 201,
-      };
+    const result = await rotateAdminApiKeyForTenant({
+      tenantId,
+      scope,
+      adminEmail,
+      idempotencyKey: getValidatedIdempotencyKey(req.headers['idempotency-key']),
+      auditAction: 'tenant.key_rotated',
+      isAuditSandbox: req.isSandbox || false,
     });
 
     res.status(result.status).json({
