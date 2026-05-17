@@ -382,6 +382,7 @@ router.delete(
  */
 router.get(
   '/wallets',
+  requireAdminRole('support'),
   asyncHandler(async (req, res) => {
     const { status, currency, search, limit = 20, after } = req.query;
     const tenantId = req.adminUser!.tenantId;
@@ -437,6 +438,7 @@ router.get(
  */
 router.get(
   '/wallets/:walletId',
+  requireAdminRole('support'),
   asyncHandler(async (req, res) => {
     const { walletId } = req.params;
     const tenantId = req.adminUser!.tenantId;
@@ -1221,6 +1223,7 @@ router.post(
  */
 router.get(
   '/audit',
+  requireAdminRole('support'),
   asyncHandler(async (req, res) => {
     const { wallet_id, actor, action, from, to, limit = 20, after } = req.query;
     const tenantId = req.adminUser!.tenantId;

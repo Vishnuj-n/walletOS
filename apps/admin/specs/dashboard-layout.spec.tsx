@@ -10,9 +10,10 @@ jest.mock('../src/contexts/AuthContext');
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
+  usePathname: jest.fn(),
 }));
 
-const { useRouter } = require('next/navigation');
+const { useRouter, usePathname } = require('next/navigation');
 
 describe('AdminLayout', () => {
   const mockPush = jest.fn();
@@ -22,12 +23,15 @@ describe('AdminLayout', () => {
     (useRouter as jest.Mock).mockReturnValue({
       push: mockPush,
     });
+    (usePathname as jest.Mock).mockReturnValue('/dashboard');
   });
 
   it('should render successfully', () => {
     (useAuth as jest.Mock).mockReturnValue({
       adminUser: { email: 'admin@example.com', role: 'superadmin' },
       signOut: jest.fn(),
+      hasRole: jest.fn().mockReturnValue(true),
+      loading: false,
     });
 
     const { baseElement } = render(
@@ -42,6 +46,8 @@ describe('AdminLayout', () => {
     (useAuth as jest.Mock).mockReturnValue({
       adminUser: { email: 'admin@example.com', role: 'superadmin' },
       signOut: jest.fn(),
+      hasRole: jest.fn().mockReturnValue(true),
+      loading: false,
     });
 
     render(
@@ -61,6 +67,8 @@ describe('AdminLayout', () => {
     (useAuth as jest.Mock).mockReturnValue({
       adminUser: { email: 'admin@example.com', role: 'superadmin' },
       signOut: jest.fn(),
+      hasRole: jest.fn().mockReturnValue(true),
+      loading: false,
     });
 
     render(
@@ -77,6 +85,8 @@ describe('AdminLayout', () => {
     (useAuth as jest.Mock).mockReturnValue({
       adminUser: { email: 'admin@example.com', role: 'superadmin' },
       signOut: jest.fn(),
+      hasRole: jest.fn().mockReturnValue(true),
+      loading: false,
     });
 
     render(
@@ -94,6 +104,8 @@ describe('AdminLayout', () => {
     (useAuth as jest.Mock).mockReturnValue({
       adminUser: { email: 'admin@example.com', role: 'superadmin' },
       signOut: mockSignOut,
+      hasRole: jest.fn().mockReturnValue(true),
+      loading: false,
     });
 
     render(
@@ -114,6 +126,8 @@ describe('AdminLayout', () => {
     (useAuth as jest.Mock).mockReturnValue({
       adminUser: { email: 'admin@example.com', role: 'superadmin' },
       signOut: jest.fn(),
+      hasRole: jest.fn().mockReturnValue(true),
+      loading: false,
     });
 
     render(
@@ -130,6 +144,8 @@ describe('AdminLayout', () => {
     (useAuth as jest.Mock).mockReturnValue({
       adminUser: null,
       signOut: jest.fn(),
+      hasRole: jest.fn().mockReturnValue(true),
+      loading: false,
     });
 
     render(
@@ -152,6 +168,8 @@ describe('AdminPage', () => {
     (useAuth as jest.Mock).mockReturnValue({
       adminUser: { email: 'admin@example.com', role: 'superadmin' },
       signOut: jest.fn(),
+      hasRole: jest.fn().mockReturnValue(true),
+      loading: false,
     });
   });
 
