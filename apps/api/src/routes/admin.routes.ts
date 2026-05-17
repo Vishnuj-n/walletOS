@@ -1973,7 +1973,9 @@ router.get(
 
     const where: Prisma.TransactionWhereInput = { 
       tenantId: tenantBoundary,
-      isSandbox: req.isSandbox,
+      wallet: {
+        isSandbox: req.isSandbox,
+      },
     };
 
     if (transactionId) {
