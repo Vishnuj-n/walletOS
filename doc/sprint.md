@@ -74,7 +74,7 @@ Deliver internal tools for support and operations staff.
 **Docs / Context:** APP FLOW.md, Requirements.md, Data API.md
 
 
-# Sprint 4: Advanced Governance, RBAC & Scoped Dashboards [IN PROGRESS]
+# Sprint 4: Advanced Governance, RBAC & Scoped Dashboards [DONE]
 
 ## Goal
 Transition from a single-admin MVP to a professional Multi-Tenant platform using Hierarchical RBAC, strict type contracts, and scoped data visibility.
@@ -85,9 +85,9 @@ Transition from a single-admin MVP to a professional Multi-Tenant platform using
 - Auth Context Migration [DONE]: Migrated AuthContext.tsx to shared types and added runtime /admin/me guards.
 - Hierarchical RBAC [DONE]: Implemented the hierarchy climb (support < finance < tenant_admin < superadmin) and verified logic in middleware/context.
 - Global Error Mapping [DONE]: Implemented shared error dictionary and professional mapping from ErrorCode to UI strings.
-- Tenant Data Scoping: Enforce strict tenantId boundaries in the API and search routes so tenants cannot query cross-tenant data.
-- Permission Gating (UI): Build the flexible <PermissionGate> component to replace hardcoded role checks in the dashboard.
-- Runtime Safety (Phase 2): Implement Zod-based runtime validation for /admin/me, transaction search, and wallet creation payloads.
+- Tenant Data Scoping [DONE]: Enforced strict tenantId boundaries in API and global search routes to prevent cross-tenant querying.
+- Permission Gating (UI) [DONE]: Replaced remaining hardcoded dashboard role checks with the declarative <PermissionGate> wrapper.
+- Runtime Safety (Phase 2) [DONE]: Implemented Zod runtime validation for /admin/me, transaction search, and wallet creation payloads.
 
 **Agent to Use:** apps/admin/AGENTS.md + apps/api/AGENTS.md  
 **Skills to Use:** design, write, check  

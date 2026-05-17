@@ -1,14 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useAuth } from '../../../contexts/AuthContext';
 import { searchWallets, searchTransactions } from '../../../services/adminService';
 import type { TransactionSearchQuery, TransactionSearchResponse, WalletSearchResponse } from '@walletOS/types';
 import { Search, Wallet, ArrowLeftRight, Building2 } from 'lucide-react';
 import { PermissionGate } from '../../../components/PermissionGate';
 
 export default function GlobalSearchPage() {
-  const { hasRole } = useAuth();
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'wallets' | 'transactions'>('wallets');
   const [walletResults, setWalletResults] = useState<WalletSearchResponse | null>(null);
@@ -55,19 +53,18 @@ export default function GlobalSearchPage() {
     }
   };
 
-  if (!hasRole('superadmin')) {
-    return (
-      <div className="min-h-screen bg-slate-50 p-6">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <h3 className="text-lg font-medium text-yellow-800">Access Denied</h3>
-          <p className="text-yellow-700 mt-2">This feature is only available to superadmins.</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <PermissionGate minRole="superadmin">
+    <PermissionGate
+      minRole="superadmin"
+      fallback={
+        <div className="min-h-screen bg-slate-50 p-6">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <h3 className="text-lg font-medium text-yellow-800">Access Denied</h3>
+            <p className="text-yellow-700 mt-2">This feature is only available to superadmins.</p>
+          </div>
+        </div>
+      }
+    >
       <div className="p-6">
         <div className="mb-4">
           <h1 className="text-lg font-semibold text-slate-900 mb-1">Global Search</h1>
