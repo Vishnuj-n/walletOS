@@ -94,16 +94,16 @@ Transition from a single-admin MVP to a professional Multi-Tenant platform using
 **Docs / Context:** Architecture.md, Data API.md
 
 
-# Sprint 4.5: The Tenant Dashboard
+# Sprint 4.5: The Unified Multi-Tenant Dashboard
 
 ## Goal
-Build the isolated, scoped dashboard for Tenant Admins (e.g., Zomato staff) to manage their specific user wallets, reusing UI components from the Superadmin view.
+Enforce dynamic multi-tenant data isolation and role-based feature gating inside our single, shared admin dashboard layout (`/dashboard`), ensuring tenant users only see their own workspace metrics without duplicating UI code.
 
 ## Tasks
-- UI Extraction: Refactor dashboard pages to extract StatCard, NavItem, and ActionButton into a shared components/ui directory.
-- Tenant Routing: Create parallel dashboard routes (e.g., /dashboard/tenant) that load distinct, scoped layouts.
-- Tenant KPI Wiring: Connect the Tenant Dashboard KPI cards to API routes that strictly fetch data for only their tenantId.
-- API Key Management UI: Add a settings tab in the Tenant Dashboard allowing Tenant Admins to view their sandbox keys and request rotation.
+- UI Extraction [DONE]: Ensure `StatCard`, `NavItem`, and `ActionButton` live inside a shared `components/ui` directory to prevent styling and behavior duplication.
+- Context-Driven Sidebar Gating: Refactor the primary dashboard sidebar to use the existing `<PermissionGate>` component. Hide platform-level tabs (Global Tenant Creation, System Balances, Audit Streams) for sessions with `tenant_admin` or lower roles.
+- Implicit Tenant Data Scoping: Ensure dashboard listing tables and KPI queries automatically forward the active session's `tenantId` to backend queries. The UI should not require separate tenant-specific routes to show isolated data.
+- API Key Management Component: Add a scoped configuration panel on the dashboard account settings tab that allows `tenant_admin` users to view key prefixes and request rotations via the backend API.
 
 **Agent to Use:** apps/admin/AGENTS.md  
 **Skills to Use:** design, write, check  

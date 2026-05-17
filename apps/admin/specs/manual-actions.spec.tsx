@@ -43,14 +43,14 @@ describe('ManualActionsPage', () => {
     render(<ManualActionsPage />);
     const debitButton = screen.getByText('Debit');
     fireEvent.click(debitButton);
-    expect(debitButton).toHaveClass('bg-indigo-600', 'text-white');
+    expect(debitButton).toHaveClass('bg-blue-600', 'text-white');
   });
 
   it('should switch to reversal action type when Reversal button is clicked', () => {
     render(<ManualActionsPage />);
     const reversalButton = screen.getByText('Reversal');
     fireEvent.click(reversalButton);
-    expect(reversalButton).toHaveClass('bg-indigo-600', 'text-white');
+    expect(reversalButton).toHaveClass('bg-blue-600', 'text-white');
   });
 
   it('should show wallet ID, amount, description, reference ID, and reason fields for credit action', () => {
@@ -243,7 +243,7 @@ describe('ManualActionsPage', () => {
   });
 
   it('should disable submit button while loading', async () => {
-    let resolvePromise: (value: { transaction_id: string }) => void;
+    let resolvePromise: (value: { transaction_id: string }) => void = () => {};
     (creditWallet as jest.Mock).mockImplementation(
       () =>
         new Promise((resolve) => {
