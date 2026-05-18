@@ -1,30 +1,46 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
-import { fetchSessionForWallet } from '../lib/api-client';
-import { walletQueryKeys } from '../lib/queries';
+import { useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { SessionBootstrapState } from '../types/wallet';
+import { validateSessionBootstrap } from '../lib/api-client';
 
-export function useWalletSession(walletId: string) {
-  const query = useQuery({
-    queryKey: walletQueryKeys.session(walletId),
-    queryFn: () => fetchSessionForWallet(walletId),
-    enabled: Boolean(walletId),
-  });
+const STORAGE_KEYS = {
+  token: 'walletos.session.token',
+  walletId: 'walletos.session.wallet_id',
+  expiresAt: 'walletos.session.expires_at',
+} as const;
 
-  useEffect(() => {
-    if (!query.data?.expires_at) return;
+export function useWalletSession(): SessionBootstrapState & { isReady: boolean } {
+  const searchParams = useSearchParams();
 
-    const expiresAt = new Date(query.data.expires_at).getTime();
-    const refreshInMs = Math.max(expiresAt - Date.now() - 5 * 60 * 1000, 0);
-    const timerId = window.setTimeout(() => {
-      void query.refetch();
-    }, refreshInMs);
+  const state = useMemo(() => {
+    const tokenFromQuery =
+      searchParams.get('token') || searchParams.get('session_token') || searchParams.get('session');
+    const walletIdFromQuery = searchParams.get('wallet_id');
+    const expiresAtFromQuery = searchParams.get('expires_at');
 
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [query.data?.expires_at, query.refetch]);
+    if (tokenFromQuery && walletIdFromQuery) {
+      window.localStorage.setItem(STORAGE_KEYS.token, tokenFromQuery);
+      window.localStorage.setItem(STORAGE_KEYS.walletId, walletIdFromQuery);
+      if (expiresAtFromQuery) {
+        window.localStorage.setItem(STORAGE_KEYS.expiresAt, expiresAtFromQuery);
+      }
+      const validated = validateSessionBootstrap({
+        token: tokenFromQuery,
+        walletId: walletIdFromQuery,
+        expiresAt: expiresAtFromQuery || null,
+      });
+      return { ...validated, source: 'query' as const, isReady: !validated.error };
+    }
 
-  return query;
+    const fromStorage = validateSessionBootstrap({
+      token: window.localStorage.getItem(STORAGE_KEYS.token),
+      walletId: window.localStorage.getItem(STORAGE_KEYS.walletId),
+      expiresAt: window.localStorage.getItem(STORAGE_KEYS.expiresAt) || null,
+    });
+    return { ...fromStorage, source: 'storage' as const, isReady: !fromStorage.error };
+  }, [searchParams]);
+
+  return state;
 }
