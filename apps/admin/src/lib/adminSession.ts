@@ -3,6 +3,33 @@ import { hasRequiredRole } from '@walletOS/types';
 
 const ADMIN_SESSION_STORAGE_KEY = 'walletos.admin.session';
 
+function isValidAdminUserInfo(value: unknown): value is AdminUserInfo {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const obj = value as Record<string, unknown>;
+  
+  // Validate required fields and types
+  if (typeof obj.id !== 'string' || !obj.id) {
+    return false;
+  }
+  if (typeof obj.email !== 'string' || !obj.email) {
+    return false;
+  }
+  if (typeof obj.tenantId !== 'string' || !obj.tenantId) {
+    return false;
+  }
+  
+  // Validate role is an allowed value
+  const validRoles = ['support', 'finance', 'tenant_admin', 'superadmin'];
+  if (!validRoles.includes(obj.role as string)) {
+    return false;
+  }
+  
+  return true;
+}
+
 function readStoredAdminUser(): AdminUserInfo | null {
   if (typeof window === 'undefined') {
     return null;
@@ -14,7 +41,12 @@ function readStoredAdminUser(): AdminUserInfo | null {
   }
 
   try {
-    return JSON.parse(raw) as AdminUserInfo;
+    const parsed = JSON.parse(raw);
+    if (!isValidAdminUserInfo(parsed)) {
+      window.sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+      return null;
+    }
+    return parsed;
   } catch {
     window.sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
     return null;

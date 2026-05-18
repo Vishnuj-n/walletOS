@@ -98,7 +98,7 @@ Every money movement is a Transaction. Transactions are immutable once created -
 | **Reverse transaction**        | Create a reversal for a previous credit or debit. Accepts: original_transaction_id, reason. Creates a new transaction of the opposite type with a link to the original. Cannot reverse a reversal. | **P0**       | POST     |
 | **Get transaction**            | Fetch a single transaction by ID. Returns full detail including linked transactions (e.g. the original for a reversal).                                                                            | **P0**       | GET      |
 | **List transactions**          | Paginated transaction history for a wallet. Filters: type (credit/debit/reversal), date range, min/max amount, reference_id. Sorted by created_at DESC.                                            | **P0**       | GET      |
-| **Idempotency**                | All write operations accept an idempotency_key header. If a key is reused within 24 hours, the original response is returned without re-executing. Prevents double-credit on retries.              | **P0**       | Header   |
+| **Idempotency**                | All write operations accept an idempotency_key header. If a key is reused within 30 days, the original response is returned without re-executing. Prevents double-credit on retries.              | **P0**       | Header   |
 | **Balance lock (concurrency)** | Wallet row is locked using SELECT FOR UPDATE inside a database transaction before any debit. Prevents race conditions when two requests debit simultaneously.                                      | **P0**       | Internal |
 
 ## **5.3 Multi-Tenancy & API Keys**
@@ -151,7 +151,7 @@ Consuming projects register webhook URLs to receive real-time notifications when
 WalletOS ships a ready-to-use web frontend that consuming projects can embed. This removes the need for consuming projects to build their own wallet UI. The primary experience is a desktop web application - fully responsive down to tablet and mobile browser widths. Two integration modes:
 
 - Embeddable iframe - drop a single script tag + div into any web page, point it at the WalletOS CDN with a session token, and get the full wallet UI rendered inside your page.
-- React component library - npm install @walletOS/ui and use &lt;WalletCard /&gt;, &lt;TransactionHistory /&gt;, &lt;WalletSummary /&gt; directly in your React web app.
+- React component library - npm install @walletos/ui and use &lt;WalletCard /&gt;, &lt;TransactionHistory /&gt;, &lt;WalletSummary /&gt; directly in your React web app.
 
 ## **6.1 Wallet Dashboard Page**
 
@@ -263,7 +263,7 @@ Rate limits are enforced per API key: 1,000 requests/minute for read endpoints a
 | **Availability**        | 99.9% uptime (SLA)          | ~8.7 hours downtime/year maximum.                        |
 | **Data durability**     | Zero data loss              | Postgres with synchronous replication. No async writes.  |
 | **Balance consistency** | Strong consistency          | Row-level locking. No eventual consistency for balances. |
-| **Security**            | TLS 1.3, at-rest encryption | API keys hashed (bcrypt). PII fields encrypted at rest.  |
+| **Security**            | TLS 1.3, at-rest encryption | API keys hashed (SHA-256). PII fields encrypted at rest.  |
 | **Audit retention**     | 7 years                     | Regulatory minimum for financial records.                |
 | **Admin UI load**       | < 2s for wallet detail      | Including transaction list (first page).                 |
 

@@ -187,7 +187,7 @@ Implement the missing Phase 1 features from the PRD and deploy the critical Webh
 ## Tasks
 
 ### 7a-7c: Webhook Dispatcher (P1 Core)
-- **Task 7a: Transaction State Event Publisher:** Embed execution hooks inside `transaction.service.ts` to capture finalized database commits. When a transaction is created or reversed, instantiate a corresponding `WebhookDelivery` entry with event type (`transaction.created`, `transaction.reversed`), tenant ID, and raw payload.
+- **Task 7a: Transaction State Event Publisher:** Embed execution hooks inside `transaction.service.ts` to capture finalized database commits. When a transaction is created or reversed, instantiate a corresponding `WebhookDelivery` entry with event type (`wallet.credited`, `wallet.debited`, `wallet.reversed`), tenant ID, and raw payload.
 - **Task 7b: Cryptographic Signature Engine:** Author utility functions computing HMAC-SHA256 signature hashes using the tenant's webhook secret. Sign each outbound payload with `X-WalletOS-Signature: sha256=<hex>` header. Document signature verification in API docs.
 - **Task 7c: Post-Commit Delivery Queue Worker:** Construct background job handlers (Bull/BullMQ) managing webhook deliveries. Implement exponential backoff retries: immediate, 30s, 2m, 15m, 2h. After 5 failures, move to dead-letter queue. Store attempt logs (timestamp, status, response code) for debugging.
 

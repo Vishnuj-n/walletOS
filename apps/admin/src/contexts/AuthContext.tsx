@@ -42,13 +42,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [adminUser, setAdminUser] = useState<AdminUserInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const latestAccessTokenRef = { current: '' };
 
   const fetchAdminUser = async (supabaseUser: User | null, accessToken?: string | null) => {
     if (!supabaseUser || !accessToken) {
-      setAdminUser(null);
-      setAdminSession(null);
+      // Only clear if this is still the latest request
+      if (latestAccessTokenRef.current === accessToken) {
+        setAdminUser(null);
+        setAdminSession(null);
+      }
       return;
     }
+
+    // Track this as the latest request
+    latestAccessTokenRef.current = accessToken;
+    const requestToken = accessToken;
 
     try {
       const response = await fetch('/api/admin/me', {
@@ -56,6 +64,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           Authorization: `Bearer ${accessToken}`,
         },
       });
+
+      // Only apply results if this request is still the latest
+      if (requestToken !== latestAccessTokenRef.current) {
+        return;
+      }
 
       if (response.ok) {
         const data: unknown = await response.json();
@@ -71,8 +84,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAdminSession(null);
       }
     } catch {
-      setAdminUser(null);
-      setAdminSession(null);
+      // Only apply error state if this request is still the latest
+      if (requestToken === latestAccessTokenRef.current) {
+        setAdminUser(null);
+        setAdminSession(null);
+      }
     }
   };
 

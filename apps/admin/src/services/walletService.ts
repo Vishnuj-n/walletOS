@@ -73,6 +73,7 @@ export async function updateWallet(walletId: string, data: UpdateWalletRequest):
   return apiRequest<Wallet>(`/admin/wallets/${walletId}`, {
     method: 'PATCH',
     body: data,
+    requireIdempotencyKey: true,
     fallbackMessage: 'Failed to update wallet',
   });
 }
@@ -81,6 +82,7 @@ export async function closeWallet(walletId: string, reason: string): Promise<Wal
   return apiRequest<Wallet>(`/admin/wallets/${walletId}`, {
     method: 'DELETE',
     body: { reason },
+    requireIdempotencyKey: true,
     fallbackMessage: 'Failed to close wallet',
   });
 }
@@ -89,6 +91,7 @@ export async function freezeWallet(walletId: string, reason: string): Promise<vo
   await apiRequest<void>(`/admin/wallets/${walletId}/freeze`, {
     method: 'POST',
     body: { reason },
+    requireIdempotencyKey: true,
     fallbackMessage: 'Failed to freeze wallet',
   });
 }
@@ -97,6 +100,7 @@ export async function unfreezeWallet(walletId: string, reason: string): Promise<
   await apiRequest<void>(`/admin/wallets/${walletId}/unfreeze`, {
     method: 'POST',
     body: { reason },
+    requireIdempotencyKey: true,
     fallbackMessage: 'Failed to unfreeze wallet',
   });
 }

@@ -183,7 +183,7 @@ export default function SettingsPage() {
 
                 <button
                   onClick={() => handleRotate(scope)}
-                  disabled={rotationLoading === scope}
+                  disabled={rotationLoading !== null}
                   className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                 >
                   <ShieldCheck size={14} />

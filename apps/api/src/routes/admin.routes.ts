@@ -61,7 +61,7 @@ const adminApiKeyRotationResponseCache = new Map<
   string,
   { response: AdminApiKeyRotationResponse; expiresAt: number }
 >();
-const ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const ADMIN_API_KEY_ROTATION_CACHE_TTL_MS = ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS;
 
 function getValidatedIdempotencyKey(idempotencyKeyHeader: string | string[] | undefined): string {
@@ -78,8 +78,8 @@ function getValidatedIdempotencyKey(idempotencyKeyHeader: string | string[] | un
   return idempotencyKey;
 }
 
-function getAdminApiKeyRotationCacheKey(tenantId: string, auditAction: string, idempotencyKey: string): string {
-  return `${tenantId}:${auditAction}:${idempotencyKey}`;
+function getAdminApiKeyRotationCacheKey(tenantId: string, scope: 'live' | 'test', auditAction: string, idempotencyKey: string): string {
+  return `${tenantId}:${scope}:${auditAction}:${idempotencyKey}`;
 }
 
 function getCachedAdminApiKeyRotationResponse(cacheKey: string): AdminApiKeyRotationResponse | undefined {
@@ -121,6 +121,15 @@ async function resolveAdminTenantScope(
     return tenantId;
   }
 
+  // Check authorization before tenant lookup to avoid leaking tenant existence
+  if (!isSuperadmin) {
+    throw new AppError(403, ErrorCode.FORBIDDEN, 'Tenant scope is limited to your assigned tenant');
+  }
+
+  if (!options?.allowSuperadminOverride) {
+    throw new AppError(403, ErrorCode.FORBIDDEN, 'Cross-tenant scope is not allowed for this route');
+  }
+
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { id: true },
@@ -128,14 +137,6 @@ async function resolveAdminTenantScope(
 
   if (!tenant) {
     throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
-  }
-
-  if (!isSuperadmin) {
-    throw new AppError(403, ErrorCode.FORBIDDEN, 'Tenant scope is limited to your assigned tenant');
-  }
-
-  if (!options?.allowSuperadminOverride) {
-    throw new AppError(403, ErrorCode.FORBIDDEN, 'Cross-tenant scope is not allowed for this route');
   }
 
   return tenant.id;
@@ -156,7 +157,7 @@ async function rotateAdminApiKeyForTenant(params: {
   const { tenantId, scope, adminEmail, idempotencyKey, auditAction, isAuditSandbox } = params;
   const idempotencyWindowStart = new Date(Date.now() - ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS);
   const isSandbox = scope === 'test';
-  const cacheKey = getAdminApiKeyRotationCacheKey(tenantId, auditAction, idempotencyKey);
+  const cacheKey = getAdminApiKeyRotationCacheKey(tenantId, scope, auditAction, idempotencyKey);
 
   const cachedResponse = getCachedAdminApiKeyRotationResponse(cacheKey);
   if (cachedResponse) {
@@ -198,17 +199,26 @@ async function rotateAdminApiKeyForTenant(params: {
         | undefined;
 
       if (cachedResponse) {
+        // If we have the raw API key in the audit log (not redacted), reuse it.
         if (!cachedResponse.api_key.includes('[redacted]')) {
           cacheAdminApiKeyRotationResponse(cacheKey, cachedResponse);
+          return {
+            apiKey: {
+              createdAt: new Date(cachedResponse.created_at),
+            },
+            cachedResponse,
+            status: (cachedChanges.response_status as number) || 201,
+          };
         }
 
-        return {
-          apiKey: {
-            createdAt: new Date(cachedResponse.created_at),
-          },
-          cachedResponse,
-          status: (cachedChanges.response_status as number) || 201,
-        };
+        // Audit only contains a redacted value. Recovery without a secure cache
+        // that persisted the raw key is unsafe — fail explicitly instead of
+        // regenerating or returning redacted secrets.
+        throw new AppError(
+          500,
+          ErrorCode.INTERNAL_ERROR,
+          'Raw API key unavailable from audit logs; rotation cannot be safely recovered'
+        );
       }
     }
 
@@ -1595,11 +1605,11 @@ router.get(
       keys: [false, true]
         .map((isSandbox) => latestKeyByEnvironment.get(isSandbox))
         .filter((apiKey): apiKey is NonNullable<typeof apiKey> => Boolean(apiKey))
-        .map((apiKey) => ({
+          .map((apiKey) => ({
           key_id: apiKey.id,
           scope: apiKey.isSandbox ? 'test' : 'live',
           prefix: apiKey.prefix,
-          created_at: apiKey.createdAt,
+          created_at: apiKey.createdAt.toISOString(),
           last_used_at: null,
           is_active: apiKey.isActive,
         })),
@@ -1637,7 +1647,7 @@ router.post(
       api_key: result.cachedResponse.api_key,
       scope,
       tenant_id: tenantId,
-      created_at: result.apiKey.createdAt,
+      created_at: result.cachedResponse.created_at,
     });
   })
 );
@@ -1716,7 +1726,7 @@ router.post(
       api_key: result.cachedResponse.api_key,
       scope,
       tenant_id: tenantId,
-      created_at: result.apiKey.createdAt,
+      created_at: result.cachedResponse.created_at,
     });
   })
 );

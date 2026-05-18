@@ -182,6 +182,8 @@ export default function DashboardPage() {
   const { adminUser, loading } = useRequireAuth();
   const router = useRouter();
 
+  const searchCap = getDashboardCapability('search');
+
   const visibleCapabilities = adminUser ? DASHBOARD_CAPABILITIES : [];
 
   if (loading) {
@@ -238,18 +240,18 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <SystemBalanceWidget />
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 xl:col-span-2">
-              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-3">
                 <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
                   <Search size={18} />
                 </div>
-                <span className="text-[11px] font-mono text-slate-400">{getDashboardCapability('search')?.href.replace('/dashboard', '')}</span>
+                <span className="text-[11px] font-mono text-slate-400">{searchCap?.href?.replace('/dashboard', '')}</span>
               </div>
-              <h3 className="text-sm font-semibold text-slate-900 mb-1">{getDashboardCapability('search')?.label}</h3>
+              <h3 className="text-sm font-semibold text-slate-900 mb-1">{searchCap?.label}</h3>
               <p className="text-xs text-slate-500 mb-4">
-                {getDashboardCapability('search')?.description}
+                {searchCap?.description}
               </p>
               <button
-                onClick={() => router.push(getDashboardCapability('search')?.href ?? '/dashboard/search')}
+                onClick={() => router.push(searchCap?.href ?? '/dashboard/search')}
                 className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3 py-2 rounded-lg inline-flex items-center gap-2"
               >
                 Open Search <ArrowRight size={14} />

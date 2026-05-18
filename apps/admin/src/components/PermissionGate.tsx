@@ -13,7 +13,7 @@ export function PermissionGate({ children, minRole, fallback = null }: Permissio
   const { hasRole, loading } = useAuth();
 
   if (loading) {
-    return fallback ? <>{fallback}</> : <div className="animate-pulse">Loading...</div>;
+    return <div className="animate-pulse">Loading...</div>;
   }
 
   if (!hasRole(minRole)) {
