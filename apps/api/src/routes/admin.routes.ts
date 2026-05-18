@@ -1557,7 +1557,7 @@ router.get(
  */
 router.get(
   '/account/api-keys',
-  requireAdminRole('support'),
+  requireAdminRole('tenant_admin'),
   asyncHandler(async (req, res) => {
     const tenantId = req.adminUser!.tenantId;
 

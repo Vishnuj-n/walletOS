@@ -16,6 +16,7 @@ function scopeLabel(scope: TenantApiKeyMetadata['scope']): string {
 
 export default function SettingsPage() {
   const { adminUser, hasRole } = useAuth();
+  const canManageApiKeys = hasRole('tenant_admin');
   const [settings, setSettings] = useState<TenantApiKeySettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +33,13 @@ export default function SettingsPage() {
   }, [settings]);
 
   const loadSettings = useCallback(async () => {
+    if (!canManageApiKeys) {
+      setSettings(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -43,7 +51,7 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canManageApiKeys]);
 
   useEffect(() => {
     loadSettings();
@@ -128,51 +136,51 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {(['live', 'test'] as const).map((scope) => {
-          const key = keysByScope.get(scope);
+      <PermissionGate minRole="tenant_admin">
+        <div className="grid gap-4 lg:grid-cols-2">
+          {(['live', 'test'] as const).map((scope) => {
+            const key = keysByScope.get(scope);
 
-          return (
-            <div key={scope} className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="inline-flex items-center gap-2">
-                  <div className={`rounded-lg p-2 ${scope === 'live' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                    <KeyRound size={16} />
+            return (
+              <div key={scope} className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="inline-flex items-center gap-2">
+                    <div className={`rounded-lg p-2 ${scope === 'live' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                      <KeyRound size={16} />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900">{scopeLabel(scope)}</h2>
+                      <p className="text-xs text-slate-500">
+                        {scope === 'live' ? 'Used for production API traffic.' : 'Used for sandbox API traffic.'}
+                      </p>
+                    </div>
                   </div>
+                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${key?.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {key?.is_active ? 'Active' : 'Not issued'}
+                  </span>
+                </div>
+
+                <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <div>
-                    <h2 className="text-sm font-semibold text-slate-900">{scopeLabel(scope)}</h2>
-                    <p className="text-xs text-slate-500">
-                      {scope === 'live' ? 'Used for production API traffic.' : 'Used for sandbox API traffic.'}
-                    </p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Prefix</p>
+                    <p className="mt-1 text-sm font-mono text-slate-900">{key?.prefix ?? 'Not available'}</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Created</p>
+                      <p className="mt-1 text-sm text-slate-700">
+                        {key ? new Date(key.created_at).toLocaleString() : 'Not available'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last Used</p>
+                      <p className="mt-1 text-sm text-slate-700">
+                        {key?.last_used_at ? new Date(key.last_used_at).toLocaleString() : 'Never recorded'}
+                      </p>
+                    </div>
                   </div>
                 </div>
-                <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${key?.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
-                  {key?.is_active ? 'Active' : 'Not issued'}
-                </span>
-              </div>
 
-              <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Prefix</p>
-                  <p className="mt-1 text-sm font-mono text-slate-900">{key?.prefix ?? 'Not available'}</p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Created</p>
-                    <p className="mt-1 text-sm text-slate-700">
-                      {key ? new Date(key.created_at).toLocaleString() : 'Not available'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last Used</p>
-                    <p className="mt-1 text-sm text-slate-700">
-                      {key?.last_used_at ? new Date(key.last_used_at).toLocaleString() : 'Never recorded'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <PermissionGate minRole="tenant_admin">
                 <button
                   onClick={() => handleRotate(scope)}
                   disabled={rotationLoading === scope}
@@ -181,21 +189,21 @@ export default function SettingsPage() {
                   <ShieldCheck size={14} />
                   {rotationLoading === scope ? 'Rotating...' : `Rotate ${scopeLabel(scope)}`}
                 </button>
-              </PermissionGate>
-            </div>
-          );
-        })}
-      </div>
-
-      {revealedKey && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-amber-900">New {scopeLabel(revealedKey.scope)}</h2>
-          <p className="mt-1 text-sm text-amber-800">This secret is shown once. Store it securely now.</p>
-          <div className="mt-4 rounded-lg border border-amber-200 bg-white p-3">
-            <code className="break-all text-sm text-slate-900">{revealedKey.value}</code>
-          </div>
+              </div>
+            );
+          })}
         </div>
-      )}
+
+        {revealedKey && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-amber-900">New {scopeLabel(revealedKey.scope)}</h2>
+            <p className="mt-1 text-sm text-amber-800">This secret is shown once. Store it securely now.</p>
+            <div className="mt-4 rounded-lg border border-amber-200 bg-white p-3">
+              <code className="break-all text-sm text-slate-900">{revealedKey.value}</code>
+            </div>
+          </div>
+        )}
+      </PermissionGate>
 
       {!hasRole('tenant_admin') && (
         <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
