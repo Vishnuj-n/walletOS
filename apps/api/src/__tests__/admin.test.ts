@@ -1,4 +1,6 @@
 import request from 'supertest';
+import { createHash } from 'crypto';
+import { AdminRole } from '@prisma/client';
 import { app } from '../main';
 import { prisma } from '../lib/prisma';
 
@@ -55,7 +57,7 @@ describe('Admin API Endpoints', () => {
         tenantId: 'default',
         supabaseUid: 'test-admin-uuid',
         email: 'admin@test.com',
-        role: 'superadmin',
+        role: AdminRole.superadmin,
         isActive: true,
       },
     });
@@ -692,12 +694,12 @@ describe('Admin API Endpoints', () => {
             supabaseUid: 'support-uuid',
           },
         },
-        update: { role: 'support', isActive: true },
+        update: { role: AdminRole.support, isActive: true },
         create: {
           tenantId: 'default',
           supabaseUid: 'support-uuid',
           email: 'support@test.com',
-          role: 'support',
+          role: AdminRole.support,
           isActive: true,
         },
       });
@@ -719,6 +721,129 @@ describe('Admin API Endpoints', () => {
 
       expect(response.status).toBe(403);
       expect(response.body.error.code).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('Tenant-scoped admin session routes', () => {
+    beforeEach(async () => {
+      await prisma.adminUser.updateMany({
+        where: { tenantId: testTenantId, supabaseUid: 'test-admin-uuid' },
+        data: { role: AdminRole.tenant_admin, isActive: true },
+      });
+
+      await prisma.apiKey.deleteMany({
+        where: { tenantId: testTenantId, scope: 'admin' },
+      });
+
+      await prisma.apiKey.createMany({
+        data: [
+          {
+            tenantId: testTenantId,
+            keyHash: createHash('sha256').update(`wlt_live_seed_${Date.now()}`).digest('hex'),
+            prefix: 'wlt_live_seed_',
+            scope: 'admin',
+            isSandbox: false,
+            isActive: true,
+          },
+          {
+            tenantId: testTenantId,
+            keyHash: createHash('sha256').update(`wlt_test_seed_${Date.now()}`).digest('hex'),
+            prefix: 'wlt_test_seed_',
+            scope: 'admin',
+            isSandbox: true,
+            isActive: true,
+          },
+        ],
+      });
+    });
+
+    afterEach(async () => {
+      await prisma.adminUser.updateMany({
+        where: { tenantId: testTenantId, supabaseUid: 'test-admin-uuid' },
+        data: { role: AdminRole.superadmin, isActive: true },
+      });
+    });
+
+    it('should reject mismatched tenantId for non-superadmin wallet queries', async () => {
+      const otherTenant = await prisma.tenant.create({
+        data: {
+          name: `Other Tenant ${Date.now()}`,
+          contactEmail: `other-${Date.now()}@example.com`,
+        },
+      });
+
+      const response = await request(app)
+        .get(`/api/v1/admin/wallets?tenantId=${otherTenant.id}`)
+        .set('Authorization', adminAuthToken);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error.code).toBe('FORBIDDEN');
+
+      await prisma.tenant.delete({ where: { id: otherTenant.id } });
+    });
+
+    it('should return current tenant key prefixes for tenant admins', async () => {
+      const response = await request(app)
+        .get('/api/v1/admin/account/api-keys')
+        .set('Authorization', adminAuthToken);
+
+      expect(response.status).toBe(200);
+      expect(response.body.tenant_id).toBe(testTenantId);
+      expect(response.body.keys).toHaveLength(2);
+      expect(response.body.keys.map((key: { scope: string }) => key.scope).sort()).toEqual(['live', 'test']);
+    });
+
+    it('should rotate the current tenant live key and return it once', async () => {
+      const idempotencyKey = `tenant-admin-live-rotate-${Date.now()}`;
+
+      const response = await request(app)
+        .post('/api/v1/admin/account/api-keys/rotate')
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', idempotencyKey)
+        .send({ scope: 'live' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.tenant_id).toBe(testTenantId);
+      expect(response.body.scope).toBe('live');
+      expect(response.body.api_key).toMatch(/^wlt_live_/);
+
+      const retryResponse = await request(app)
+        .post('/api/v1/admin/account/api-keys/rotate')
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', idempotencyKey)
+        .send({ scope: 'live' });
+
+      expect(retryResponse.status).toBe(201);
+      expect(retryResponse.body.api_key).toBe(response.body.api_key);
+
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: testTenantId,
+          action: 'tenant.key_rotated',
+          actorId: 'admin@test.com',
+        },
+        orderBy: { timestamp: 'desc' },
+      });
+
+      expect(auditLog).toBeDefined();
+      const auditChanges = (auditLog?.changes as Record<string, unknown>) ?? {};
+      const auditResponse = (auditChanges.response as { api_key?: string } | undefined) ?? {};
+
+      expect(auditChanges.scope).toBe('live');
+      expect(auditResponse.api_key).toContain('[redacted]');
+      expect(auditResponse.api_key).not.toBe(response.body.api_key);
+    });
+
+    it('should rotate the current tenant test key for tenant admins', async () => {
+      const response = await request(app)
+        .post('/api/v1/admin/account/api-keys/rotate')
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', `tenant-admin-test-rotate-${Date.now()}`)
+        .send({ scope: 'test' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.scope).toBe('test');
+      expect(response.body.api_key).toMatch(/^wlt_test_/);
     });
   });
 

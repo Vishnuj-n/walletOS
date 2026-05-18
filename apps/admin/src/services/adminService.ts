@@ -16,6 +16,7 @@ import type {
   SystemBalanceResponse,
   SystemErrorsResponse,
   Tenant,
+  TenantApiKeySettingsResponse,
   TenantListResponse,
   TenantUsageResponse,
   TransactionResponse,
@@ -24,17 +25,33 @@ import type {
   WalletSearchResponse,
 } from '@walletOS/types';
 import { apiRequest } from '../lib/apiClient';
+import { withActiveTenantScope } from '../lib/adminSession';
 
 export async function fetchAuditLogs(
   params: AdminAuditQuery & { signal?: AbortSignal }
 ): Promise<AuditLog[]> {
   const { signal, ...query } = params;
   const response = await apiRequest<AuditLogListResponse>('/admin/audit', {
-    query,
+    query: withActiveTenantScope(query),
     signal,
     fallbackMessage: 'Failed to fetch audit logs',
   });
   return response.data;
+}
+
+export async function fetchCurrentTenantApiKeys(): Promise<TenantApiKeySettingsResponse> {
+  return apiRequest<TenantApiKeySettingsResponse>('/admin/account/api-keys', {
+    fallbackMessage: 'Failed to fetch API key settings',
+  });
+}
+
+export async function rotateCurrentTenantKey(request: RotateKeyRequest): Promise<RotateKeyResponse> {
+  return apiRequest<RotateKeyResponse>('/admin/account/api-keys/rotate', {
+    method: 'POST',
+    body: request,
+    requireIdempotencyKey: true,
+    fallbackMessage: 'Failed to rotate API key',
+  });
 }
 
 export async function creditWallet(request: CreditTransactionRequest): Promise<TransactionResponse> {

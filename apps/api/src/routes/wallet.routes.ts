@@ -95,11 +95,11 @@ router.post(
           entityId: newWallet.id,
           action: 'wallet.created',
           changes: {
-            external_user_id,
+            externalUserId: external_user_id,
             currency,
             label,
             metadata,
-            is_sandbox: req.isSandbox || false,
+            isSandbox: req.isSandbox || false,
           },
           actorId: req.apiKeyId || 'api',
           actorType: 'api_key',

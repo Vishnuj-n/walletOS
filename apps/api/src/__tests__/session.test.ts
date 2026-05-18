@@ -32,6 +32,7 @@ describe('Session Token Tests', () => {
     const otherWallet = await request(app)
       .post('/api/v1/wallets')
       .set('x-api-key', apiKey.plainKey)
+      .set('Idempotency-Key', 'session_other_wallet_1')
       .send({
         external_user_id: 'user_other_wallet',
         currency: 'INR',

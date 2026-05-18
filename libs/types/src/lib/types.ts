@@ -175,6 +175,17 @@ export interface AdminUserInfo {
   role: AdminRole;
 }
 
+export type DashboardCapabilityScope = 'tenant' | 'platform' | 'account';
+
+export interface DashboardCapability {
+  id: string;
+  label: string;
+  href: string;
+  description: string;
+  minRole: AdminRole;
+  scope: DashboardCapabilityScope;
+}
+
 /**
  * /admin/me response shape proxied by admin app
  */
@@ -207,6 +218,21 @@ export interface RotateKeyResponse {
   scope: string;
   tenant_id: string;
   created_at: string;
+}
+
+export interface TenantApiKeyMetadata {
+  key_id: string;
+  scope: 'live' | 'test';
+  prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  is_active: boolean;
+}
+
+export interface TenantApiKeySettingsResponse {
+  tenant_id: string;
+  tenant_name: string;
+  keys: TenantApiKeyMetadata[];
 }
 
 export interface TenantUsageResponse {
@@ -355,6 +381,7 @@ export interface AdminAuditQuery {
   action?: string;
   limit?: number;
   after?: string;
+  tenantId?: string;
 }
 
 export interface AdminActivityQuery {
