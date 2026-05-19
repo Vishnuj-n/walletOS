@@ -1,4 +1,4 @@
-const API_BASE = process.env.API_BASE || "http://localhost:3333/api/v1"; // Your Backend API
+const API_BASE = process.env.API_BASE; // Your Backend API
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || ""; // Get this from browser localStorage after admin login
 
 if (!ADMIN_TOKEN) {

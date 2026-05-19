@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { SessionBootstrapState } from '../types/wallet';
 import { validateSessionBootstrap } from '../lib/api-client';
@@ -11,10 +11,17 @@ const STORAGE_KEYS = {
   expiresAt: 'walletos.session.expires_at',
 } as const;
 
+const INITIAL_STATE: SessionBootstrapState & { isReady: boolean } = {
+  error: null,
+  isReady: false,
+};
+
 export function useWalletSession(): SessionBootstrapState & { isReady: boolean } {
   const searchParams = useSearchParams();
+  const [state, setState] = useState<SessionBootstrapState & { isReady: boolean }>(INITIAL_STATE);
+  const [hasHydrated, setHasHydrated] = useState(false);
 
-  const state = useMemo(() => {
+  useEffect(() => {
     const tokenFromQuery =
       searchParams.get('token') || searchParams.get('session_token') || searchParams.get('session');
     const walletIdFromQuery = searchParams.get('wallet_id');
@@ -31,16 +38,23 @@ export function useWalletSession(): SessionBootstrapState & { isReady: boolean }
         walletId: walletIdFromQuery,
         expiresAt: expiresAtFromQuery || null,
       });
-      return { ...validated, source: 'query' as const, isReady: !validated.error };
+      setState({ ...validated, source: 'query' as const, isReady: !validated.error });
+    } else {
+      const fromStorage = validateSessionBootstrap({
+        token: window.localStorage.getItem(STORAGE_KEYS.token),
+        walletId: window.localStorage.getItem(STORAGE_KEYS.walletId),
+        expiresAt: window.localStorage.getItem(STORAGE_KEYS.expiresAt) || null,
+      });
+      setState({ ...fromStorage, source: 'storage' as const, isReady: !fromStorage.error });
     }
 
-    const fromStorage = validateSessionBootstrap({
-      token: window.localStorage.getItem(STORAGE_KEYS.token),
-      walletId: window.localStorage.getItem(STORAGE_KEYS.walletId),
-      expiresAt: window.localStorage.getItem(STORAGE_KEYS.expiresAt) || null,
-    });
-    return { ...fromStorage, source: 'storage' as const, isReady: !fromStorage.error };
+    setHasHydrated(true);
   }, [searchParams]);
+
+  // Return initial state during hydration to prevent mismatch
+  if (!hasHydrated) {
+    return INITIAL_STATE;
+  }
 
   return state;
 }
