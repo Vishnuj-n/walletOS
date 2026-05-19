@@ -5,7 +5,6 @@ import Page from '../src/app/page';
 jest.mock('../src/hooks/useWalletSession', () => ({
   useWalletSession: () => ({
     token: 'sess_demo',
-    walletId: 'wallet_demo',
     expiresAt: null,
     error: null,
     source: 'query',
@@ -13,11 +12,19 @@ jest.mock('../src/hooks/useWalletSession', () => ({
   }),
 }));
 
+jest.mock('../src/hooks/useSessionProfile', () => ({
+  useWalletIdFromSession: () => ({
+    walletId: 'wallet_demo',
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 jest.mock('../src/hooks/useWalletBalance', () => ({
   useWalletBalance: () => ({
     isLoading: false,
     data: {
-      wallet_id: 'wallet_demo',
+      id: 'wallet_demo',
       external_user_id: 'user_123456',
       label: 'Zomato Credits',
       is_sandbox: true,

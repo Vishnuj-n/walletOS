@@ -10,7 +10,7 @@ export function useWalletBalance(walletId: string, token?: string | null) {
     : 10_000;
 
   return useQuery({
-    queryKey: walletQueryKeys.wallet(walletId),
+    queryKey: walletQueryKeys.wallet(walletId, token),
     queryFn: () => {
       if (!token) throw new Error('Session token is required');
       return fetchWallet(walletId, token);

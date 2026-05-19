@@ -1,5 +1,7 @@
 export interface WalletDto {
   wallet_id: string;
+  // Some API responses use `id` while others use `wallet_id`. Accept both.
+  id?: string;
   external_user_id: string;
   label: string | null;
   balance: string;
@@ -36,7 +38,6 @@ export type TransactionDetailDto = LedgerActivityDto;
 
 export interface SessionBootstrapState {
   token: string | null;
-  walletId: string | null;
   expiresAt: string | null;
   error: string | null;
   source: 'query' | 'storage' | 'missing' | 'invalid';

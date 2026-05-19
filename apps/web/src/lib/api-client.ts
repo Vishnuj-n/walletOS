@@ -63,14 +63,11 @@ export function validateSessionBootstrap(
   input: Partial<SessionBootstrapState>
 ): SessionBootstrapState {
   const token = input.token?.trim() ?? '';
-  const walletId = input.walletId?.trim() ?? '';
   const expiresAt = input.expiresAt?.trim() || null;
 
   if (!token) {
     return {
       token: null,
-      walletId: walletId || null,
-      expiresAt,
       error: 'Missing session token. Pass `token=sess_...` when loading the wallet embed.',
       source: 'missing',
     };
@@ -79,30 +76,22 @@ export function validateSessionBootstrap(
   if (!token.startsWith('sess_')) {
     return {
       token: null,
-      walletId: walletId || null,
       expiresAt,
       error: 'Invalid session token format. Wallet embeds only accept `sess_...` tokens.',
       source: 'invalid',
     };
   }
 
-  if (!walletId) {
-    return {
-      token,
-      walletId: null,
-      expiresAt,
-      error: 'Missing wallet identifier. Pass `wallet_id` alongside the session token.',
-      source: 'missing',
-    };
-  }
-
   return {
     token,
-    walletId,
     expiresAt,
     error: null,
     source: 'query',
   };
+}
+
+export function fetchSessionProfile(token: string): Promise<{ wallet: WalletDto }> {
+  return requestJson<{ wallet: WalletDto }>('/auth/session/profile', token);
 }
 
 export function fetchWallet(walletId: string, token: string): Promise<WalletDto> {

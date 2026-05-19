@@ -12,6 +12,7 @@ import { useLedgerActivities } from '../hooks/useLedgerActivities';
 import { useTransactionDetail } from '../hooks/useTransactionDetail';
 import { useWalletSession } from '../hooks/useWalletSession';
 import { useWalletBalance } from '../hooks/useWalletBalance';
+import { useWalletIdFromSession } from '../hooks/useSessionProfile';
 import { LedgerActivityFilters } from '../types/wallet';
 
 const initialFilters: LedgerActivityFilters = {
@@ -43,16 +44,16 @@ function renderTopLevelError(error: unknown) {
 
 export default function Index() {
   const session = useWalletSession();
+  const { walletId, isLoading: isLoadingWalletId } = useWalletIdFromSession(session.token);
   const [filters, setFilters] = useState<LedgerActivityFilters>(initialFilters);
   const [cursorStack, setCursorStack] = useState<Array<string | null>>([null]);
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
 
   const activeCursor = cursorStack[cursorStack.length - 1];
-  const walletId = session.walletId ?? '';
   const token = session.token;
 
-  const walletQuery = useWalletBalance(walletId, token);
-  const activitiesQuery = useLedgerActivities(walletId, token, filters, activeCursor);
+  const walletQuery = useWalletBalance(walletId ?? '', token);
+  const activitiesQuery = useLedgerActivities(walletId ?? '', token, filters, activeCursor);
   const transactionDetailQuery = useTransactionDetail(selectedTransactionId, token);
 
   const activities = activitiesQuery.data?.data ?? [];
@@ -99,8 +100,30 @@ export default function Index() {
         <section className="card state-panel state-panel--warning">
           <p className="font-semibold">Wallet session required</p>
           <p className="text-sm text-muted">
-            {session.error || 'Pass `token=sess_...` and `wallet_id=...` to load this wallet embed.'}
+            {session.error || 'Pass `token=sess_...` to load this wallet embed.'}
           </p>
+        </section>
+      </main>
+    );
+  }
+
+  if (isLoadingWalletId) {
+    return (
+      <main className="page-shell">
+        <section className="card state-panel state-panel--warning">
+          <p className="font-semibold">Loading wallet information...</p>
+          <p className="text-sm text-muted">Please wait while we retrieve your wallet details.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!walletId) {
+    return (
+      <main className="page-shell">
+        <section className="card state-panel state-panel--error">
+          <p className="font-semibold">Unable to load wallet</p>
+          <p className="text-sm text-muted">The wallet associated with your session could not be found.</p>
         </section>
       </main>
     );
@@ -150,7 +173,7 @@ export default function Index() {
             items={activities}
             currency={walletQuery.data?.currency ?? 'USD'}
             loading={activitiesQuery.isLoading}
-            error={activitiesQuery.error instanceof Error ? activitiesQuery.error.message : String(activitiesQuery.error ?? 'Unknown error')}
+            error={activitiesQuery.isError ? (activitiesQuery.error instanceof Error ? activitiesQuery.error.message : 'Failed to load transactions') : null}
             nextCursor={nextCursor}
             total={activitiesQuery.data?.total}
             canGoBack={cursorStack.length > 1}
@@ -174,7 +197,7 @@ export default function Index() {
         open={Boolean(selectedTransactionId)}
         transaction={transactionDetailQuery.data}
         loading={transactionDetailQuery.isLoading}
-        error={transactionDetailQuery.error instanceof Error ? transactionDetailQuery.error.message : String(transactionDetailQuery.error ?? 'Unknown error')}
+        error={transactionDetailQuery.isError ? (transactionDetailQuery.error instanceof Error ? transactionDetailQuery.error.message : 'Failed to load transaction details') : null}
         currency={walletQuery.data?.currency}
         onClose={() => setSelectedTransactionId(null)}
       />

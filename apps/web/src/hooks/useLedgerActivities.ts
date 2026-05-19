@@ -12,7 +12,7 @@ export function useLedgerActivities(
   cursor: string | null = null
 ) {
   return useQuery({
-    queryKey: walletQueryKeys.activities(walletId, cursor, filters),
+    queryKey: walletQueryKeys.activities(walletId, cursor, filters, token),
     queryFn: () => {
       if (!token) throw new Error('Session token is required');
       return fetchLedgerActivities(walletId, token, filters, cursor, 20);

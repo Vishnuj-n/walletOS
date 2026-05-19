@@ -6,7 +6,7 @@ import { walletQueryKeys } from '../lib/queries';
 
 export function useTransactionDetail(txId: string | null, token?: string | null) {
   return useQuery({
-    queryKey: walletQueryKeys.transaction(txId),
+    queryKey: walletQueryKeys.transaction(txId, token),
     queryFn: () => {
       if (!txId || !token) throw new Error('Transaction detail requires a session token and transaction id');
       return fetchTransactionDetail(txId, token);

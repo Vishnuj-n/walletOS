@@ -13,9 +13,9 @@ describe('useWalletSession', () => {
     mockedUseSearchParams.mockReset();
   });
 
-  it('reads session state from query params and persists it', async () => {
+  it('reads session token from query params and persists it', async () => {
     mockedUseSearchParams.mockReturnValue(
-      new URLSearchParams('token=sess_123&wallet_id=wallet_123&expires_at=2026-05-18T10:00:00.000Z')
+      new URLSearchParams('token=sess_123&expires_at=2026-05-18T10:00:00.000Z')
     );
 
     const { result } = renderHook(() => useWalletSession());
@@ -30,7 +30,6 @@ describe('useWalletSession', () => {
 
   it('falls back to local storage when query params are absent', async () => {
     window.localStorage.setItem('walletos.session.token', 'sess_stored');
-    window.localStorage.setItem('walletos.session.wallet_id', 'wallet_stored');
     mockedUseSearchParams.mockReturnValue(new URLSearchParams(''));
 
     const { result } = renderHook(() => useWalletSession());
@@ -40,11 +39,10 @@ describe('useWalletSession', () => {
     });
 
     expect(result.current.token).toBe('sess_stored');
-    expect(result.current.walletId).toBe('wallet_stored');
   });
 
   it('returns an error for invalid session token format', async () => {
-    mockedUseSearchParams.mockReturnValue(new URLSearchParams('token=bad_token&wallet_id=wallet_123'));
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams('token=bad_token'));
 
     const { result } = renderHook(() => useWalletSession());
 
