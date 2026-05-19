@@ -48,6 +48,89 @@ Follow this order to test the API in Postman.
 
 The core ledger and concurrency logic are stable. You will build the admin dashboard in `apps/admin` next.
 
+### Wallet Embed Integration (iframe Pattern)
+
+The wallet UI (`apps/web`) is designed to be embedded in third-party applications using iframe embeds with secure session tokens.
+
+#### Architecture
+
+- **Token-Scoped Security:** Session tokens (`sess_...`) are cryptographically linked to a specific wallet at creation time. Clients cannot modify which wallet they access.
+- **Zero Front-End State Overhead:** The consuming application's backend creates a session token and passes it to the embed. The embed uses only the token to authenticate.
+- **Opaque Token Pattern:** The frontend only needs the `token` parameter. The backend resolves the wallet ID and profile from the token scope.
+
+#### Implementation Steps
+
+**Step 1: Create a Session Token (Server-Side)**
+
+Your consuming app's backend calls:
+
+```bash
+POST /api/v1/auth/session
+Authorization: Bearer <your-api-key>
+Content-Type: application/json
+
+{
+  "wallet_id": "wallet_12345"
+}
+```
+
+**Response:**
+
+```json
+{
+  "token": "sess_xxx",
+  "expires_at": "2026-05-19T11:30:00.000Z",
+  "wallet": {
+    "id": "wallet_12345",
+    "external_user_id": "user_zomato_5678",
+    "label": "Zomato Credits",
+    "balance": "125.5000",
+    "currency": "INR",
+    "status": "active",
+    "is_sandbox": false,
+    "metadata": {}
+  }
+}
+```
+
+**Step 2: Pass Token to iframe**
+
+Your consuming app renders the embed with **only the token**:
+
+```html
+<iframe 
+  src="https://wallet.yourapp.com/?token=sess_b0ac548cd56140be3da75f045e7358cbbb4843c90912db50ab35d377e8e8e6ce"
+  width="100%"
+  height="600"
+/>
+```
+
+**Step 3: Embedded App Loads (iframe)**
+
+The embedded wallet app:
+1. Extracts the token from the URL: `?token=sess_...`
+2. Validates the token format (`sess_` prefix)
+3. Calls `GET /api/v1/auth/session/profile` with the token
+4. Backend returns the wallet profile (ID, balance, label, etc.)
+5. UI renders the wallet, ledger, and transaction details
+
+#### Error Handling
+
+| Error | Meaning | Action |
+| :--- | :--- | :--- |
+| Missing `token` | No session provided | Embed shows: "Pass `token=sess_...` to load this wallet embed." |
+| Invalid format | Token doesn't start with `sess_` | Embed shows: "Invalid session token format." |
+| Token expired | Session beyond `expires_at` | Embed shows: "Session expired. Request a new token." |
+| Wallet not found | Backend cannot resolve wallet | Embed shows: "Unable to load wallet." |
+
+#### Security Notes
+
+- Session tokens expire after **1 hour** by default.
+- Each token is scoped to a single wallet; accessing other wallets returns `403 Forbidden`.
+- Tokens are hashed in the database; raw tokens are never stored.
+- The consuming app's API key controls which wallets can create tokens.
+- Use HTTPS in production to protect tokens in transit.
+
 ### Creating a Superadmin User (Supabase Remote)
 
 Use magic links or the Supabase dashboard for secure account creation. Direct SQL insertion is not recommended for production use.

@@ -1,30 +1,58 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
-import { fetchSessionForWallet } from '../lib/api-client';
-import { walletQueryKeys } from '../lib/queries';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { SessionBootstrapState } from '../types/wallet';
+import { validateSessionBootstrap } from '../lib/api-client';
 
-export function useWalletSession(walletId: string) {
-  const query = useQuery({
-    queryKey: walletQueryKeys.session(walletId),
-    queryFn: () => fetchSessionForWallet(walletId),
-    enabled: Boolean(walletId),
-  });
+const STORAGE_KEYS = {
+  token: 'walletos.session.token',
+  expiresAt: 'walletos.session.expires_at',
+} as const;
+
+const INITIAL_STATE: SessionBootstrapState & { isReady: boolean } = {
+  token: null,
+  expiresAt: null,
+  source: 'storage' as const,
+  error: null,
+  isReady: false,
+};
+
+export function useWalletSession(): SessionBootstrapState & { isReady: boolean } {
+  const searchParams = useSearchParams();
+  const [state, setState] = useState<SessionBootstrapState & { isReady: boolean }>(INITIAL_STATE);
+  const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
-    if (!query.data?.expires_at) return;
+    const tokenFromQuery =
+      searchParams.get('token') || searchParams.get('session_token') || searchParams.get('session');
+    const expiresAtFromQuery = searchParams.get('expires_at');
 
-    const expiresAt = new Date(query.data.expires_at).getTime();
-    const refreshInMs = Math.max(expiresAt - Date.now() - 5 * 60 * 1000, 0);
-    const timerId = window.setTimeout(() => {
-      void query.refetch();
-    }, refreshInMs);
+    if (tokenFromQuery) {
+      window.localStorage.setItem(STORAGE_KEYS.token, tokenFromQuery);
+      if (expiresAtFromQuery) {
+        window.localStorage.setItem(STORAGE_KEYS.expiresAt, expiresAtFromQuery);
+      }
+      const validated = validateSessionBootstrap({
+        token: tokenFromQuery,
+        expiresAt: expiresAtFromQuery || null,
+      });
+      setState({ ...validated, source: 'query' as const, isReady: !validated.error });
+    } else {
+      const fromStorage = validateSessionBootstrap({
+        token: window.localStorage.getItem(STORAGE_KEYS.token),
+        expiresAt: window.localStorage.getItem(STORAGE_KEYS.expiresAt) || null,
+      });
+      setState({ ...fromStorage, source: 'storage' as const, isReady: !fromStorage.error });
+    }
 
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [query.data?.expires_at, query.refetch]);
+    setHasHydrated(true);
+  }, [searchParams]);
 
-  return query;
+  // Return initial state during hydration to prevent mismatch
+  if (!hasHydrated) {
+    return INITIAL_STATE;
+  }
+
+  return state;
 }

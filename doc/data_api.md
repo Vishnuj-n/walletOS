@@ -212,13 +212,79 @@ Issue a short-lived session token for the user-facing UI. Server-to-server only.
 **Response 200**
 ```json
 {
-  "token": "sess_xxx",
+  "token": "sess_b0ac548cd56140be3da75f045e7358cbbb4843c90912db50ab35d377e8e8e6ce",
   "expires_at": "2025-06-01T11:00:00.000Z",
-  "wallet_id": "clxyz..."
+  "wallet": {
+    "id": "clxyz...",
+    "external_user_id": "user_123",
+    "label": "Zomato Credits",
+    "balance": "125.5000",
+    "currency": "INR",
+    "status": "active",
+    "is_sandbox": false,
+    "metadata": {}
+  }
 }
 ```
 
-Token expires in 1 hour. Scoped to the one `wallet_id`. The consuming project sends this to their frontend. The live API key never leaves the server. The authentication flow includes a silent background refresh mechanism to maintain session continuity.
+**Response Fields**
+
+| Field | Type | Description |
+|---|---|---|
+| `token` | string | Opaque session token (always starts with `sess_`). Use as `Authorization: Bearer {token}`. |
+| `expires_at` | ISO 8601 | Token expiration timestamp. Expires in 1 hour. |
+| `wallet` | object | Full wallet profile associated with this session (read-only in UI). |
+
+**Security**
+
+- Token is cryptographically scoped to the one `wallet_id`. Clients cannot access other wallets even if they try to modify the `wallet_id` URL parameter.
+- The consuming app passes only the `token` to the embedded iframe; the API key never leaves the server.
+- Session tokens are hashed in the database; raw tokens are never stored.
+
+**Iframe Integration**
+
+Send only the token to the embedded wallet app:
+
+```html
+<iframe src="https://wallet.yourapp.com/?token=sess_..." />
+```
+
+The embedded app will call `GET /api/v1/auth/session/profile` to fetch the wallet and user profile.
+
+---
+
+### GET /api/v1/auth/session/profile
+
+Fetch the wallet profile for the authenticated session token (client-facing). Requires a valid `Authorization: Bearer sess_...` header.
+
+**Request**
+```bash
+GET /api/v1/auth/session/profile
+Authorization: Bearer sess_b0ac548cd56140be3da75f045e7358cbbb4843c90912db50ab35d377e8e8e6ce
+```
+
+**Response 200**
+```json
+{
+  "wallet": {
+    "id": "clxyz...",
+    "external_user_id": "user_123",
+    "label": "Zomato Credits",
+    "balance": "125.5000",
+    "currency": "INR",
+    "status": "active",
+    "is_sandbox": false,
+    "metadata": {}
+  }
+}
+```
+
+**Errors**
+
+| Code | HTTP | Condition |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | Missing or invalid session token |
+| `NOT_FOUND` | 404 | Wallet associated with session not found (edge case) |
 
 ---
 

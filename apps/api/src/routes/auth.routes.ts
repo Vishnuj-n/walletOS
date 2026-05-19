@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { createHash, randomBytes } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { apiKeyAuthMiddleware } from '../middleware/auth';
+import { userSessionAuthMiddleware } from '../middleware/userSessionAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 
@@ -52,10 +53,57 @@ router.post(
       },
     });
 
+    // Fetch full wallet profile to return to the client
+    const walletProfile = await prisma.wallet.findUnique({
+      where: { id: wallet.id },
+      select: {
+        id: true,
+        externalUserId: true,
+        label: true,
+        balance: true,
+        currency: true,
+        status: true,
+        isSandbox: true,
+        metadata: true,
+      },
+    });
+
     res.status(200).json({
       token,
       expires_at: expiresAt.toISOString(),
-      wallet_id: wallet.id,
+      wallet: walletProfile,
+    });
+  })
+);
+
+router.get(
+  '/session/profile',
+  userSessionAuthMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.sessionWalletId) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Session wallet ID not found');
+    }
+
+    const walletProfile = await prisma.wallet.findUnique({
+      where: { id: req.sessionWalletId },
+      select: {
+        id: true,
+        externalUserId: true,
+        label: true,
+        balance: true,
+        currency: true,
+        status: true,
+        isSandbox: true,
+        metadata: true,
+      },
+    });
+
+    if (!walletProfile) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
+    }
+
+    res.status(200).json({
+      wallet: walletProfile,
     });
   })
 );

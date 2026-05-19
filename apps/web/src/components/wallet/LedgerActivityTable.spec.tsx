@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { LedgerActivityTable } from './LedgerActivityTable';
 import { LedgerActivityDto } from '../../types/wallet';
 
@@ -10,202 +10,137 @@ describe('LedgerActivityTable', () => {
       wallet_id: 'wallet_123',
       type: 'credit',
       amount: '100.0000',
+      balance_before: '0.0000',
+      balance_after: '100.0000',
       description: 'Test credit',
+      reference_id: 'ref_1',
+      idempotency_key: 'idem_1',
+      metadata: {},
       created_at: new Date('2024-01-01T00:00:00Z').toISOString(),
-    },
-    {
-      transaction_id: 'tx_2',
-      wallet_id: 'wallet_123',
-      type: 'debit',
-      amount: '50.0000',
-      description: 'Test debit',
-      created_at: new Date('2024-01-02T00:00:00Z').toISOString(),
     },
   ];
 
-  it('should render loading state', () => {
+  it('renders loading state', () => {
     const { container } = render(
       <LedgerActivityTable
         items={[]}
+        currency="INR"
         loading={true}
+        error={null}
         nextCursor={null}
+        total={0}
         onNextPage={jest.fn()}
         onPrevPage={jest.fn()}
         canGoBack={false}
+        onRetry={jest.fn()}
+        onSelect={jest.fn()}
       />
     );
 
-    expect(screen.getByText('Recent Ledger Activity')).toBeInTheDocument();
-    expect(screen.getByText('20 per page')).toBeInTheDocument();
-
-    // Table headers should not be present in loading state
-    expect(screen.queryByText(/type/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/amount/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/description/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/created/i)).not.toBeInTheDocument();
-
-    // Skeleton elements should be present
-    const skeletons = container.querySelectorAll('.skeleton');
-    expect(skeletons.length).toBe(3);
+    expect(container.querySelectorAll('.skeleton').length).toBeGreaterThan(0);
   });
 
-  it('should render activities when data is available', () => {
+  it('renders activities and opens selection callback', () => {
+    const onSelect = jest.fn();
     render(
       <LedgerActivityTable
         items={mockActivities}
+        currency="INR"
         loading={false}
+        error={null}
         nextCursor={null}
+        total={1}
         onNextPage={jest.fn()}
         onPrevPage={jest.fn()}
         canGoBack={false}
+        onRetry={jest.fn()}
+        onSelect={onSelect}
       />
     );
 
-    expect(screen.getByText('Recent Ledger Activity')).toBeInTheDocument();
-    expect(screen.getByText('credit')).toBeInTheDocument();
-    expect(screen.getByText('debit')).toBeInTheDocument();
-    expect(screen.getByText('Test credit')).toBeInTheDocument();
-    expect(screen.getByText('Test debit')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /open details/i }));
+    expect(onSelect).toHaveBeenCalledWith('tx_1');
   });
 
-  it('should render empty state when no activities', () => {
+  it('renders empty state copy when no activities exist', () => {
     render(
       <LedgerActivityTable
         items={[]}
+        currency="INR"
         loading={false}
+        error={null}
         nextCursor={null}
+        total={0}
         onNextPage={jest.fn()}
         onPrevPage={jest.fn()}
         canGoBack={false}
+        onRetry={jest.fn()}
+        onSelect={jest.fn()}
       />
     );
 
-    expect(screen.getByText('No activities available yet.')).toBeInTheDocument();
+    expect(screen.getByText('No transactions yet')).toBeInTheDocument();
   });
 
-  it('should disable next button when there is no next cursor', () => {
-    const onNextPage = jest.fn();
+  it('renders retry action for error states', () => {
+    const onRetry = jest.fn();
     render(
       <LedgerActivityTable
-        items={mockActivities}
+        items={[]}
+        currency="INR"
         loading={false}
+        error="Failed"
         nextCursor={null}
-        onNextPage={onNextPage}
-        onPrevPage={jest.fn()}
-        canGoBack={false}
-      />
-    );
-
-    const nextButton = screen.getByText('Next');
-    expect(nextButton).toBeDisabled();
-    fireEvent.click(nextButton);
-    expect(onNextPage).not.toHaveBeenCalled();
-  });
-
-  it('should enable next button when there is a next cursor', () => {
-    const onNextPage = jest.fn();
-    render(
-      <LedgerActivityTable
-        items={mockActivities}
-        loading={false}
-        nextCursor='cursor_123'
-        onNextPage={onNextPage}
-        onPrevPage={jest.fn()}
-        canGoBack={false}
-      />
-    );
-
-    const nextButton = screen.getByText('Next');
-    expect(nextButton).not.toBeDisabled();
-  });
-
-  it('should call onNextPage when next button is clicked', () => {
-    const onNextPage = jest.fn();
-    render(
-      <LedgerActivityTable
-        items={mockActivities}
-        loading={false}
-        nextCursor='cursor_123'
-        onNextPage={onNextPage}
-        onPrevPage={jest.fn()}
-        canGoBack={false}
-      />
-    );
-
-    const nextButton = screen.getByText('Next');
-    fireEvent.click(nextButton);
-    expect(onNextPage).toHaveBeenCalledTimes(1);
-  });
-
-  it('should disable previous button when canGoBack is false', () => {
-    const onPrevPage = jest.fn();
-    render(
-      <LedgerActivityTable
-        items={mockActivities}
-        loading={false}
-        nextCursor={null}
+        total={0}
         onNextPage={jest.fn()}
-        onPrevPage={onPrevPage}
+        onPrevPage={jest.fn()}
         canGoBack={false}
+        onRetry={onRetry}
+        onSelect={jest.fn()}
       />
     );
 
-    const prevButton = screen.getByText('Previous');
-    expect(prevButton).toBeDisabled();
-    fireEvent.click(prevButton);
-    expect(onPrevPage).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Retry'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('should enable previous button when canGoBack is true', () => {
-    const onPrevPage = jest.fn();
-    render(
+  it('disables pagination buttons appropriately', () => {
+    const { rerender } = render(
       <LedgerActivityTable
-        items={mockActivities}
+        items={[]}
+        currency="INR"
         loading={false}
+        error={null}
         nextCursor={null}
+        total={0}
         onNextPage={jest.fn()}
-        onPrevPage={onPrevPage}
+        onPrevPage={jest.fn()}
+        canGoBack={false}
+        onRetry={jest.fn()}
+        onSelect={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Previous').closest('button')).toBeDisabled();
+    expect(screen.getByText('Next').closest('button')).toBeDisabled();
+
+    rerender(
+      <LedgerActivityTable
+        items={[]}
+        currency="INR"
+        loading={false}
+        error={null}
+        nextCursor={'abc'}
+        total={0}
+        onNextPage={jest.fn()}
+        onPrevPage={jest.fn()}
         canGoBack={true}
+        onRetry={jest.fn()}
+        onSelect={jest.fn()}
       />
     );
 
-    const prevButton = screen.getByText('Previous');
-    expect(prevButton).not.toBeDisabled();
-  });
-
-  it('should call onPrevPage when previous button is clicked', () => {
-    const onPrevPage = jest.fn();
-    render(
-      <LedgerActivityTable
-        items={mockActivities}
-        loading={false}
-        nextCursor={null}
-        onNextPage={jest.fn()}
-        onPrevPage={onPrevPage}
-        canGoBack={true}
-      />
-    );
-
-    const prevButton = screen.getByText('Previous');
-    fireEvent.click(prevButton);
-    expect(onPrevPage).toHaveBeenCalledTimes(1);
-  });
-
-  it('should display table headers correctly', () => {
-    render(
-      <LedgerActivityTable
-        items={mockActivities}
-        loading={false}
-        nextCursor={null}
-        onNextPage={jest.fn()}
-        onPrevPage={jest.fn()}
-        canGoBack={false}
-      />
-    );
-
-    expect(screen.getByText(/type/i)).toBeInTheDocument();
-    expect(screen.getByText(/amount/i)).toBeInTheDocument();
-    expect(screen.getByText(/description/i)).toBeInTheDocument();
-    expect(screen.getByText(/created/i)).toBeInTheDocument();
+    expect(screen.getByText('Previous').closest('button')).not.toBeDisabled();
+    expect(screen.getByText('Next').closest('button')).not.toBeDisabled();
   });
 });

@@ -243,7 +243,7 @@ describe('ManualActionsPage', () => {
   });
 
   it('should disable submit button while loading', async () => {
-    let resolvePromise: (value: { transaction_id: string }) => void = () => {};
+    let resolvePromise: (value: { transaction_id: string }) => void;
     (creditWallet as jest.Mock).mockImplementation(
       () =>
         new Promise((resolve) => {

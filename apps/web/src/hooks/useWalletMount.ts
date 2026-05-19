@@ -1,13 +1,14 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
+import { useWalletSession } from './useWalletSession';
 
 export function useWalletMount() {
-  const searchParams = useSearchParams();
-  const walletId = searchParams.get('wallet_id') || process.env.NEXT_PUBLIC_DEMO_WALLET_ID || '';
+  const session = useWalletSession();
 
   return {
-    walletId,
-    isReady: walletId.length > 0,
+    walletId: session.walletId ?? '',
+    token: session.token,
+    isReady: session.isReady,
+    error: session.error,
   };
 }

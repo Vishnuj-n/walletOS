@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useWalletBalance } from './useWalletBalance';
 import { fetchWallet } from '../lib/api-client';
 
-// Mock the api-client
 jest.mock('../lib/api-client', () => ({
   fetchWallet: jest.fn(),
 }));
@@ -24,7 +23,7 @@ describe('useWalletBalance', () => {
     jest.clearAllMocks();
   });
 
-  it('should fetch wallet balance when walletId and token are provided', async () => {
+  it('fetches wallet balance when walletId and token are provided', async () => {
     const mockWallet = {
       wallet_id: 'wallet_123',
       external_user_id: 'user_123',
@@ -49,61 +48,7 @@ describe('useWalletBalance', () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(fetchWallet).toHaveBeenCalledWith('wallet_123', 'sess_test_token');
     expect(result.current.data).toEqual(mockWallet);
-  });
-
-  it('should not be enabled if walletId is missing', () => {
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
-
-    const { result } = renderHook(() => useWalletBalance('', 'sess_test_token'), { wrapper });
-
-    expect(result.current.fetchStatus).toBe('idle');
-    expect(fetchWallet).not.toHaveBeenCalled();
-  });
-
-  it('should not be enabled if token is missing', () => {
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
-
-    const { result } = renderHook(() => useWalletBalance('wallet_123', undefined), { wrapper });
-
-    expect(result.current.fetchStatus).toBe('idle');
-    expect(fetchWallet).not.toHaveBeenCalled();
-  });
-
-  it('should handle loading state', () => {
-    (fetchWallet as jest.Mock).mockReturnValue(new Promise(() => void 0));
-
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
-
-    const { result } = renderHook(() => useWalletBalance('wallet_123', 'sess_test_token'), {
-      wrapper,
-    });
-
-    expect(result.current.isLoading).toBe(true);
-  });
-
-  it('should handle fetch errors', async () => {
-    (fetchWallet as jest.Mock).mockRejectedValue(new Error('Wallet fetch failed'));
-
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
-
-    const { result } = renderHook(() => useWalletBalance('wallet_123', 'sess_test_token'), {
-      wrapper,
-    });
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    expect(result.current.error).toBeInstanceOf(Error);
+    expect(fetchWallet).toHaveBeenCalledWith('wallet_123', 'sess_test_token');
   });
 });

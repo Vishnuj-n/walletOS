@@ -20,7 +20,8 @@ describe('Session Token Tests', () => {
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty('token');
     expect(response.body.token).toContain('sess_');
-    expect(response.body).toHaveProperty('wallet_id', wallet.id);
+    expect(response.body).toHaveProperty('wallet');
+    expect(response.body.wallet).toHaveProperty('id', wallet.id);
     expect(response.body).toHaveProperty('expires_at');
 
     await cleanupTestData(tenant.id);

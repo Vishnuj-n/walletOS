@@ -3,18 +3,21 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: light;
+  }
+
   html,
   body {
     margin: 0;
     padding: 0;
     font-family:
-      Inter,
-      ui-sans-serif,
-      system-ui,
-      -apple-system,
-      BlinkMacSystemFont,
+      'Manrope',
       'Segoe UI',
       sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(251, 191, 36, 0.12), transparent 28%),
+      linear-gradient(180deg, #fcfcfb 0%, #f5f4ef 100%);
   }
 
   * {
@@ -25,15 +28,249 @@
     color: inherit;
     text-decoration: none;
   }
+
+  button,
+  input {
+    font: inherit;
+  }
 }
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6;
+    @apply rounded-3xl border border-border/70 bg-surface p-4 shadow-card sm:p-6;
   }
 
   .page-shell {
-    @apply mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 p-3 sm:gap-6 sm:p-6;
+    @apply mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-3 py-4 sm:gap-6 sm:px-6 sm:py-8;
+  }
+
+  .hero-panel {
+    @apply flex flex-col gap-3 rounded-[32px] border border-border/70 bg-surface px-5 py-6 shadow-card sm:px-8 sm:py-8;
+  }
+
+  .hero-panel__eyebrow {
+    @apply text-xs uppercase tracking-[0.32em] text-muted;
+  }
+
+  .hero-panel__title {
+    @apply mt-2 text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl;
+  }
+
+  .hero-panel__copy {
+    @apply max-w-2xl text-sm leading-6 text-muted sm:text-base;
+  }
+
+  .layout-grid {
+    @apply grid gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.18fr)] lg:items-start;
+  }
+
+  .wallet-balance-card {
+    @apply min-h-[280px];
+  }
+
+  .balance-meta-card {
+    @apply rounded-2xl border border-border/60 bg-app px-4 py-4;
+  }
+
+  .balance-meta-card__label {
+    @apply text-xs uppercase tracking-[0.2em] text-muted;
+  }
+
+  .balance-meta-card__value {
+    @apply mt-2 text-sm font-semibold text-foreground;
+  }
+
+  .status-pill {
+    @apply inline-flex rounded-full border border-border/60 bg-app px-3 py-2 text-sm font-semibold text-foreground;
+  }
+
+  .status-pill--active {
+    @apply border-success/20 bg-success/10 text-success;
+  }
+
+  .status-pill--frozen {
+    @apply border-warning/20 bg-warning/10 text-warning;
+  }
+
+  .status-pill--closed {
+    @apply border-muted/20 bg-slate-200 text-slate-700;
+  }
+
+  .banner {
+    @apply grid gap-4 rounded-3xl border border-border/70 bg-surface px-5 py-5 shadow-card sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)];
+  }
+
+  .banner--sandbox {
+    background:
+      linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(249, 115, 22, 0.08)),
+      #fffefb;
+  }
+
+  .banner--frozen {
+    @apply border-warning/30;
+  }
+
+  .banner--closed {
+    @apply border-slate-300 bg-slate-100;
+  }
+
+  .stat-card {
+    @apply rounded-2xl border border-border/60 bg-surface px-4 py-4 shadow-card;
+  }
+
+  .stat-card__label {
+    @apply text-xs uppercase tracking-[0.2em] text-muted;
+  }
+
+  .stat-card__value {
+    @apply mt-3 text-2xl font-bold tracking-tight text-foreground;
+  }
+
+  .filter-bar {
+    @apply rounded-3xl border border-border/70 bg-surface px-4 py-4 shadow-card sm:px-5;
+  }
+
+  .filter-tabs {
+    @apply mb-4 flex flex-wrap gap-2;
+  }
+
+  .filter-tab {
+    @apply rounded-full border border-border/70 bg-app px-4 py-2 text-sm font-medium text-muted transition active:scale-95;
+  }
+
+  .filter-tab--active {
+    @apply border-foreground bg-foreground text-white;
+  }
+
+  .filter-field {
+    @apply flex flex-col gap-2 text-sm font-medium text-foreground;
+  }
+
+  .filter-field span {
+    @apply text-xs uppercase tracking-[0.2em] text-muted;
+  }
+
+  .filter-field input {
+    @apply rounded-2xl border border-border/70 bg-app px-4 py-3 text-foreground outline-none ring-0 transition focus:border-foreground;
+  }
+
+  .transaction-row {
+    @apply grid w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-app/70 focus-visible:bg-app/80 focus-visible:outline-none sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.9fr)_minmax(0,1fr)_auto];
+  }
+
+  .transaction-row__type {
+    @apply inline-flex items-center gap-2 text-sm font-semibold capitalize;
+  }
+
+  .transaction-row__icon {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-full bg-app text-base;
+  }
+
+  .transaction-row__description {
+    @apply flex min-w-0 flex-col;
+  }
+
+  .transaction-row__description strong {
+    @apply truncate text-sm text-foreground;
+  }
+
+  .transaction-row__description small {
+    @apply mt-1 truncate text-xs text-muted;
+  }
+
+  .transaction-row__date {
+    @apply text-sm text-muted;
+  }
+
+  .transaction-row__amount {
+    @apply text-right text-sm font-bold;
+  }
+
+  .secondary-button,
+  .action-button,
+  .icon-button {
+    @apply inline-flex items-center justify-center rounded-full border border-border/70 bg-app px-4 py-2 text-sm font-semibold text-foreground transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .action-link {
+    @apply inline-flex w-fit rounded-full border border-border/70 bg-app px-4 py-2 text-sm font-semibold text-foreground transition active:scale-95;
+  }
+
+  .state-panel {
+    @apply flex flex-col gap-2 rounded-3xl border px-5 py-5;
+  }
+
+  .state-panel--error {
+    @apply border-danger/20 bg-danger/5;
+  }
+
+  .state-panel--warning {
+    @apply border-warning/20 bg-warning/5;
+  }
+
+  .empty-state {
+    @apply flex min-h-[340px] flex-col items-center justify-center gap-6 rounded-[28px] border border-dashed border-border/70 bg-app/60 px-6 py-8;
+  }
+
+  .empty-state__art {
+    @apply relative h-28 w-40;
+  }
+
+  .empty-state__coin,
+  .empty-state__line {
+    @apply absolute block rounded-full;
+  }
+
+  .empty-state__coin--primary {
+    @apply left-6 top-5 h-12 w-12 border border-warning/30 bg-warning/20;
+  }
+
+  .empty-state__coin--secondary {
+    @apply left-20 top-10 h-16 w-16 border border-success/30 bg-success/15;
+  }
+
+  .empty-state__line--top {
+    @apply right-2 top-6 h-3 w-16 rounded-full bg-slate-300;
+  }
+
+  .empty-state__line--bottom {
+    @apply right-6 top-14 h-3 w-24 rounded-full bg-slate-200;
+  }
+
+  .modal-shell {
+    @apply fixed inset-0 z-50 flex justify-end;
+  }
+
+  .modal-backdrop {
+    @apply absolute inset-0 bg-slate-900/40;
+  }
+
+  .modal-panel {
+    @apply relative z-10 h-full w-full max-w-2xl overflow-y-auto bg-surface px-5 py-6 shadow-2xl sm:px-8;
+  }
+
+  .detail-row {
+    @apply grid gap-2 rounded-2xl border border-border/70 bg-app px-4 py-4 sm:grid-cols-[160px_minmax(0,1fr)];
+  }
+
+  .detail-row dt {
+    @apply text-xs uppercase tracking-[0.2em] text-muted;
+  }
+
+  .detail-row dd {
+    @apply m-0 break-all text-sm font-medium text-foreground;
+  }
+
+  .metadata-panel {
+    @apply rounded-2xl border border-border/70 bg-app px-4 py-4;
+  }
+
+  .metadata-panel summary {
+    @apply cursor-pointer text-sm font-semibold text-foreground;
+  }
+
+  .metadata-panel pre {
+    @apply mt-3 overflow-x-auto text-xs leading-6 text-foreground;
   }
 
   .skeleton {
@@ -42,7 +279,9 @@
 }
 
 @layer utilities {
-  .text-safe-balance {
+  .text-balance {
     font-variant-numeric: tabular-nums;
+    line-height: 0.95;
+    font-size: clamp(2.75rem, 5vw, 4.5rem);
   }
 }
