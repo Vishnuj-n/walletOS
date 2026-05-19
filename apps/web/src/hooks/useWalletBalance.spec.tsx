@@ -48,6 +48,7 @@ describe('useWalletBalance', () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
+    expect(result.current.data).toEqual(mockWallet);
     expect(fetchWallet).toHaveBeenCalledWith('wallet_123', 'sess_test_token');
   });
 });

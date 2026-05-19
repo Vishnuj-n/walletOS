@@ -92,7 +92,7 @@ export default function Index() {
         transactionsThisMonth: 0,
       }
     );
-  }, [activitiesQuery.data?.data?.length, activitiesQuery.data?.data?.map(a => a.type).join(',')]);
+  }, [activitiesQuery.data?.data]);
 
   if (!session.isReady) {
     return (
@@ -173,7 +173,13 @@ export default function Index() {
             items={activities}
             currency={walletQuery.data?.currency ?? 'USD'}
             loading={activitiesQuery.isLoading}
-            error={activitiesQuery.isError ? (activitiesQuery.error instanceof Error ? activitiesQuery.error.message : 'Failed to load transactions') : null}
+            error={
+              activitiesQuery.isError
+                ? activitiesQuery.error instanceof Error
+                  ? activitiesQuery.error.message
+                  : String(activitiesQuery.error ?? 'Unknown error')
+                : undefined
+            }
             nextCursor={nextCursor}
             total={activitiesQuery.data?.total}
             canGoBack={cursorStack.length > 1}
@@ -197,7 +203,13 @@ export default function Index() {
         open={Boolean(selectedTransactionId)}
         transaction={transactionDetailQuery.data}
         loading={transactionDetailQuery.isLoading}
-        error={transactionDetailQuery.isError ? (transactionDetailQuery.error instanceof Error ? transactionDetailQuery.error.message : 'Failed to load transaction details') : null}
+        error={
+          transactionDetailQuery.error == null
+            ? undefined
+            : transactionDetailQuery.error instanceof Error
+              ? transactionDetailQuery.error.message
+              : String(transactionDetailQuery.error)
+        }
         currency={walletQuery.data?.currency}
         onClose={() => setSelectedTransactionId(null)}
       />

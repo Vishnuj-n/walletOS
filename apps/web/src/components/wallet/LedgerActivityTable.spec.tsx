@@ -103,4 +103,44 @@ describe('LedgerActivityTable', () => {
     fireEvent.click(screen.getByText('Retry'));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
+
+  it('disables pagination buttons appropriately', () => {
+    const { rerender } = render(
+      <LedgerActivityTable
+        items={[]}
+        currency="INR"
+        loading={false}
+        error={null}
+        nextCursor={null}
+        total={0}
+        onNextPage={jest.fn()}
+        onPrevPage={jest.fn()}
+        canGoBack={false}
+        onRetry={jest.fn()}
+        onSelect={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Previous').closest('button')).toBeDisabled();
+    expect(screen.getByText('Next').closest('button')).toBeDisabled();
+
+    rerender(
+      <LedgerActivityTable
+        items={[]}
+        currency="INR"
+        loading={false}
+        error={null}
+        nextCursor={'abc'}
+        total={0}
+        onNextPage={jest.fn()}
+        onPrevPage={jest.fn()}
+        canGoBack={true}
+        onRetry={jest.fn()}
+        onSelect={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Previous').closest('button')).not.toBeDisabled();
+    expect(screen.getByText('Next').closest('button')).not.toBeDisabled();
+  });
 });

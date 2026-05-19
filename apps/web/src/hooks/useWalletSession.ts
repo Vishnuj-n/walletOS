@@ -11,6 +11,9 @@ const STORAGE_KEYS = {
 } as const;
 
 const INITIAL_STATE: SessionBootstrapState & { isReady: boolean } = {
+  token: null,
+  expiresAt: null,
+  source: 'storage' as const,
   error: null,
   isReady: false,
 };

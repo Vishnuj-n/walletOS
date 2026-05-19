@@ -1,4 +1,4 @@
-import { formatCurrency, formatDateTime } from '../../lib/formatters';
+import { formatCurrency, formatDateTime, maskIdentifier } from '../../lib/formatters';
 import { Skeleton } from '../common/Skeleton';
 import { TransactionDetailDto } from '../../types/wallet';
 
@@ -60,14 +60,14 @@ export function TransactionDetailModal({
           </div>
         ) : transaction ? (
           <dl className="space-y-3">
-            <DetailRow label="Transaction ID" value={transaction.transaction_id} />
+            <DetailRow label="Transaction ID" value={maskIdentifier(transaction.transaction_id)} />
             <DetailRow label="Type" value={transaction.type} />
             <DetailRow
               label="Amount"
               value={formatCurrency(transaction.amount, currency ?? 'USD')}
             />
             <DetailRow label="Description" value={transaction.description || '-'} />
-            <DetailRow label="Reference ID" value={transaction.reference_id || '-'} />
+            <DetailRow label="Reference ID" value={transaction.reference_id ? maskIdentifier(transaction.reference_id) : '-'} />
             <DetailRow label="Created At" value={formatDateTime(transaction.created_at)} />
             <DetailRow
               label="Balance Before"
@@ -77,11 +77,6 @@ export function TransactionDetailModal({
               label="Balance After"
               value={formatCurrency(transaction.balance_after, currency ?? 'USD')}
             />
-            <DetailRow label="Idempotency Key" value={transaction.idempotency_key || '-'} />
-            <details className="metadata-panel">
-              <summary>Metadata</summary>
-              <pre>{JSON.stringify(transaction.metadata ?? {}, null, 2)}</pre>
-            </details>
           </dl>
         ) : null}
       </aside>

@@ -52,7 +52,7 @@ jest.mock('../src/hooks/useLedgerActivities', () => ({
           reference_id: 'order_123',
           idempotency_key: 'idem_123',
           metadata: {},
-          created_at: new Date().toISOString(),
+          created_at: "2024-01-01T00:00:00.000Z",
         },
       ],
       next_cursor: null,
@@ -79,5 +79,7 @@ describe('Page', () => {
     expect(screen.getByText('Zomato Credits')).toBeInTheDocument();
     expect(screen.getByText('Total Earned')).toBeInTheDocument();
     expect(screen.getByText('Transaction history')).toBeInTheDocument();
+
+    expect(screen.queryByText('user_123456')).not.toBeInTheDocument();
   });
 });

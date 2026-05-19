@@ -54,6 +54,11 @@ export function LedgerActivityTable({
   onRetry,
   onSelect,
 }: LedgerActivityTableProps) {
+  let safeErrorMessage = 'Unable to load transactions, please try again';
+  if (error) {
+    console.error('LedgerActivityTable error:', error);
+  }
+
   return (
     <section className="card">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -75,7 +80,7 @@ export function LedgerActivityTable({
       ) : error ? (
         <div className="state-panel state-panel--error">
           <p className="font-semibold">Unable to load transactions</p>
-          <p className="text-sm text-muted">{error}</p>
+          <p className="text-sm text-muted">{safeErrorMessage}</p>
           <button type="button" className="action-button mt-2" onClick={onRetry}>
             Retry
           </button>

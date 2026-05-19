@@ -25,15 +25,14 @@ export function TransactionFilters({ filters, onChange }: TransactionFiltersProp
 
   return (
     <section className="filter-bar" aria-label="Transaction filters">
-      <div className="filter-tabs" role="tablist" aria-label="Transaction type">
+      <div className="filter-tabs" role="group" aria-label="Transaction type">
         {filterOptions.map((option) => {
           const isActive = filters.type === option.value;
           return (
             <button
               key={option.value}
               type="button"
-              role="tab"
-              aria-selected={isActive}
+              aria-pressed={isActive}
               className={`filter-tab ${isActive ? 'filter-tab--active' : ''}`}
               onClick={() => onChange({ ...filters, type: option.value })}
             >

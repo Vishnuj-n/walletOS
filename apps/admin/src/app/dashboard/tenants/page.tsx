@@ -196,7 +196,7 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
 }
 
 export default function TenantsPage() {
-  const { hasRole } = useAuth();
+  useAuth();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

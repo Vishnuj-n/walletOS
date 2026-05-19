@@ -47,8 +47,8 @@ export function formatDateInputValue(value: string) {
 }
 
 export function maskIdentifier(value: string, visible = 4) {
-  if (value.length <= visible) return value;
-  return `${'*'.repeat(Math.max(value.length - visible, 3))}${value.slice(-visible)}`;
+  const visibleCount = Math.min(visible, value.length);
+  return `${'*'.repeat(Math.max(value.length - visibleCount, 3))}${value.slice(value.length - visibleCount)}`;
 }
 
 export function titleCaseStatus(value: string) {
