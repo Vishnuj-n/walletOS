@@ -112,7 +112,7 @@ Enforce dynamic multi-tenant data isolation and role-based feature gating inside
 
 ---
 
-# Sprint 5: The End-User Experience (Wallet Web App) [PRIORITY: IMMEDIATE]
+# Sprint 5: The End-User Experience (Wallet Web App) [DON]
 
 ## Goal
 Build the consumer-facing wallet web application with **complete PRD compliance** for Phase 1 UI components. This is the core product delivery — the UI that Zomato's end-users will see when they click "My Wallet."

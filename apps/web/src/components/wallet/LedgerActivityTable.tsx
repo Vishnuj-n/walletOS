@@ -54,7 +54,7 @@ export function LedgerActivityTable({
   onRetry,
   onSelect,
 }: LedgerActivityTableProps) {
-  let safeErrorMessage = 'Unable to load transactions, please try again';
+  const safeErrorMessage = 'Unable to load transactions, please try again';
   if (error) {
     console.error('LedgerActivityTable error:', error);
   }
