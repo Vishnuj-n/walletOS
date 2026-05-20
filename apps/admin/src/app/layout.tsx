@@ -1,5 +1,5 @@
 import './global.css';
-import { AuthProvider } from '../contexts/AuthContext';
+import { ClientProviders } from '../components/ClientProviders';
 
 export const metadata = {
   title: 'WalletOS Admin',
@@ -14,7 +14,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <ClientProviders>{children}</ClientProviders>
       </body>
     </html>
   );

@@ -951,6 +951,110 @@ describe('Admin API Endpoints', () => {
         },
       });
     });
+
+    it('should surface Supabase invite rate limits as RATE_LIMIT_EXCEEDED', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { createClient } = require('@supabase/supabase-js');
+      const originalCreateClientImpl = createClient.getMockImplementation();
+
+      createClient.mockImplementation(() => ({
+        auth: {
+          admin: {
+            inviteUserByEmail: jest.fn(() => Promise.resolve({
+              data: { user: null },
+              error: {
+                status: 429,
+                code: 'over_email_send_rate_limit',
+                message: 'email rate limit exceeded',
+              },
+            })),
+            updateUserById: jest.fn(() => Promise.resolve({ data: { user: null }, error: null })),
+          },
+          getUser: jest.fn(() => Promise.resolve({
+            data: {
+              user: {
+                id: 'test-admin-uuid',
+                email: 'admin@test.com',
+                app_metadata: { tenantId: 'default' },
+                email_confirmed_at: '2026-01-01T00:00:00.000Z',
+              },
+            },
+            error: null,
+          })),
+        },
+      }));
+
+      try {
+        const response = await request(app)
+          .post(`/api/v1/admin/tenants/${testTenantId}/invite-user`)
+          .set('Authorization', adminAuthToken)
+          .send({
+            email: 'invited-admin@test.com',
+            role: 'tenant_admin',
+          });
+
+        expect(response.status).toBe(429);
+        expect(response.body.error.code).toBe('RATE_LIMIT_EXCEEDED');
+      } finally {
+        createClient.mockImplementation(originalCreateClientImpl);
+      }
+
+      await prisma.adminUser.deleteMany({
+        where: {
+          tenantId: testTenantId,
+          email: 'invited-admin@test.com',
+        },
+      });
+    });
+
+    it('should surface thrown Supabase invite exceptions as INTERNAL_ERROR', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { createClient } = require('@supabase/supabase-js');
+      const originalCreateClientImpl = createClient.getMockImplementation();
+
+      createClient.mockImplementation(() => ({
+        auth: {
+          admin: {
+            inviteUserByEmail: jest.fn(() => Promise.reject(new Error('network boom'))),
+            updateUserById: jest.fn(() => Promise.resolve({ data: { user: null }, error: null })),
+          },
+          getUser: jest.fn(() => Promise.resolve({
+            data: {
+              user: {
+                id: 'test-admin-uuid',
+                email: 'admin@test.com',
+                app_metadata: { tenantId: 'default' },
+                email_confirmed_at: '2026-01-01T00:00:00.000Z',
+              },
+            },
+            error: null,
+          })),
+        },
+      }));
+
+      try {
+        const response = await request(app)
+          .post(`/api/v1/admin/tenants/${testTenantId}/invite-user`)
+          .set('Authorization', adminAuthToken)
+          .send({
+            email: 'invited-admin@test.com',
+            role: 'tenant_admin',
+          });
+
+        expect(response.status).toBe(502);
+        expect(response.body.error.code).toBe('INTERNAL_ERROR');
+        expect(response.body.error.message).toBe('Failed to send Supabase invite');
+      } finally {
+        createClient.mockImplementation(originalCreateClientImpl);
+      }
+
+      await prisma.adminUser.deleteMany({
+        where: {
+          tenantId: testTenantId,
+          email: 'invited-admin@test.com',
+        },
+      });
+    });
   });
 
   describe('POST /admin/invitations/activate', () => {

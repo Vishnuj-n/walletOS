@@ -144,16 +144,75 @@ function normalizeAdminEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function getAdminClaimRedirectUrl(tenantId: string): string {
-  const configuredBaseUrl = process.env.ADMIN_CLAIM_REDIRECT_URL || process.env.ADMIN_APP_URL;
+function getInviteDebugMetadata(email: string) {
+  const normalizedEmail = normalizeAdminEmail(email);
+  const [, emailDomain = 'unknown'] = normalizedEmail.split('@');
 
-  if (!configuredBaseUrl) {
-    throw new AppError(500, ErrorCode.INTERNAL_ERROR, 'Admin claim redirect URL is not configured');
+  return {
+    emailDomain,
+    emailHashPrefix: createHash('sha256').update(normalizedEmail).digest('hex').slice(0, 12),
+  };
+}
+
+function logAdminInviteDebug(event: string, metadata: Record<string, unknown>) {
+  if (process.env.NODE_ENV === 'test') {
+    return;
   }
+
+  try {
+    console.info(`[admin.invite] ${event} ${JSON.stringify(metadata)}`);
+  } catch (e) {
+    console.info(`[admin.invite] ${event}`, metadata);
+  }
+}
+
+function logInviteError(event: string, metadata: Record<string, unknown>) {
+  if (process.env.NODE_ENV === 'test') {
+    return;
+  }
+
+  try {
+    console.error(`[admin.invite] ${event} ${JSON.stringify(metadata)}`);
+  } catch {
+    console.error(`[admin.invite] ${event}`, metadata);
+  }
+}
+
+function getAdminClaimRedirectUrl(tenantId: string): string {
+  const configuredBaseUrl = process.env.ADMIN_CLAIM_REDIRECT_URL || process.env.ADMIN_APP_URL || 'http://localhost:3000';
 
   const claimUrl = new URL('/claim', configuredBaseUrl);
   claimUrl.searchParams.set('tenant_id', tenantId);
   return claimUrl.toString();
+}
+
+type SupabaseInviteErrorLike = {
+  message?: string;
+  status?: number;
+  code?: string;
+};
+
+function mapSupabaseInviteError(error: SupabaseInviteErrorLike): AppError {
+  if (error.status === 429 || error.code === 'over_email_send_rate_limit') {
+    return new AppError(429, ErrorCode.RATE_LIMIT_EXCEEDED, 'Invite rate limit exceeded. Please retry shortly.');
+  }
+
+  if (error.status === 400 || error.code === 'email_address_invalid') {
+    return new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid invite email address.');
+  }
+
+  return new AppError(502, ErrorCode.INTERNAL_ERROR, 'Failed to send Supabase invite');
+}
+
+function getSupabaseInviteTimeoutMs(): number {
+  const rawValue = process.env.SUPABASE_INVITE_TIMEOUT_MS;
+  const parsedValue = rawValue ? Number.parseInt(rawValue, 10) : NaN;
+
+  if (Number.isFinite(parsedValue) && parsedValue >= 1000) {
+    return parsedValue;
+  }
+
+  return 10000;
 }
 
 async function sendTenantAdminInvite(params: {
@@ -164,17 +223,92 @@ async function sendTenantAdminInvite(params: {
   const { tenantId, email, role } = params;
   const supabaseAdmin = getSupabaseAdminClient();
   const redirectTo = getAdminClaimRedirectUrl(tenantId);
+  const inviteDebugMetadata = getInviteDebugMetadata(email);
+  const startedAt = Date.now();
+  const timeoutMs = getSupabaseInviteTimeoutMs();
 
-  const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+  logAdminInviteDebug('supabase.request', {
+    tenantId,
+    role,
     redirectTo,
-    data: {
-      tenant_id: tenantId,
-      invited_role: role,
-    },
+    timeoutMs,
+    elapsedMs: 0,
+    ...inviteDebugMetadata,
   });
 
-  if (error) {
-    throw new AppError(502, ErrorCode.INTERNAL_ERROR, 'Failed to send Supabase invite');
+  try {
+    let inviteTimeoutHandle: NodeJS.Timeout | undefined;
+    const invitePromise = supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+      data: {
+        tenant_id: tenantId,
+        invited_role: role,
+      },
+    });
+    const inviteTimeoutPromise = new Promise<never>((_, reject) => {
+      inviteTimeoutHandle = setTimeout(() => {
+        reject(new Error(`Supabase invite request timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    const { error } = await Promise.race([invitePromise, inviteTimeoutPromise]).finally(() => {
+      if (inviteTimeoutHandle) {
+        clearTimeout(inviteTimeoutHandle);
+      }
+    });
+
+    if (error) {
+      const mappedError = mapSupabaseInviteError(error);
+      const errorMetadata = {
+        tenantId,
+        role,
+        redirectTo,
+        timeoutMs,
+        elapsedMs: Date.now() - startedAt,
+        ...inviteDebugMetadata,
+        status: error?.status,
+        code: error?.code,
+        message: error?.message,
+        mappedStatusCode: mappedError.statusCode,
+        mappedErrorCode: mappedError.code,
+      };
+
+      logAdminInviteDebug('supabase.failed', errorMetadata);
+      logInviteError('Supabase invite failed', errorMetadata);
+      throw mappedError;
+    }
+
+    logAdminInviteDebug('supabase.success', {
+      tenantId,
+      role,
+      redirectTo,
+      timeoutMs,
+      elapsedMs: Date.now() - startedAt,
+      ...inviteDebugMetadata,
+    });
+  } catch (error) {
+    const normalizedError = error instanceof AppError
+      ? error
+      : new AppError(502, ErrorCode.INTERNAL_ERROR, 'Failed to send Supabase invite');
+
+    const threwMetadata = {
+      tenantId,
+      role,
+      redirectTo,
+      timeoutMs,
+      elapsedMs: Date.now() - startedAt,
+      ...inviteDebugMetadata,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      mappedStatusCode: normalizedError.statusCode,
+      mappedErrorCode: normalizedError.code,
+    };
+
+    logAdminInviteDebug('supabase.threw', threwMetadata);
+    logInviteError('Supabase invite threw', threwMetadata);
+
+    throw normalizedError;
   }
 }
 
@@ -1591,7 +1725,7 @@ router.post(
 
       const cachedResponse = tenantCreationCache.get(cacheKey);
       if (cachedResponse) {
-        return cachedResponse;
+        return { finalResponse: cachedResponse, pendingInviteEmail: null };
       }
 
       const replayAudit = await tx.auditLog.findFirst({
@@ -1616,7 +1750,7 @@ router.post(
             !replayResponse.test_key.includes('[redacted]')
           ) {
             tenantCreationCache.set(cacheKey, replayResponse);
-            return replayResponse;
+            return { finalResponse: replayResponse, pendingInviteEmail: null };
           }
 
           throw new AppError(
@@ -1658,7 +1792,7 @@ router.post(
         },
       });
 
-      let finalResponse: CreatedTenantResponse = {
+      const finalResponse: CreatedTenantResponse = {
         tenant_id: tenant.id,
         name: tenant.name,
         contact_email: tenant.contactEmail,
@@ -1669,6 +1803,9 @@ router.post(
         bootstrap_admin_email: bootstrap_admin_email ?? null,
       };
 
+      // Upsert pending admin row inside the transaction — rolls back safely if
+      // tenant creation fails. The Supabase email is sent AFTER commit below.
+      let pendingInviteEmail: string | null = null;
       if (bootstrap_admin_email) {
         const invitedAdmin = await upsertPendingAdminInvite({
           tenantId: tenant.id,
@@ -1676,11 +1813,9 @@ router.post(
           role: 'tenant_admin',
         }, tx);
 
-        await sendTenantAdminInvite({
-          tenantId: tenant.id,
-          email: invitedAdmin.email,
-          role: 'tenant_admin',
-        });
+        pendingInviteEmail = invitedAdmin.email;
+        finalResponse.bootstrap_admin_email = invitedAdmin.email;
+        // bootstrap_invite_sent stays false until Supabase confirms delivery
 
         await tx.auditLog.create({
           data: {
@@ -1699,9 +1834,6 @@ router.post(
             isSandbox: false,
           },
         });
-
-        finalResponse.bootstrap_invite_sent = true;
-        finalResponse.bootstrap_admin_email = invitedAdmin.email;
       }
 
       tenantCreationCache.set(cacheKey, finalResponse);
@@ -1733,10 +1865,32 @@ router.post(
         },
       });
 
-      return finalResponse;
+      return { finalResponse, pendingInviteEmail };
     });
 
-    res.status(201).json(result);
+    const { finalResponse, pendingInviteEmail } = result;
+
+    // Send Supabase invite OUTSIDE the transaction — no long-held DB connection
+    // during the network call, and a Supabase failure won't roll back a committed tenant.
+    if (pendingInviteEmail) {
+      try {
+        await sendTenantAdminInvite({
+          tenantId: finalResponse.tenant_id,
+          email: pendingInviteEmail,
+          role: 'tenant_admin',
+        });
+        finalResponse.bootstrap_invite_sent = true;
+      } catch (inviteErr) {
+        // Tenant created successfully. Admin can be re-invited via POST /admin/tenants/:id/invite-user.
+        console.error(
+          `[tenant.created] Supabase invite failed for tenant ${finalResponse.tenant_id}:`,
+          inviteErr instanceof Error ? inviteErr.message : String(inviteErr)
+        );
+        finalResponse.bootstrap_invite_sent = false;
+      }
+    }
+
+    res.status(201).json(finalResponse);
   })
 );
 
@@ -2010,6 +2164,7 @@ router.post(
   '/tenants/:tenantId/invite-user',
   requireAdminRole('tenant_admin'),
   asyncHandler(async (req, res) => {
+    const requestId = req.id || 'unknown';
     const parsedBody = inviteTenantUserRequestSchema.safeParse(req.body);
     if (!parsedBody.success) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid invite payload');
@@ -2032,10 +2187,28 @@ router.post(
       throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
     }
 
+    const inviteDebugMetadata = getInviteDebugMetadata(parsedBody.data.email);
+    logAdminInviteDebug('request.received', {
+      requestId,
+      tenantId,
+      requesterRole: requester.role,
+      requesterTenantId: requester.tenantId,
+      ...inviteDebugMetadata,
+    });
+
     const invitedAdmin = await upsertPendingAdminInvite({
       tenantId,
       email: parsedBody.data.email,
       role: parsedBody.data.role,
+    });
+
+    logAdminInviteDebug('pending_invite.upserted', {
+      requestId,
+      tenantId,
+      adminUserId: invitedAdmin.id,
+      invitedAt: invitedAdmin.invitedAt?.toISOString() ?? null,
+      isActive: invitedAdmin.isActive,
+      ...inviteDebugMetadata,
     });
 
     await sendTenantAdminInvite({

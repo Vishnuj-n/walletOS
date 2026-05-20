@@ -3,7 +3,9 @@
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
     "declaration": true,
-    "module": "Node16",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
     "types": ["node"]
   },
   "composite": true,

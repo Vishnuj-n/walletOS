@@ -14,3 +14,28 @@ if (!supabaseAnonKey || supabaseAnonKey.trim() === '') {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+
+/**
+ * Parse Supabase auth callback hash for error information.
+ * Returns structured error data if the hash contains an error, null otherwise.
+ */
+export function parseSupabaseCallbackHash(): {
+  errorCode: string;
+  errorDescription: string;
+} | null {
+  if (typeof window === 'undefined' || !window.location.hash) {
+    return null;
+  }
+
+  const hashParams = new URLSearchParams(window.location.hash.slice(1));
+  const errorCode = hashParams.get('error_code');
+
+  if (!errorCode) {
+    return null;
+  }
+
+  return {
+    errorCode,
+    errorDescription: hashParams.get('error_description') ?? '',
+  };
+}

@@ -1,8 +1,20 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase, API_BASE_URL } from '../../lib/supabase';
+import { supabase, API_BASE_URL, parseSupabaseCallbackHash } from '../../lib/supabase';
+import { ShieldCheck, Lock, AlertCircle, KeyRound } from 'lucide-react';
+
+function getSupabaseCallbackError() {
+  const parsed = parseSupabaseCallbackHash();
+  if (parsed?.errorCode === 'otp_expired') {
+    return {
+      state: 'expired-invite' as const,
+      message: parsed.errorDescription || 'This invite link has expired. Ask the tenant owner to send a new invite.',
+    };
+  }
+  return null;
+}
 
 type ClaimState =
   | 'waiting-session'
@@ -23,7 +35,7 @@ function mapActivationError(message: string): ClaimState {
   return 'error';
 }
 
-export default function ClaimPage() {
+function ClaimContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tenantId = searchParams.get('tenant_id') ?? '';
@@ -36,6 +48,17 @@ export default function ClaimPage() {
     let active = true;
 
     const loadSession = async () => {
+      const callbackError = getSupabaseCallbackError();
+      if (callbackError) {
+        if (active) {
+          setState(callbackError.state);
+          setMessage(callbackError.message);
+        }
+
+        await supabase.auth.signOut();
+        return;
+      }
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -161,63 +184,124 @@ export default function ClaimPage() {
     state === 'error' ||
     state === 'success';
 
+  let HeaderIcon = KeyRound;
+  let badgeColor = 'bg-blue-50 text-blue-600';
+
+  if (state === 'success') {
+    HeaderIcon = ShieldCheck;
+    badgeColor = 'bg-emerald-50 text-emerald-600';
+  } else if (state === 'waiting-session' || state === 'missing-session') {
+    HeaderIcon = ShieldCheck;
+    badgeColor = 'bg-amber-50 text-amber-600';
+  } else if (
+    state === 'expired-invite' ||
+    state === 'already-activated' ||
+    state === 'unauthorized-tenant' ||
+    state === 'error'
+  ) {
+    HeaderIcon = AlertCircle;
+    badgeColor = 'bg-red-50 text-red-600';
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
-      <div className="mx-auto max-w-xl rounded-3xl border border-slate-800 bg-slate-900/90 p-8 shadow-2xl">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Tenant Claim</p>
-        <h1 className="mt-3 text-3xl font-semibold text-white">Claim your admin access</h1>
-        <p className="mt-3 text-sm text-slate-300">{message}</p>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+      <div className="max-w-md w-full bg-white border border-slate-200 rounded-xl shadow-sm p-8">
+        <div>
+          <div className={`mx-auto mb-4 w-10 h-10 rounded-lg ${badgeColor} flex items-center justify-center`}>
+            <HeaderIcon size={20} />
+          </div>
+          <h2 className="text-center text-lg font-semibold text-slate-900">
+            Tenant Claim
+          </h2>
+          <p className="mt-2 text-center text-xs text-slate-500">
+            {message}
+          </p>
+        </div>
 
         {state === 'ready' || state === 'submitting' ? (
-          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-200">
+              <label htmlFor="password" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
                 New password
               </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="new-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none ring-0 placeholder:text-slate-500 focus:border-cyan-400"
-                placeholder="Set a password"
-                disabled={state === 'submitting'}
-              />
+              <div className="relative">
+                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="appearance-none block w-full pl-9 pr-3 py-2 border border-slate-300 placeholder-slate-400 text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="Set a password"
+                  disabled={state === 'submitting'}
+                />
+              </div>
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-200">
+              <label htmlFor="confirmPassword" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
                 Confirm password
               </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none ring-0 placeholder:text-slate-500 focus:border-cyan-400"
-                placeholder="Repeat the password"
-                disabled={state === 'submitting'}
-              />
+              <div className="relative">
+                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  className="appearance-none block w-full pl-9 pr-3 py-2 border border-slate-300 placeholder-slate-400 text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="Repeat the password"
+                  disabled={state === 'submitting'}
+                />
+              </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={state === 'submitting'}
-              className="w-full rounded-xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {state === 'submitting' ? 'Activating...' : 'Claim access'}
-            </button>
+            <div>
+              <button
+                type="submit"
+                disabled={state === 'submitting'}
+                className="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {state === 'submitting' ? 'Activating...' : 'Claim access'}
+              </button>
+            </div>
           </form>
         ) : null}
 
         {isTerminalState ? (
-          <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-sm text-slate-300">
-            {state === 'success' ? 'Your session is being refreshed before redirect.' : 'Use the latest invite email if you need to restart the claim flow.'}
+          <div
+            className={`mt-6 rounded-lg border p-4 text-xs ${
+              state === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                : state === 'missing-session'
+                  ? 'bg-amber-50 border-amber-200 text-amber-700'
+                  : 'bg-red-50 border-red-200 text-red-700'
+            }`}
+          >
+            {state === 'success'
+              ? 'Your session is being refreshed before redirect.'
+              : state === 'expired-invite'
+                ? 'This invite link has expired. Ask the tenant owner to send a fresh invite.'
+                : 'Use the latest invite email if you need to restart the claim flow.'}
           </div>
         ) : null}
       </div>
     </div>
+  );
+}
+
+export default function ClaimPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div className="max-w-md w-full bg-white border border-slate-200 rounded-xl shadow-sm p-8 text-center text-sm text-slate-500">
+          Loading claim session...
+        </div>
+      </div>
+    }>
+      <ClaimContent />
+    </Suspense>
   );
 }

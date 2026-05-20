@@ -8,6 +8,7 @@ const mockGetSession = jest.fn();
 const mockUpdateUser = jest.fn();
 const mockRefreshSession = jest.fn();
 const mockOnAuthStateChange = jest.fn();
+const mockSignOut = jest.fn();
 
 jest.mock('../src/lib/supabase', () => ({
   API_BASE_URL: 'http://localhost:3333/api/v1',
@@ -16,6 +17,7 @@ jest.mock('../src/lib/supabase', () => ({
       getSession: (...args: unknown[]) => mockGetSession(...args),
       updateUser: (...args: unknown[]) => mockUpdateUser(...args),
       refreshSession: (...args: unknown[]) => mockRefreshSession(...args),
+      signOut: (...args: unknown[]) => mockSignOut(...args),
       onAuthStateChange: (...args: unknown[]) => mockOnAuthStateChange(...args),
     },
   },
@@ -32,6 +34,7 @@ describe('ClaimPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+    window.history.replaceState({}, '', 'http://localhost/claim?tenant_id=tenant-123');
     mockOnAuthStateChange.mockReturnValue({
       data: {
         subscription: {
@@ -54,6 +57,20 @@ describe('ClaimPage', () => {
     render(<ClaimPage />);
 
     expect(await screen.findByText(/open the latest invite link again/i)).toBeInTheDocument();
+  });
+
+  it('shows an expired-invite state when the Supabase callback reports otp_expired', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      'http://localhost/claim?tenant_id=tenant-123#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired'
+    );
+
+    render(<ClaimPage />);
+
+    expect(await screen.findByText(/this invite link has expired/i)).toBeInTheDocument();
+    expect(mockSignOut).toHaveBeenCalled();
+    expect(mockGetSession).not.toHaveBeenCalled();
   });
 
   it('claims the invite, refreshes the session, and redirects to the dashboard', async () => {

@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+export const dynamic = 'force-dynamic';
+
+import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   creditWallet,
@@ -14,7 +16,7 @@ import type {
 } from '@walletOS/types';
 import { ArrowRightLeft, BadgeDollarSign, RotateCcw, ShieldAlert } from 'lucide-react';
 
-export default function ManualActionsPage() {
+function ManualActionsForm() {
   const searchParams = useSearchParams();
   const [actionType, setActionType] = useState<'credit' | 'debit' | 'reversal'>('credit');
   const [walletId, setWalletId] = useState(searchParams.get('walletId') || '');
@@ -249,5 +251,20 @@ export default function ManualActionsPage() {
         </ul>
       </div>
     </div>
+  );
+}
+
+export default function ManualActionsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 p-6">
+        <h2 className="text-lg font-semibold text-slate-900 mb-4">Manual Actions</h2>
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 text-sm text-slate-500">
+          Loading manual actions...
+        </div>
+      </div>
+    }>
+      <ManualActionsForm />
+    </Suspense>
   );
 }

@@ -31,7 +31,7 @@ export function CredentialRevealDialog({
   const onClearRef = useRef(onClear);
   onClearRef.current = onClear;
   const expiresAtRef = useRef(Date.now() + REVEAL_TIMEOUT_MS);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [secondsRemaining, setSecondsRemaining] = useState(() => Math.ceil(REVEAL_TIMEOUT_MS / 1000));

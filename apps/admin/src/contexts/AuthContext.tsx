@@ -1,11 +1,16 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { supabase, parseSupabaseCallbackHash } from '../lib/supabase';
 import { setAdminSession } from '../lib/adminSession';
 import { User } from '@supabase/supabase-js';
 import type { AdminMeResponse, AdminRole, AdminUserInfo } from '@walletOS/types';
 import { roleRank } from '@walletOS/types';
+
+function hasExpiredInviteCallback(): boolean {
+  const parsed = parseSupabaseCallbackHash();
+  return parsed?.errorCode === 'otp_expired';
+}
 
 function isAdminRole(value: unknown): value is AdminRole {
   return value === 'support' || value === 'finance' || value === 'tenant_admin' || value === 'superadmin';
@@ -42,7 +47,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [adminUser, setAdminUser] = useState<AdminUserInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const latestAccessTokenRef = { current: '' };
+  const latestAccessTokenRef = useRef('');
+
+  const clearAuthState = (opts?: { setLoadingFalse?: boolean }) => {
+    setUser(null);
+    setAdminUser(null);
+    setAdminSession(null);
+    if (opts?.setLoadingFalse) {
+      setLoading(false);
+    }
+  };
 
   const fetchAdminUser = async (supabaseUser: User | null, accessToken?: string | null) => {
     if (!supabaseUser || !accessToken) {
@@ -94,6 +108,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const initializeAuth = async () => {
+      if (hasExpiredInviteCallback()) {
+        clearAuthState({ setLoadingFalse: true });
+        return;
+      }
+
       try {
         const {
           data: { session },
@@ -102,10 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (error) {
           await supabase.auth.signOut();
-          setUser(null);
-          setAdminUser(null);
-          setAdminSession(null);
-          setLoading(false);
+          clearAuthState({ setLoadingFalse: true });
           return;
         }
 
@@ -115,9 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch {
         await supabase.auth.signOut();
-        setUser(null);
-        setAdminUser(null);
-        setAdminSession(null);
+        clearAuthState();
       } finally {
         setLoading(false);
       }
@@ -128,12 +142,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (hasExpiredInviteCallback()) {
+        clearAuthState();
+        return;
+      }
+
       setUser(session?.user ?? null);
       if (session?.user) {
         await fetchAdminUser(session.user, session.access_token);
       } else {
-        setAdminUser(null);
-        setAdminSession(null);
+        clearAuthState();
       }
       // Note: loading is only set to false once during initial session check
     });

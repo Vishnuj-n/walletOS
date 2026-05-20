@@ -4,15 +4,15 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { PermissionGate } from '../../../components/PermissionGate';
 import { CredentialRevealDialog, type RevealedCredential } from '../../../components/CredentialRevealDialog';
-import { 
+import {
   createTenant,
-  fetchTenants, 
-  rotateTenantKey, 
-  fetchTenantUsage, 
+  fetchTenants,
+  rotateTenantKey,
+  fetchTenantUsage,
   revokeTenantKey,
 } from '../../../services/adminService';
 import type { Tenant, TenantUsageResponse } from '@walletOS/types';
-import { Building2, Plus } from 'lucide-react';
+import { Building2, Plus, MoreVertical } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface UsageModalProps {
@@ -218,8 +218,24 @@ export default function TenantsPage() {
     credentials: RevealedCredential[];
   } | null>(null);
 
+  const [openKebabTenantId, setOpenKebabTenantId] = useState<string | null>(null);
+
   useEffect(() => {
     loadTenants();
+  }, []);
+
+  useEffect(() => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.kebab-menu-container')) {
+        setOpenKebabTenantId(null);
+      }
+    };
+
+    document.addEventListener('click', handleDocumentClick);
+    return () => {
+      document.removeEventListener('click', handleDocumentClick);
+    };
   }, []);
 
   const loadTenants = async () => {
@@ -429,41 +445,77 @@ export default function TenantsPage() {
                       {tenant.admin_count}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleRotateKey(tenant.tenant_id, tenant.name, 'live')}
-                          disabled={actionLoading === `${tenant.tenant_id}-live`}
-                          className="text-indigo-600 hover:text-indigo-900 text-xs disabled:opacity-50"
-                        >
-                          {actionLoading === `${tenant.tenant_id}-live` ? 'Rotating...' : 'Rotate Live Key'}
-                        </button>
-                        <button
-                          onClick={() => handleRotateKey(tenant.tenant_id, tenant.name, 'test')}
-                          disabled={actionLoading === `${tenant.tenant_id}-test`}
-                          className="text-indigo-600 hover:text-indigo-900 text-xs disabled:opacity-50"
-                        >
-                          {actionLoading === `${tenant.tenant_id}-test` ? 'Rotating...' : 'Rotate Test Key'}
-                        </button>
-                        <button
-                          onClick={() => handleRevokeKey(tenant.tenant_id, tenant.name, 'live')}
-                          disabled={actionLoading === `${tenant.tenant_id}-revoke-live`}
-                          className="text-red-600 hover:text-red-900 text-xs disabled:opacity-50"
-                        >
-                          {actionLoading === `${tenant.tenant_id}-revoke-live` ? 'Revoking...' : 'Revoke Live'}
-                        </button>
-                        <button
-                          onClick={() => handleRevokeKey(tenant.tenant_id, tenant.name, 'test')}
-                          disabled={actionLoading === `${tenant.tenant_id}-revoke-test`}
-                          className="text-red-600 hover:text-red-900 text-xs disabled:opacity-50"
-                        >
-                          {actionLoading === `${tenant.tenant_id}-revoke-test` ? 'Revoking...' : 'Revoke Test'}
-                        </button>
+                      <div className="flex items-center space-x-3 justify-start">
                         <button
                           onClick={() => setUsageModal({ tenantId: tenant.tenant_id, tenantName: tenant.name })}
-                          className="text-green-600 hover:text-green-900 text-xs"
+                          className="text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors text-xs font-semibold"
                         >
                           View Usage
                         </button>
+                        
+                        <div className="relative kebab-menu-container">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenKebabTenantId(openKebabTenantId === tenant.tenant_id ? null : tenant.tenant_id);
+                            }}
+                            className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors inline-flex items-center justify-center focus:outline-none"
+                            aria-label="More actions"
+                            title="More actions"
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+                          
+                          {openKebabTenantId === tenant.tenant_id && (
+                            <div className="absolute right-0 mt-1.5 z-50 w-48 origin-top-right overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg transition-all flex flex-col">
+                              <button
+                                onClick={() => {
+                                  handleRotateKey(tenant.tenant_id, tenant.name, 'live');
+                                  setOpenKebabTenantId(null);
+                                }}
+                                disabled={actionLoading === `${tenant.tenant_id}-live`}
+                                className="block w-full whitespace-nowrap px-4 py-2 text-left text-xs text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                              >
+                                {actionLoading === `${tenant.tenant_id}-live` ? 'Rotating...' : 'Rotate Live Key'}
+                              </button>
+                              
+                              <button
+                                onClick={() => {
+                                  handleRotateKey(tenant.tenant_id, tenant.name, 'test');
+                                  setOpenKebabTenantId(null);
+                                }}
+                                disabled={actionLoading === `${tenant.tenant_id}-test`}
+                                className="block w-full whitespace-nowrap px-4 py-2 text-left text-xs text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                              >
+                                {actionLoading === `${tenant.tenant_id}-test` ? 'Rotating...' : 'Rotate Test Key'}
+                              </button>
+                              
+                              <div className="border-t border-slate-100 my-1"></div>
+                              
+                              <button
+                                onClick={() => {
+                                  handleRevokeKey(tenant.tenant_id, tenant.name, 'live');
+                                  setOpenKebabTenantId(null);
+                                }}
+                                disabled={actionLoading === `${tenant.tenant_id}-revoke-live`}
+                                className="block w-full whitespace-nowrap px-4 py-2 text-left text-xs text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                              >
+                                {actionLoading === `${tenant.tenant_id}-revoke-live` ? 'Revoking...' : 'Revoke Live'}
+                              </button>
+                              
+                              <button
+                                onClick={() => {
+                                  handleRevokeKey(tenant.tenant_id, tenant.name, 'test');
+                                  setOpenKebabTenantId(null);
+                                }}
+                                disabled={actionLoading === `${tenant.tenant_id}-revoke-test`}
+                                className="block w-full whitespace-nowrap px-4 py-2 text-left text-xs text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                              >
+                                {actionLoading === `${tenant.tenant_id}-revoke-test` ? 'Revoking...' : 'Revoke Test'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>

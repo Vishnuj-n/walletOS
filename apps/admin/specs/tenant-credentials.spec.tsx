@@ -86,7 +86,8 @@ describe('Tenants credential reveal flow', () => {
 
     render(<TenantsPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /rotate live key/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /more actions/i }));
+    fireEvent.click(screen.getByRole('button', { name: /rotate live key/i }));
 
     expect(await screen.findByText('One-Time Reveal')).toBeInTheDocument();
     expect(screen.getByText('Live API Key')).toBeInTheDocument();

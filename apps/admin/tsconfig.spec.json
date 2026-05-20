@@ -4,6 +4,7 @@
     "outDir": "../../dist/out-tsc",
     "module": "commonjs",
     "moduleResolution": "node10",
+    "ignoreDeprecations": "6.0",
     "jsx": "react",
     "types": ["jest", "node"]
   },

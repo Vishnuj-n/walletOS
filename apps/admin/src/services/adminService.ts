@@ -13,6 +13,8 @@ import type {
   RevokeKeyResponse,
   RotateKeyRequest,
   RotateKeyResponse,
+  InviteTenantUserRequest,
+  InviteTenantUserResponse,
   SystemBalanceResponse,
   SystemErrorsResponse,
   Tenant,
@@ -141,6 +143,17 @@ export async function revokeTenantKey(
     body: request,
     requireIdempotencyKey: true,
     fallbackMessage: 'Failed to revoke API key',
+  });
+}
+
+export async function inviteTenantUser(
+  tenantId: string,
+  request: InviteTenantUserRequest
+): Promise<InviteTenantUserResponse> {
+  return apiRequest<InviteTenantUserResponse>(`/admin/tenants/${tenantId}/invite-user`, {
+    method: 'POST',
+    body: request,
+    fallbackMessage: 'Failed to send invite',
   });
 }
 
