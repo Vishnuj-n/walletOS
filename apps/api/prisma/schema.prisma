@@ -39,13 +39,16 @@ model ApiKey {
 model AdminUser {
   id          String    @id @default(cuid())
   tenantId    String
-  supabaseUid String
+  supabaseUid String?
   email       String
   role        AdminRole
   isActive    Boolean   @default(true)
+  invitedAt   DateTime?
+  activatedAt DateTime?
   tenant      Tenant    @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, supabaseUid])
+  @@unique([tenantId, email])
   @@index([tenantId])
 }
 

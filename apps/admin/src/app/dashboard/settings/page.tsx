@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { KeyRound, RefreshCcw, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { PermissionGate } from '../../../components/PermissionGate';
+import { CredentialRevealDialog } from '../../../components/CredentialRevealDialog';
 import {
   fetchCurrentTenantApiKeys,
   rotateCurrentTenantKey,
@@ -56,18 +57,6 @@ export default function SettingsPage() {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
-
-  useEffect(() => {
-    if (!revealedKey) {
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setRevealedKey(null);
-    }, 30000);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [revealedKey]);
 
   const handleRotate = async (scope: 'live' | 'test') => {
     setRotationLoading(scope);
@@ -194,21 +183,28 @@ export default function SettingsPage() {
           })}
         </div>
 
-        {revealedKey && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-amber-900">New {scopeLabel(revealedKey.scope)}</h2>
-            <p className="mt-1 text-sm text-amber-800">This secret is shown once. Store it securely now.</p>
-            <div className="mt-4 rounded-lg border border-amber-200 bg-white p-3">
-              <code className="break-all text-sm text-slate-900">{revealedKey.value}</code>
-            </div>
-          </div>
-        )}
       </PermissionGate>
 
       {!hasRole('tenant_admin') && (
         <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
           Rotation actions are hidden for roles below `tenant_admin`.
         </div>
+      )}
+
+      {revealedKey && (
+        <CredentialRevealDialog
+          title={`${scopeLabel(revealedKey.scope)} rotated`}
+          tenantName={settings?.tenant_name}
+          credentials={[
+            {
+              id: `settings-${revealedKey.scope}`,
+              label: scopeLabel(revealedKey.scope),
+              value: revealedKey.value,
+              tone: revealedKey.scope,
+            },
+          ]}
+          onClear={() => setRevealedKey(null)}
+        />
       )}
     </div>
   );

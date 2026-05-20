@@ -16,6 +16,41 @@ const useRealSupabase = process.env.TEST_REAL_SUPABASE === 'true';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - jest global is available at runtime
 if (!useRealSupabase) {
+  const getUserForToken = (token: string) => {
+    if (token === 'support-jwt-token') {
+      return {
+        id: 'support-uuid',
+        email: 'support@test.com',
+        app_metadata: {
+          tenantId: 'default',
+        },
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
+      };
+    }
+
+    if (token === 'invited-tenant-admin-jwt-token') {
+      return {
+        id: 'invited-tenant-admin-uuid',
+        email: 'invited-admin@test.com',
+        app_metadata: {},
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
+      };
+    }
+
+    if (token === 'expired-invite-jwt-token') {
+      return null;
+    }
+
+    return {
+      id: 'test-admin-uuid',
+      email: 'admin@test.com',
+      app_metadata: {
+        tenantId: 'default',
+      },
+      email_confirmed_at: '2026-01-01T00:00:00.000Z',
+    };
+  };
+
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore - jest global is available at runtime
   jest.mock('@supabase/supabase-js', () => ({
@@ -23,36 +58,24 @@ if (!useRealSupabase) {
     // @ts-ignore - jest global is available at runtime
     createClient: jest.fn(() => ({
       auth: {
+        admin: {
+          inviteUserByEmail: jest.fn(() => Promise.resolve({ data: { user: null }, error: null })),
+          updateUserById: jest.fn(() => Promise.resolve({ data: { user: null }, error: null })),
+        },
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore - jest global is available at runtime
         getUser: jest.fn((token: string) => {
-          // Return different users based on token for testing different roles
-          if (token === 'support-jwt-token') {
+          const user = getUserForToken(token);
+
+          if (!user) {
             return Promise.resolve({
-              data: {
-                user: {
-                  id: 'support-uuid',
-                  email: 'support@test.com',
-                  app_metadata: {
-                    tenantId: 'default',
-                  },
-                },
-              },
-              error: null,
+              data: { user: null },
+              error: { message: 'Invalid token' },
             });
           }
-          
-          // Default admin user
+
           return Promise.resolve({
-            data: {
-              user: {
-                id: 'test-admin-uuid',
-                email: 'admin@test.com',
-                app_metadata: {
-                  tenantId: 'default',
-                },
-              },
-            },
+            data: { user },
             error: null,
           });
         }),

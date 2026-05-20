@@ -257,6 +257,7 @@ export interface RevokeKeyResponse {
 export interface CreateTenantRequest {
   name: string;
   contact_email?: string;
+  bootstrap_admin_email?: string;
 }
 
 export interface CreatedTenantResponse {
@@ -266,6 +267,32 @@ export interface CreatedTenantResponse {
   live_key: string;
   test_key: string;
   created_at: string;
+  bootstrap_invite_sent?: boolean;
+  bootstrap_admin_email?: string | null;
+}
+
+export interface InviteTenantUserRequest {
+  email: string;
+  role: Extract<AdminRole, 'tenant_admin'>;
+}
+
+export interface InviteTenantUserResponse {
+  tenant_id: string;
+  email: string;
+  role: Extract<AdminRole, 'tenant_admin'>;
+  invite_sent: boolean;
+  invited_at: string;
+}
+
+export interface ActivateInvitationRequest {
+  tenant_id: string;
+}
+
+export interface ActivateInvitationResponse {
+  tenant_id: string;
+  email: string;
+  role: AdminRole;
+  activated_at: string;
 }
 
 export interface WalletSearchResult {

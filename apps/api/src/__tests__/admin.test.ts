@@ -304,10 +304,11 @@ describe('Admin API Endpoints', () => {
 
   describe('POST /admin/tenants', () => {
     it('should create a tenant with API keys', async () => {
+      const idempotencyKey = `test-tenant-idempotency-key-${Date.now()}`;
       const response = await request(app)
         .post('/api/v1/admin/tenants')
         .set('Authorization', adminAuthToken)
-        .set('Idempotency-Key', 'test-tenant-idempotency-key')
+        .set('Idempotency-Key', idempotencyKey)
         .send({
           name: 'New Test Tenant',
           contact_email: 'new-tenant@example.com',
@@ -328,9 +329,30 @@ describe('Admin API Endpoints', () => {
       });
       expect(auditLog).toBeDefined();
       expect(auditLog?.isSandbox).toBe(false);
+      const auditChanges = (auditLog?.changes as Record<string, unknown>) ?? {};
+      const auditResponse = (auditChanges.response as { live_key?: string; test_key?: string } | undefined) ?? {};
+      expect(auditResponse.live_key).toContain('[redacted]');
+      expect(auditResponse.test_key).toContain('[redacted]');
+      expect(auditResponse.live_key).not.toBe(response.body.live_key);
+      expect(auditResponse.test_key).not.toBe(response.body.test_key);
+
+      const retryResponse = await request(app)
+        .post('/api/v1/admin/tenants')
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', idempotencyKey)
+        .send({
+          name: 'New Test Tenant',
+          contact_email: 'new-tenant@example.com',
+        });
+
+      expect(retryResponse.status).toBe(201);
+      expect(retryResponse.body.tenant_id).toBe(response.body.tenant_id);
+      expect(retryResponse.body.live_key).toBe(response.body.live_key);
+      expect(retryResponse.body.test_key).toBe(response.body.test_key);
 
       // Cleanup
       await prisma.auditLog.deleteMany({ where: { tenantId: response.body.tenant_id } });
+      await prisma.adminUser.deleteMany({ where: { tenantId: response.body.tenant_id } });
       await prisma.apiKey.deleteMany({ where: { tenantId: response.body.tenant_id } });
       await prisma.tenant.delete({ where: { id: response.body.tenant_id } });
     });
@@ -343,6 +365,50 @@ describe('Admin API Endpoints', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('should optionally bootstrap the first tenant admin invite', async () => {
+      const response = await request(app)
+        .post('/api/v1/admin/tenants')
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', `tenant-bootstrap-${Date.now()}`)
+        .send({
+          name: 'Bootstrap Tenant',
+          contact_email: 'bootstrap-tenant@example.com',
+          bootstrap_admin_email: 'Invited-Admin@Test.com',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.bootstrap_invite_sent).toBe(true);
+      expect(response.body.bootstrap_admin_email).toBe('invited-admin@test.com');
+
+      const pendingAdmin = await prisma.adminUser.findUnique({
+        where: {
+          tenantId_email: {
+            tenantId: response.body.tenant_id,
+            email: 'invited-admin@test.com',
+          },
+        },
+      });
+
+      expect(pendingAdmin).toBeDefined();
+      expect(pendingAdmin?.isActive).toBe(false);
+      expect(pendingAdmin?.supabaseUid).toBeNull();
+      expect(pendingAdmin?.invitedAt).toBeTruthy();
+
+      const inviteAudit = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: response.body.tenant_id,
+          action: 'admin_user.invited',
+        },
+      });
+
+      expect(inviteAudit).toBeDefined();
+
+      await prisma.auditLog.deleteMany({ where: { tenantId: response.body.tenant_id } });
+      await prisma.adminUser.deleteMany({ where: { tenantId: response.body.tenant_id } });
+      await prisma.apiKey.deleteMany({ where: { tenantId: response.body.tenant_id } });
+      await prisma.tenant.delete({ where: { id: response.body.tenant_id } });
     });
   });
 
@@ -844,6 +910,148 @@ describe('Admin API Endpoints', () => {
       expect(response.status).toBe(201);
       expect(response.body.scope).toBe('test');
       expect(response.body.api_key).toMatch(/^wlt_test_/);
+    });
+
+    it('should invite a same-tenant tenant admin and keep the row pending', async () => {
+      const response = await request(app)
+        .post(`/api/v1/admin/tenants/${testTenantId}/invite-user`)
+        .set('Authorization', adminAuthToken)
+        .send({
+          email: 'invited-admin@test.com',
+          role: 'tenant_admin',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.invite_sent).toBe(true);
+      expect(response.body.email).toBe('invited-admin@test.com');
+
+      const pendingInvite = await prisma.adminUser.findUnique({
+        where: {
+          tenantId_email: {
+            tenantId: testTenantId,
+            email: 'invited-admin@test.com',
+          },
+        },
+      });
+
+      expect(pendingInvite).toBeDefined();
+      expect(pendingInvite?.isActive).toBe(false);
+      expect(pendingInvite?.supabaseUid).toBeNull();
+
+      await prisma.auditLog.deleteMany({
+        where: {
+          tenantId: testTenantId,
+          action: 'admin_user.invited',
+        },
+      });
+      await prisma.adminUser.deleteMany({
+        where: {
+          tenantId: testTenantId,
+          email: 'invited-admin@test.com',
+        },
+      });
+    });
+  });
+
+  describe('POST /admin/invitations/activate', () => {
+    let pendingTenantId: string;
+    let pendingAdminId: string;
+
+    beforeEach(async () => {
+      const tenant = await prisma.tenant.create({
+        data: {
+          name: `Pending Invite Tenant ${Date.now()}`,
+          contactEmail: `pending-${Date.now()}@example.com`,
+        },
+      });
+      pendingTenantId = tenant.id;
+
+      const pendingAdmin = await prisma.adminUser.create({
+        data: {
+          tenantId: tenant.id,
+          email: 'invited-admin@test.com',
+          role: AdminRole.tenant_admin,
+          isActive: false,
+          invitedAt: new Date(),
+        },
+      });
+      pendingAdminId = pendingAdmin.id;
+    });
+
+    afterEach(async () => {
+      if (pendingTenantId) {
+        await prisma.auditLog.deleteMany({ where: { tenantId: pendingTenantId } });
+        await prisma.adminUser.deleteMany({ where: { tenantId: pendingTenantId } });
+        await prisma.apiKey.deleteMany({ where: { tenantId: pendingTenantId } });
+        await prisma.tenant.deleteMany({ where: { id: pendingTenantId } });
+      }
+    });
+
+    it('should activate a pending invite with a verified Supabase user', async () => {
+      const response = await request(app)
+        .post('/api/v1/admin/invitations/activate')
+        .set('Authorization', 'Bearer invited-tenant-admin-jwt-token')
+        .send({ tenant_id: pendingTenantId });
+
+      expect(response.status).toBe(200);
+      expect(response.body.tenant_id).toBe(pendingTenantId);
+      expect(response.body.email).toBe('invited-admin@test.com');
+      expect(response.body.role).toBe('tenant_admin');
+
+      const activatedAdmin = await prisma.adminUser.findUnique({
+        where: { id: pendingAdminId },
+      });
+
+      expect(activatedAdmin?.isActive).toBe(true);
+      expect(activatedAdmin?.supabaseUid).toBe('invited-tenant-admin-uuid');
+      expect(activatedAdmin?.activatedAt).toBeTruthy();
+
+      const activationAudit = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: pendingTenantId,
+          action: 'admin_user.activated',
+        },
+      });
+      expect(activationAudit).toBeDefined();
+    });
+
+    it('should reject activation for an unknown invite', async () => {
+      const response = await request(app)
+        .post('/api/v1/admin/invitations/activate')
+        .set('Authorization', 'Bearer invited-tenant-admin-jwt-token')
+        .send({ tenant_id: 'missing-tenant' });
+
+      expect(response.status).toBe(404);
+      expect(response.body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('should reject duplicate activation', async () => {
+      await prisma.adminUser.update({
+        where: { id: pendingAdminId },
+        data: {
+          isActive: true,
+          supabaseUid: 'existing-uid',
+          activatedAt: new Date(),
+        },
+      });
+
+      const response = await request(app)
+        .post('/api/v1/admin/invitations/activate')
+        .set('Authorization', 'Bearer invited-tenant-admin-jwt-token')
+        .send({ tenant_id: pendingTenantId });
+
+      expect(response.status).toBe(409);
+      expect(response.body.error.code).toBe('INVALID_OPERATION');
+    });
+
+    it('should reject expired sessions', async () => {
+      const response = await request(app)
+        .post('/api/v1/admin/invitations/activate')
+        .set('Authorization', 'Bearer expired-invite-jwt-token')
+        .send({ tenant_id: pendingTenantId });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error.code).toBe('UNAUTHORIZED');
     });
   });
 

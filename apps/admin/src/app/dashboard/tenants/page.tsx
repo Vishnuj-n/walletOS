@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { PermissionGate } from '../../../components/PermissionGate';
+import { CredentialRevealDialog, type RevealedCredential } from '../../../components/CredentialRevealDialog';
 import { 
   createTenant,
   fetchTenants, 
@@ -10,8 +11,8 @@ import {
   fetchTenantUsage, 
   revokeTenantKey,
 } from '../../../services/adminService';
-import type { CreatedTenantResponse, Tenant, TenantUsageResponse } from '@walletOS/types';
-import { Building2, KeyRound, Plus } from 'lucide-react';
+import type { Tenant, TenantUsageResponse } from '@walletOS/types';
+import { Building2, Plus } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface UsageModalProps {
@@ -210,9 +211,12 @@ export default function TenantsPage() {
   const [contactEmail, setContactEmail] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
-  const [createSuccess, setCreateSuccess] = useState('');
-  const [createdTenant, setCreatedTenant] = useState<CreatedTenantResponse | null>(null);
-  const [copyStatus, setCopyStatus] = useState<string>('');
+  const [bootstrapAdminEmail, setBootstrapAdminEmail] = useState('');
+  const [revealState, setRevealState] = useState<{
+    title: string;
+    tenantName?: string;
+    credentials: RevealedCredential[];
+  } | null>(null);
 
   useEffect(() => {
     loadTenants();
@@ -239,9 +243,17 @@ export default function TenantsPage() {
     setActionLoading(`${tenantId}-${scope}`);
     try {
       const result = await rotateTenantKey(tenantId, { scope });
-      setAlertModal({
-        message: `New ${scope} API key generated: ${result.api_key}\n\nSave this key now - it won't be shown again!`,
-        type: 'success'
+      setRevealState({
+        title: `${scope === 'live' ? 'Live' : 'Test'} key rotated`,
+        tenantName,
+        credentials: [
+          {
+            id: `${tenantId}-${scope}`,
+            label: scope === 'live' ? 'Live API Key' : 'Test API Key',
+            value: result.api_key,
+            tone: scope,
+          },
+        ],
       });
       await loadTenants(); // Refresh the list
     } catch (err) {
@@ -297,36 +309,41 @@ export default function TenantsPage() {
     }
 
     setCreateError('');
-    setCreateSuccess('');
     setCreateLoading(true);
-    setCreatedTenant(null);
 
     try {
       const result = await createTenant({
         name: normalizedName,
         contact_email: trimmedEmail || undefined,
+        bootstrap_admin_email: bootstrapAdminEmail.trim() || undefined,
       });
-      setCreatedTenant(result);
-      setCreateSuccess('Tenant created successfully!');
+      setRevealState({
+        title: 'Tenant credentials issued',
+        tenantName: result.name,
+        credentials: [
+          {
+            id: `${result.tenant_id}-live`,
+            label: 'Live API Key',
+            value: result.live_key,
+            tone: 'live',
+          },
+          {
+            id: `${result.tenant_id}-test`,
+            label: 'Test API Key',
+            value: result.test_key,
+            tone: 'test',
+          },
+        ],
+      });
       setName('');
       setContactEmail('');
+      setBootstrapAdminEmail('');
+      setCreateModalOpen(false);
       await loadTenants(); // Refresh the list
     } catch (err: unknown) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create tenant');
     } finally {
       setCreateLoading(false);
-    }
-  };
-
-  const copyToClipboard = async (text: string) => {
-    setCopyStatus('');
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopyStatus('Copied!');
-      setTimeout(() => setCopyStatus(''), 2000);
-    } catch {
-      setCopyStatus('Select & copy manually');
-      setTimeout(() => setCopyStatus(''), 3000);
     }
   };
 
@@ -481,125 +498,61 @@ export default function TenantsPage() {
                 </div>
               )}
 
-              {createSuccess && (
-                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-4">
-                  {createSuccess}
+              <form onSubmit={handleCreateTenant}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tenant Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Enter tenant name"
+                  />
                 </div>
-              )}
 
-              {copyStatus && (
-                <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-4">
-                  {copyStatus}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Contact Email
+                  </label>
+                  <input
+                    type="email"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Enter contact email (optional)"
+                    pattern="[^\s@]+@[^\s@]+\.[^\s@]+"
+                    title="Please enter a valid email address"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Optional - must be a valid email if provided</p>
                 </div>
-              )}
 
-              {!createdTenant ? (
-                <form onSubmit={handleCreateTenant}>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tenant Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Enter tenant name"
-                    />
-                  </div>
-
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contact Email
-                    </label>
-                    <input
-                      type="email"
-                      value={contactEmail}
-                      onChange={(e) => setContactEmail(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Enter contact email (optional)"
-                      pattern="[^\s@]+@[^\s@]+\.[^\s@]+"
-                      title="Please enter a valid email address"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Optional - must be a valid email if provided</p>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={createLoading}
-                    className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {createLoading ? 'Creating...' : 'Create Tenant'}
-                  </button>
-                </form>
-              ) : (
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-900 mb-4 inline-flex items-center gap-2">
-                    <KeyRound size={16} className="text-blue-600" /> API Keys - Save These Now!
-                  </h4>
-                  <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg mb-4">
-                    <p className="font-medium">Important:</p>
-                    <p className="text-sm">
-                      These API keys will only be shown once. Please save them securely.
-                    </p>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Live API Key
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          readOnly
-                          value={createdTenant.live_key}
-                          className="flex-1 px-4 py-2 border border-gray-300 rounded-md bg-gray-50 font-mono text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(createdTenant.live_key)}
-                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Test API Key (Sandbox)
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          readOnly
-                          value={createdTenant.test_key}
-                          className="flex-1 px-4 py-2 border border-gray-300 rounded-md bg-gray-50 font-mono text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(createdTenant.test_key)}
-                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setCreateModalOpen(false);
-                      setCreatedTenant(null);
-                    }}
-                    className="w-full mt-6 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 text-sm font-semibold"
-                  >
-                    Done
-                  </button>
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Bootstrap Tenant Admin Email
+                  </label>
+                  <input
+                    type="email"
+                    value={bootstrapAdminEmail}
+                    onChange={(e) => setBootstrapAdminEmail(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Invite the first tenant admin (optional)"
+                    pattern="[^\s@]+@[^\s@]+\.[^\s@]+"
+                    title="Please enter a valid email address"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Optional - sends the first tenant admin invite through Supabase.</p>
                 </div>
-              )}
+
+                <button
+                  type="submit"
+                  disabled={createLoading}
+                  className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {createLoading ? 'Creating...' : 'Create Tenant'}
+                </button>
+              </form>
             </div>
           </div>
         )}
@@ -619,6 +572,15 @@ export default function TenantsPage() {
             message={alertModal.message}
             type={alertModal.type}
             onClose={() => setAlertModal(null)}
+          />
+        )}
+
+        {revealState && (
+          <CredentialRevealDialog
+            title={revealState.title}
+            tenantName={revealState.tenantName}
+            credentials={revealState.credentials}
+            onClear={() => setRevealState(null)}
           />
         )}
       </div>

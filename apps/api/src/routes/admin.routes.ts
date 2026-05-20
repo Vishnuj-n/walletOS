@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { Decimal } from '@prisma/client/runtime/library';
 import { Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
-import { adminAuthMiddleware, requireAdminRole } from '../middleware/adminAuth';
+import { adminAuthMiddleware, getSupabaseAdminClient, requireAdminRole, verifySupabaseAccessToken } from '../middleware/adminAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
@@ -50,6 +50,22 @@ const adminApiKeyRotationRequestSchema = z.object({
   scope: z.enum(['live', 'test']),
 });
 
+const createTenantRequestSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  contact_email: z.string().trim().email().optional(),
+  bootstrap_admin_email: z.string().trim().email().optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+});
+
+const inviteTenantUserRequestSchema = z.object({
+  email: z.string().trim().email(),
+  role: z.literal('tenant_admin'),
+});
+
+const activateInvitationRequestSchema = z.object({
+  tenant_id: z.string().trim().min(1).max(255),
+});
+
 type AdminApiKeyRotationResponse = {
   api_key: string;
   scope: 'live' | 'test';
@@ -57,12 +73,46 @@ type AdminApiKeyRotationResponse = {
   created_at: string;
 };
 
-const adminApiKeyRotationResponseCache = new Map<
-  string,
-  { response: AdminApiKeyRotationResponse; expiresAt: number }
->();
-const ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-const ADMIN_API_KEY_ROTATION_CACHE_TTL_MS = ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS;
+type CreatedTenantResponse = {
+  tenant_id: string;
+  name: string;
+  contact_email: string | null;
+  live_key: string;
+  test_key: string;
+  created_at: string;
+  bootstrap_invite_sent?: boolean;
+  bootstrap_admin_email?: string | null;
+};
+
+type InviteTenantUserResponse = {
+  tenant_id: string;
+  email: string;
+  role: 'tenant_admin';
+  invite_sent: boolean;
+  invited_at: string;
+};
+
+const IDEMPOTENCY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+class TtlCache<V> {
+  private store = new Map<string, { value: V; expiresAt: number }>();
+  constructor(private ttlMs: number) {}
+  get(key: string): V | undefined {
+    const entry = this.store.get(key);
+    if (!entry) return undefined;
+    if (entry.expiresAt <= Date.now()) {
+      this.store.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+  set(key: string, value: V): void {
+    this.store.set(key, { value, expiresAt: Date.now() + this.ttlMs });
+  }
+}
+
+const adminApiKeyRotationCache = new TtlCache<AdminApiKeyRotationResponse>(IDEMPOTENCY_WINDOW_MS);
+const tenantCreationCache = new TtlCache<CreatedTenantResponse>(IDEMPOTENCY_WINDOW_MS);
 
 function getValidatedIdempotencyKey(idempotencyKeyHeader: string | string[] | undefined): string {
   const idempotencyKey = Array.isArray(idempotencyKeyHeader) ? idempotencyKeyHeader[0] : idempotencyKeyHeader;
@@ -82,30 +132,84 @@ function getAdminApiKeyRotationCacheKey(tenantId: string, scope: 'live' | 'test'
   return `${tenantId}:${scope}:${auditAction}:${idempotencyKey}`;
 }
 
-function getCachedAdminApiKeyRotationResponse(cacheKey: string): AdminApiKeyRotationResponse | undefined {
-  const cachedEntry = adminApiKeyRotationResponseCache.get(cacheKey);
-
-  if (!cachedEntry) {
-    return undefined;
-  }
-
-  if (cachedEntry.expiresAt <= Date.now()) {
-    adminApiKeyRotationResponseCache.delete(cacheKey);
-    return undefined;
-  }
-
-  return cachedEntry.response;
-}
-
-function cacheAdminApiKeyRotationResponse(cacheKey: string, response: AdminApiKeyRotationResponse): void {
-  adminApiKeyRotationResponseCache.set(cacheKey, {
-    response,
-    expiresAt: Date.now() + ADMIN_API_KEY_ROTATION_CACHE_TTL_MS,
-  });
+function getTenantCreationCacheKey(actorEmail: string, idempotencyKey: string): string {
+  return `${actorEmail}:tenant.created:${idempotencyKey}`;
 }
 
 function redactApiKeyForAudit(apiKey: string): string {
   return `${apiKey.slice(0, 15)}...[redacted]`;
+}
+
+function normalizeAdminEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function getAdminClaimRedirectUrl(tenantId: string): string {
+  const configuredBaseUrl = process.env.ADMIN_CLAIM_REDIRECT_URL || process.env.ADMIN_APP_URL;
+
+  if (!configuredBaseUrl) {
+    throw new AppError(500, ErrorCode.INTERNAL_ERROR, 'Admin claim redirect URL is not configured');
+  }
+
+  const claimUrl = new URL('/claim', configuredBaseUrl);
+  claimUrl.searchParams.set('tenant_id', tenantId);
+  return claimUrl.toString();
+}
+
+async function sendTenantAdminInvite(params: {
+  tenantId: string;
+  email: string;
+  role: 'tenant_admin';
+}) {
+  const { tenantId, email, role } = params;
+  const supabaseAdmin = getSupabaseAdminClient();
+  const redirectTo = getAdminClaimRedirectUrl(tenantId);
+
+  const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    redirectTo,
+    data: {
+      tenant_id: tenantId,
+      invited_role: role,
+    },
+  });
+
+  if (error) {
+    throw new AppError(502, ErrorCode.INTERNAL_ERROR, 'Failed to send Supabase invite');
+  }
+}
+
+async function upsertPendingAdminInvite(params: {
+  tenantId: string;
+  email: string;
+  role: 'tenant_admin';
+}, tx: Prisma.TransactionClient = prisma) {
+  const normalizedEmail = normalizeAdminEmail(params.email);
+  const invitedAt = new Date();
+
+  const adminUser = await tx.adminUser.upsert({
+    where: {
+      tenantId_email: {
+        tenantId: params.tenantId,
+        email: normalizedEmail,
+      },
+    },
+    update: {
+      role: params.role,
+      isActive: false,
+      invitedAt,
+      activatedAt: null,
+      supabaseUid: null,
+    },
+    create: {
+      tenantId: params.tenantId,
+      email: normalizedEmail,
+      role: params.role,
+      isActive: false,
+      invitedAt,
+    },
+  });
+
+  return adminUser;
 }
 
 async function resolveAdminTenantScope(
@@ -155,11 +259,11 @@ async function rotateAdminApiKeyForTenant(params: {
   status: number;
 }> {
   const { tenantId, scope, adminEmail, idempotencyKey, auditAction, isAuditSandbox } = params;
-  const idempotencyWindowStart = new Date(Date.now() - ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS);
+  const idempotencyWindowStart = new Date(Date.now() - IDEMPOTENCY_WINDOW_MS);
   const isSandbox = scope === 'test';
   const cacheKey = getAdminApiKeyRotationCacheKey(tenantId, scope, auditAction, idempotencyKey);
 
-  const cachedResponse = getCachedAdminApiKeyRotationResponse(cacheKey);
+  const cachedResponse = adminApiKeyRotationCache.get(cacheKey);
   if (cachedResponse) {
     return {
       apiKey: {
@@ -201,7 +305,7 @@ async function rotateAdminApiKeyForTenant(params: {
       if (cachedResponse) {
         // If we have the raw API key in the audit log (not redacted), reuse it.
         if (!cachedResponse.api_key.includes('[redacted]')) {
-          cacheAdminApiKeyRotationResponse(cacheKey, cachedResponse);
+          adminApiKeyRotationCache.set(cacheKey, cachedResponse);
           return {
             apiKey: {
               createdAt: new Date(cachedResponse.created_at),
@@ -253,7 +357,7 @@ async function rotateAdminApiKeyForTenant(params: {
       created_at: apiKey.createdAt.toISOString(),
     };
 
-    cacheAdminApiKeyRotationResponse(cacheKey, response);
+    adminApiKeyRotationCache.set(cacheKey, response);
 
     await tx.auditLog.create({
       data: {
@@ -288,6 +392,113 @@ async function rotateAdminApiKeyForTenant(params: {
     };
   });
 }
+
+/**
+ * POST /admin/invitations/activate
+ * Activate a pending invited admin using the verified Supabase session
+ */
+router.post(
+  '/invitations/activate',
+  asyncHandler(async (req, res) => {
+    const authHeader = req.headers['authorization'];
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Missing or invalid authorization header');
+    }
+
+    const parsedBody = activateInvitationRequestSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'tenant_id is required');
+    }
+
+    const token = authHeader.substring(7);
+    const tenantId = parsedBody.data.tenant_id;
+    const user = await verifySupabaseAccessToken(token);
+    const normalizedEmail = normalizeAdminEmail(user.email ?? '');
+
+    if (!normalizedEmail) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Verified email is required');
+    }
+
+    if (!user.email_confirmed_at) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Verified email is required');
+    }
+
+    const pendingInvite = await prisma.adminUser.findUnique({
+      where: {
+        tenantId_email: {
+          tenantId,
+          email: normalizedEmail,
+        },
+      },
+    });
+
+    if (!pendingInvite) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Pending invite not found');
+    }
+
+    if (pendingInvite.isActive || pendingInvite.activatedAt || pendingInvite.supabaseUid) {
+      throw new AppError(409, ErrorCode.INVALID_OPERATION, 'Invite has already been activated');
+    }
+
+    const activatedAt = new Date();
+    const updatedAdmin = await prisma.$transaction(async (tx) => {
+      const activatedAdmin = await tx.adminUser.update({
+        where: {
+          tenantId_email: {
+            tenantId,
+            email: normalizedEmail,
+          },
+        },
+        data: {
+          supabaseUid: user.id,
+          isActive: true,
+          activatedAt,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          tenantId,
+          entityType: 'admin_user',
+          entityId: activatedAdmin.id,
+          action: 'admin_user.activated',
+          changes: {
+            email: normalizedEmail,
+            role: activatedAdmin.role,
+            activated_at: activatedAt.toISOString(),
+            actor_supabase_uid: user.id,
+          },
+          actorId: normalizedEmail,
+          actorType: 'admin',
+          isSandbox: false,
+        },
+      });
+
+      const supabaseAdmin = getSupabaseAdminClient();
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+        app_metadata: {
+          ...(user.app_metadata ?? {}),
+          tenantId,
+          role: activatedAdmin.role,
+        },
+      });
+
+      if (error) {
+        throw new AppError(502, ErrorCode.INTERNAL_ERROR, 'Failed to finalize Supabase admin activation');
+      }
+
+      return activatedAdmin;
+    });
+
+    res.status(200).json({
+      tenant_id: tenantId,
+      email: normalizedEmail,
+      role: updatedAdmin.role,
+      activated_at: activatedAt.toISOString(),
+    });
+  })
+);
 
 // Apply admin auth to all routes
 router.use(adminAuthMiddleware);
@@ -1357,17 +1568,33 @@ router.post(
   '/tenants',
   requireAdminRole('superadmin'),
   asyncHandler(async (req, res) => {
-    const { name, contact_email, config } = req.body;
-    const adminEmail = req.adminUser!.email;
-    const idempotencyKey = req.headers['idempotency-key'] as string;
-
-    if (!name) {
-      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Missing required field: name');
+    const parsedBody = createTenantRequestSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid tenant create payload');
     }
 
-    // Check for existing audit log with same idempotency key scoped to admin user
-    if (idempotencyKey) {
-      const existingAudit = await prisma.auditLog.findFirst({
+    const { name, contact_email, bootstrap_admin_email, config } = parsedBody.data;
+    const adminEmail = req.adminUser!.email;
+    const idempotencyKey = getValidatedIdempotencyKey(req.headers['idempotency-key']);
+    const cacheKey = getTenantCreationCacheKey(adminEmail, idempotencyKey);
+
+    // Generate API keys
+    const liveKey = `wlt_live_${randomBytes(24).toString('hex')}`;
+    const testKey = `wlt_test_${randomBytes(24).toString('hex')}`;
+
+    // Hash keys with SHA-256
+    const liveKeyHash = createHash('sha256').update(liveKey).digest('hex');
+    const testKeyHash = createHash('sha256').update(testKey).digest('hex');
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${adminEmail}:${idempotencyKey}:tenant.created`}));`;
+
+      const cachedResponse = tenantCreationCache.get(cacheKey);
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      const replayAudit = await tx.auditLog.findFirst({
         where: {
           action: 'tenant.created',
           actorId: adminEmail,
@@ -1379,38 +1606,33 @@ router.post(
         orderBy: { timestamp: 'desc' },
       });
 
-      if (existingAudit) {
-        const existingTenant = await prisma.tenant.findUnique({
-          where: { id: existingAudit.entityId },
-        });
+      if (replayAudit) {
+        const replayChanges = (replayAudit.changes as Record<string, unknown> | null) ?? {};
+        const replayResponse = replayChanges.response as CreatedTenantResponse | undefined;
 
-        if (existingTenant) {
-          return res.status(200).json({
-            tenant_id: existingTenant.id,
-            name: existingTenant.name,
-            contact_email: existingTenant.contactEmail,
-            created_at: existingTenant.createdAt,
-            idempotent: true,
-          });
+        if (replayResponse) {
+          if (
+            !replayResponse.live_key.includes('[redacted]') &&
+            !replayResponse.test_key.includes('[redacted]')
+          ) {
+            tenantCreationCache.set(cacheKey, replayResponse);
+            return replayResponse;
+          }
+
+          throw new AppError(
+            500,
+            ErrorCode.INTERNAL_ERROR,
+            'Raw API keys unavailable from audit logs; tenant creation cannot be safely recovered'
+          );
         }
       }
-    }
 
-    // Generate API keys
-    const liveKey = `wlt_live_${randomBytes(24).toString('hex')}`;
-    const testKey = `wlt_test_${randomBytes(24).toString('hex')}`;
-
-    // Hash keys with SHA-256
-    const liveKeyHash = createHash('sha256').update(liveKey).digest('hex');
-    const testKeyHash = createHash('sha256').update(testKey).digest('hex');
-
-    const result = await prisma.$transaction(async (tx) => {
       // Create tenant
       const tenant = await tx.tenant.create({
         data: {
           name,
           contactEmail: contact_email,
-          config,
+          config: config as Prisma.InputJsonValue | undefined,
         },
       });
 
@@ -1436,7 +1658,54 @@ router.post(
         },
       });
 
-      // Create audit log
+      let finalResponse: CreatedTenantResponse = {
+        tenant_id: tenant.id,
+        name: tenant.name,
+        contact_email: tenant.contactEmail,
+        live_key: liveKey,
+        test_key: testKey,
+        created_at: tenant.createdAt.toISOString(),
+        bootstrap_invite_sent: false,
+        bootstrap_admin_email: bootstrap_admin_email ?? null,
+      };
+
+      if (bootstrap_admin_email) {
+        const invitedAdmin = await upsertPendingAdminInvite({
+          tenantId: tenant.id,
+          email: bootstrap_admin_email,
+          role: 'tenant_admin',
+        }, tx);
+
+        await sendTenantAdminInvite({
+          tenantId: tenant.id,
+          email: invitedAdmin.email,
+          role: 'tenant_admin',
+        });
+
+        await tx.auditLog.create({
+          data: {
+            tenantId: tenant.id,
+            entityType: 'admin_user',
+            entityId: invitedAdmin.id,
+            action: 'admin_user.invited',
+            changes: {
+              email: invitedAdmin.email,
+              role: invitedAdmin.role,
+              invited_at: invitedAdmin.invitedAt?.toISOString() ?? new Date().toISOString(),
+              invited_by: adminEmail,
+            },
+            actorId: adminEmail,
+            actorType: 'admin',
+            isSandbox: false,
+          },
+        });
+
+        finalResponse.bootstrap_invite_sent = true;
+        finalResponse.bootstrap_admin_email = invitedAdmin.email;
+      }
+
+      tenantCreationCache.set(cacheKey, finalResponse);
+
       await tx.auditLog.create({
         data: {
           tenantId: tenant.id,
@@ -1446,8 +1715,17 @@ router.post(
           changes: {
             name,
             contact_email,
+            bootstrap_admin_email: bootstrap_admin_email ?? null,
             created_by: adminEmail,
             idempotency_key: idempotencyKey,
+            live_key_prefix: liveKey.substring(0, 15),
+            test_key_prefix: testKey.substring(0, 15),
+            response: {
+              ...finalResponse,
+              live_key: redactApiKeyForAudit(liveKey),
+              test_key: redactApiKeyForAudit(testKey),
+            },
+            response_status: 201,
           },
           actorId: adminEmail,
           actorType: 'admin',
@@ -1455,17 +1733,10 @@ router.post(
         },
       });
 
-      return tenant;
+      return finalResponse;
     });
 
-    res.status(201).json({
-      tenant_id: result.id,
-      name: result.name,
-      contact_email: result.contactEmail,
-      live_key: liveKey,
-      test_key: testKey,
-      created_at: result.createdAt,
-    });
+    res.status(201).json(result);
   })
 );
 
@@ -1728,6 +1999,78 @@ router.post(
       tenant_id: tenantId,
       created_at: result.cachedResponse.created_at,
     });
+  })
+);
+
+/**
+ * POST /admin/tenants/:tenantId/invite-user
+ * Invite a tenant admin for the target tenant
+ */
+router.post(
+  '/tenants/:tenantId/invite-user',
+  requireAdminRole('tenant_admin'),
+  asyncHandler(async (req, res) => {
+    const parsedBody = inviteTenantUserRequestSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid invite payload');
+    }
+
+    const { tenantId } = req.params;
+    const requester = req.adminUser!;
+    const isSameTenantAdmin = requester.role === 'tenant_admin' && requester.tenantId === tenantId;
+
+    if (requester.role !== 'superadmin' && !isSameTenantAdmin) {
+      throw new AppError(403, ErrorCode.FORBIDDEN, 'Tenant scope is limited to your assigned tenant');
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true },
+    });
+
+    if (!tenant) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
+    }
+
+    const invitedAdmin = await upsertPendingAdminInvite({
+      tenantId,
+      email: parsedBody.data.email,
+      role: parsedBody.data.role,
+    });
+
+    await sendTenantAdminInvite({
+      tenantId,
+      email: invitedAdmin.email,
+      role: parsedBody.data.role,
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        entityType: 'admin_user',
+        entityId: invitedAdmin.id,
+        action: 'admin_user.invited',
+        changes: {
+          email: invitedAdmin.email,
+          role: invitedAdmin.role,
+          invited_at: invitedAdmin.invitedAt?.toISOString() ?? new Date().toISOString(),
+          invited_by: requester.email,
+        },
+        actorId: requester.email,
+        actorType: 'admin',
+        isSandbox: false,
+      },
+    });
+
+    const response: InviteTenantUserResponse = {
+      tenant_id: tenantId,
+      email: invitedAdmin.email,
+      role: parsedBody.data.role,
+      invite_sent: true,
+      invited_at: invitedAdmin.invitedAt?.toISOString() ?? new Date().toISOString(),
+    };
+
+    res.status(201).json(response);
   })
 );
 
