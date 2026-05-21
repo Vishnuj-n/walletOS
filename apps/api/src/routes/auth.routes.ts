@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { createHash, randomBytes } from 'crypto';
+import bcrypt from 'bcrypt';
 import { prisma } from '../lib/prisma';
 import { apiKeyAuthMiddleware } from '../middleware/auth';
 import { userSessionAuthMiddleware } from '../middleware/userSessionAuth';
@@ -104,6 +105,121 @@ router.get(
 
     res.status(200).json({
       wallet: walletProfile,
+    });
+  })
+);
+
+
+router.post(
+  '/login',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'email and password are required');
+    }
+
+    // Find the admin user
+    const adminUser = await prisma.adminUser.findUnique({
+      where: { email },
+    });
+
+    if (!adminUser || !adminUser.passwordHash) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Invalid email or password');
+    }
+
+    if (!adminUser.isActive) {
+      throw new AppError(403, ErrorCode.FORBIDDEN, 'Your account is inactive. Please complete setup.');
+    }
+
+    // Compare passwords
+    const isMatch = await bcrypt.compare(password, adminUser.passwordHash);
+    if (!isMatch) {
+      throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Invalid email or password');
+    }
+
+    // Generate a secure admin session token starting with `adm_`
+    const rawToken = `adm_${randomBytes(32).toString('hex')}`;
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours expiry
+
+    await prisma.sessionToken.create({
+      data: {
+        tenantId: adminUser.tenantId,
+        tokenHash,
+        scope: `admin:${adminUser.id}`,
+        expiresAt,
+      },
+    });
+
+    res.status(200).json({
+      token: rawToken,
+      expires_at: expiresAt.toISOString(),
+      adminUser: {
+        id: adminUser.id,
+        email: adminUser.email,
+        tenantId: adminUser.tenantId,
+        role: adminUser.role,
+      },
+    });
+  })
+);
+
+router.post(
+  '/claim',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'token and password are required');
+    }
+
+    if (password.length < 8) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Password must be at least 8 characters');
+    }
+
+    // Hash incoming raw token using SHA-256 to search the DB
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+
+    // Find verification record
+    const pendingVerification = await prisma.pendingVerification.findUnique({
+      where: { tokenHash },
+      include: { adminUser: true },
+    });
+
+    if (!pendingVerification) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid or expired activation link');
+    }
+
+    if (pendingVerification.expiresAt < new Date()) {
+      // Clean up expired verification
+      await prisma.pendingVerification.delete({ where: { id: pendingVerification.id } });
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Activation link has expired');
+    }
+
+    // Hash the password using bcrypt with salt rounds 12
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    // Atomically activate admin user and delete token
+    await prisma.$transaction(async (tx) => {
+      // 1. Update AdminUser
+      await tx.adminUser.update({
+        where: { email: pendingVerification.email },
+        data: {
+          passwordHash,
+          isActive: true,
+          activatedAt: new Date(),
+        },
+      });
+
+      // 2. Delete used verification token
+      await tx.pendingVerification.delete({
+        where: { id: pendingVerification.id },
+      });
+    });
+
+    res.status(200).json({
+      message: 'Account successfully activated. You can now log in.',
     });
   })
 );

@@ -1561,6 +1561,117 @@ router.get(
   })
 );
 
+const adminUserInviteSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(['support', 'finance', 'tenant_admin', 'superadmin']),
+  tenant_id: z.string().min(1).optional(),
+});
+
+/**
+ * POST /admin/users/invite
+ * Invite a new admin user to the tenant
+ */
+router.post(
+  '/users/invite',
+  requireAdminRole('tenant_admin'),
+  asyncHandler(async (req, res) => {
+    const parsedPayload = adminUserInviteSchema.safeParse(req.body);
+    if (!parsedPayload.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid invitation payload');
+    }
+
+    const { email, role, tenant_id } = parsedPayload.data;
+    const sessionTenantId = req.adminUser!.tenantId;
+    const isSuperadmin = req.adminUser!.role === 'superadmin';
+    const targetTenantId = tenant_id || sessionTenantId;
+
+    // Authorization checks
+    if (targetTenantId !== sessionTenantId && !isSuperadmin) {
+      throw new AppError(403, ErrorCode.FORBIDDEN, 'Only superadmins can invite users to other tenants');
+    }
+
+    // Standard tenant_admin can invite support, finance, or tenant_admin roles to their own tenant
+    if (role === 'superadmin' && !isSuperadmin) {
+      throw new AppError(403, ErrorCode.FORBIDDEN, 'Only superadmins can invite other superadmins');
+    }
+
+    // Verify tenant exists
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: targetTenantId },
+    });
+    if (!tenant) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Target tenant not found');
+    }
+
+    // Verify if user already exists
+    const existingUser = await prisma.adminUser.findUnique({
+      where: { email },
+    });
+    if (existingUser) {
+      throw new AppError(409, ErrorCode.VALIDATION_ERROR, 'A user with this email address already exists');
+    }
+
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours activation window
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Create unactivated AdminUser row
+      const adminUser = await tx.adminUser.create({
+        data: {
+          tenantId: targetTenantId,
+          email,
+          role,
+          isActive: false,
+          invitedAt: new Date(),
+        },
+      });
+
+      // 2. Create pending verification token
+      await tx.pendingVerification.create({
+        data: {
+          email,
+          tokenHash,
+          tenantId: targetTenantId,
+          expiresAt,
+        },
+      });
+
+      return adminUser;
+    });
+
+    const inviteLink = `http://localhost:4200/claim?token=${rawToken}`;
+
+    // Create Audit Log
+    await prisma.auditLog.create({
+      data: {
+        tenantId: targetTenantId,
+        entityType: 'admin_user',
+        entityId: result.id,
+        action: 'admin_user.invited',
+        actorId: req.adminUser!.email,
+        actorType: 'admin',
+        changes: {
+          invited_email: email,
+          invited_role: role,
+          invited_by: req.adminUser!.email,
+        },
+      },
+    });
+
+    res.status(201).json({
+      message: 'Invitation successfully created.',
+      invite_link: inviteLink,
+      admin_user: {
+        id: result.id,
+        email: result.email,
+        role: result.role,
+        is_active: result.isActive,
+      },
+    });
+  })
+);
+
 /**
  * GET /admin/account/api-keys
  * Get current tenant API key metadata for the active admin session

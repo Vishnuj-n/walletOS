@@ -14,10 +14,10 @@ export function useRequireAuth(redirectTo = '/login') {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && (!user || !adminUser)) {
+    if (!loading && !adminUser) {
       router.push(redirectTo);
     }
-  }, [user, adminUser, loading, router, redirectTo]);
+  }, [adminUser, loading, router, redirectTo]);
 
   return { user, adminUser, loading };
 }
@@ -32,13 +32,13 @@ export function useRequireRole(minRole: AdminRole, redirectTo = '/unauthorized')
 
   useEffect(() => {
     if (!loading) {
-      if (!user || !adminUser) {
+      if (!adminUser) {
         router.push('/login');
       } else if (!hasRole(minRole)) {
         router.push(redirectTo);
       }
     }
-  }, [user, adminUser, loading, hasRole, minRole, router, redirectTo]);
+  }, [adminUser, loading, hasRole, minRole, router, redirectTo]);
 
   return { user, adminUser, loading, hasRole };
 }

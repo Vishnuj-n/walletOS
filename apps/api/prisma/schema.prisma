@@ -3,23 +3,26 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Tenant {
-  id           String        @id @default(cuid())
-  name         String
-  contactEmail String?
-  config       Json?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  adminUsers   AdminUser[]
-  apiKeys      ApiKey[]
-  auditLogs    AuditLog[]
-  transactions Transaction[]
-  wallets      Wallet[]
-  webhooks     Webhook[]
+  id                   String                @id @default(cuid())
+  name                 String
+  contactEmail         String?
+  config               Json?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  adminUsers           AdminUser[]
+  apiKeys              ApiKey[]
+  auditLogs            AuditLog[]
+  sessionTokens        SessionToken[]
+  pendingVerifications PendingVerification[]
+  wallets              Wallet[]
+  transactions         Transaction[]
+  webhooks             Webhook[]
 }
 
 model ApiKey {
@@ -37,15 +40,19 @@ model ApiKey {
 }
 
 model AdminUser {
-  id          String    @id @default(cuid())
-  tenantId    String
-  supabaseUid String
-  email       String
-  role        AdminRole
-  isActive    Boolean   @default(true)
-  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  id           String    @id @default(cuid())
+  tenantId     String
+  email        String    @unique // This maps to: CONSTRAINT AdminUser_email_key UNIQUE (email)
+  passwordHash String?
+  role         AdminRole
+  isActive     Boolean   @default(false)
+  invitedAt    DateTime? @default(now())
+  activatedAt  DateTime?
 
-  @@unique([tenantId, supabaseUid])
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // This tells Prisma that other tables can link directly to this unique email field
+  verifications PendingVerification[]
+
   @@index([tenantId])
 }
 
@@ -154,6 +161,8 @@ model SessionToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([tenantId])
   @@index([tokenHash])
 }
@@ -182,4 +191,20 @@ enum TransactionType {
   credit
   debit
   reversal
+}
+
+model PendingVerification {
+  id        String   @id @default(cuid())
+  email     String   // This column holds the string email value
+  tokenHash String   @unique // This maps to: CONSTRAINT PendingVerification_tokenHash_key UNIQUE ("tokenHash")
+  tenantId  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  // ON DELETE CASCADE mapping for Tenant relation
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // CRITICAL FIX: This maps to your explicit FOREIGN KEY (email) REFERENCES public."AdminUser"(email) ON DELETE CASCADE
+  adminUser AdminUser @relation(fields: [email], references: [email], onDelete: Cascade)
+
+  @@index([tokenHash])
 }

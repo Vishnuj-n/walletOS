@@ -1,11 +1,15 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { setAdminSession } from '../lib/adminSession';
-import { User } from '@supabase/supabase-js';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { API_BASE_URL } from '../lib/supabase';
+import { getAdminToken, setAdminSession } from '../lib/adminSession';
 import type { AdminMeResponse, AdminRole, AdminUserInfo } from '@walletOS/types';
 import { roleRank } from '@walletOS/types';
+
+interface AuthIdentity {
+  id: string;
+  email: string;
+}
 
 function isAdminRole(value: unknown): value is AdminRole {
   return value === 'support' || value === 'finance' || value === 'tenant_admin' || value === 'superadmin';
@@ -27,7 +31,7 @@ function isAdminMeResponse(value: unknown): value is AdminMeResponse {
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthIdentity | null;
   adminUser: AdminUserInfo | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
@@ -39,17 +43,28 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthIdentity | null>(null);
   const [adminUser, setAdminUser] = useState<AdminUserInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const latestAccessTokenRef = { current: '' };
+  const latestAccessTokenRef = useRef('');
 
-  const fetchAdminUser = async (supabaseUser: User | null, accessToken?: string | null) => {
-    if (!supabaseUser || !accessToken) {
+  const setAuthenticatedAdmin = (nextAdminUser: AdminUserInfo, token: string) => {
+    setUser({ id: nextAdminUser.id, email: nextAdminUser.email });
+    setAdminUser(nextAdminUser);
+    setAdminSession(nextAdminUser, token);
+  };
+
+  const clearAuthenticatedAdmin = () => {
+    setUser(null);
+    setAdminUser(null);
+    setAdminSession(null);
+  };
+
+  const fetchAdminUser = async (accessToken?: string | null) => {
+    if (!accessToken) {
       // Only clear if this is still the latest request
       if (latestAccessTokenRef.current === accessToken) {
-        setAdminUser(null);
-        setAdminSession(null);
+        clearAuthenticatedAdmin();
       }
       return;
     }
@@ -73,21 +88,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         const data: unknown = await response.json();
         if (isAdminMeResponse(data)) {
-          setAdminUser(data.adminUser);
-          setAdminSession(data.adminUser);
+          setAuthenticatedAdmin(data.adminUser, requestToken);
         } else {
-          setAdminUser(null);
-          setAdminSession(null);
+          clearAuthenticatedAdmin();
         }
       } else {
-        setAdminUser(null);
-        setAdminSession(null);
+        clearAuthenticatedAdmin();
       }
     } catch {
       // Only apply error state if this request is still the latest
       if (requestToken === latestAccessTokenRef.current) {
-        setAdminUser(null);
-        setAdminSession(null);
+        clearAuthenticatedAdmin();
       }
     }
   };
@@ -95,63 +106,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
-
-        if (error) {
-          await supabase.auth.signOut();
-          setUser(null);
-          setAdminUser(null);
-          setAdminSession(null);
-          setLoading(false);
-          return;
-        }
-
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await fetchAdminUser(session.user, session.access_token);
+        const storedToken = getAdminToken();
+        if (storedToken) {
+          latestAccessTokenRef.current = storedToken;
+          await fetchAdminUser(storedToken);
+        } else {
+          clearAuthenticatedAdmin();
         }
       } catch {
-        await supabase.auth.signOut();
-        setUser(null);
-        setAdminUser(null);
-        setAdminSession(null);
+        clearAuthenticatedAdmin();
       } finally {
         setLoading(false);
       }
     };
 
     initializeAuth();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchAdminUser(session.user, session.access_token);
-      } else {
-        setAdminUser(null);
-        setAdminSession(null);
-      }
-      // Note: loading is only set to false once during initial session check
-    });
-
-    return () => subscription.unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        password,
+      }),
     });
-    if (error) throw error;
+
+    const data = await response.json().catch(() => null) as
+      | { token?: string; adminUser?: AdminUserInfo; message?: string; error?: { message?: string } }
+      | null;
+
+    if (!response.ok) {
+      throw new Error(data?.error?.message || data?.message || 'Failed to sign in');
+    }
+
+    if (!data?.token || !data.adminUser || !isAdminMeResponse({ adminUser: data.adminUser })) {
+      throw new Error('Invalid login response');
+    }
+
+    latestAccessTokenRef.current = data.token;
+    setAuthenticatedAdmin(data.adminUser, data.token);
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    latestAccessTokenRef.current = '';
+    clearAuthenticatedAdmin();
   };
 
   const hasRole = (minRole: AdminRole): boolean => {

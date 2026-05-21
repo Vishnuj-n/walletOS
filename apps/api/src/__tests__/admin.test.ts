@@ -9,12 +9,13 @@ import { prisma } from '../lib/prisma';
 
 describe('Admin API Endpoints', () => {
   let adminAuthToken: string;
+  let supportAuthToken: string;
   let testWalletId: string;
   let testTenantId: string;
   let testTransactionId: string;
 
   beforeAll(async () => {
-    // Create or update test tenant with ID 'default' to match the mock Supabase user's app_metadata.tenantId
+    // Create or update test tenant with ID 'default' to match the test setup
     // Using upsert to handle cases where tenant already exists from previous runs or seeded data
     const tenant = await prisma.tenant.upsert({
       where: { id: 'default' },
@@ -43,28 +44,63 @@ describe('Admin API Endpoints', () => {
     });
     testWalletId = wallet.id;
 
-    // Seed AdminUser record matching the mocked Supabase user ID
-    // This prevents the "Ghost Admin" issue where the middleware can't find the user
-    await prisma.adminUser.upsert({
-      where: {
-        tenantId_supabaseUid: {
-          tenantId: 'default',
-          supabaseUid: 'test-admin-uuid',
-        },
+    // Seed AdminUser record for superadmin
+    const adminUser = await prisma.adminUser.upsert({
+      where: { email: 'admin@test.com' },
+      update: {
+        role: AdminRole.superadmin,
+        isActive: true,
+        tenantId: 'default',
       },
-      update: {},
       create: {
         tenantId: 'default',
-        supabaseUid: 'test-admin-uuid',
         email: 'admin@test.com',
         role: AdminRole.superadmin,
         isActive: true,
       },
     });
 
-    // Mock admin auth token (in real implementation, this would be a valid Supabase JWT)
-    // The mocked Supabase client will accept any token and return the test user
-    adminAuthToken = 'Bearer test-admin-jwt-token';
+    // Create a real DB session token for superadmin
+    const adminToken = `adm_${require('crypto').randomBytes(32).toString('hex')}`;
+    const adminTokenHash = createHash('sha256').update(adminToken).digest('hex');
+    await prisma.sessionToken.create({
+      data: {
+        tokenHash: adminTokenHash,
+        tenantId: 'default',
+        scope: `admin:${adminUser.id}`,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+    adminAuthToken = `Bearer ${adminToken}`;
+
+    // Seed AdminUser record for support
+    const supportUser = await prisma.adminUser.upsert({
+      where: { email: 'support@test.com' },
+      update: {
+        role: AdminRole.support,
+        isActive: true,
+        tenantId: 'default',
+      },
+      create: {
+        tenantId: 'default',
+        email: 'support@test.com',
+        role: AdminRole.support,
+        isActive: true,
+      },
+    });
+
+    // Create a real DB session token for support
+    const supportToken = `adm_${require('crypto').randomBytes(32).toString('hex')}`;
+    const supportTokenHash = createHash('sha256').update(supportToken).digest('hex');
+    await prisma.sessionToken.create({
+      data: {
+        tokenHash: supportTokenHash,
+        tenantId: 'default',
+        scope: `admin:${supportUser.id}`,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+    supportAuthToken = `Bearer ${supportToken}`;
   });
 
   afterAll(async () => {
@@ -72,10 +108,11 @@ describe('Admin API Endpoints', () => {
     if (testTenantId) {
       try {
         // Delete in correct foreign key order to avoid constraint violations
+        await prisma.sessionToken.deleteMany({ where: { tenantId: testTenantId } });
         await prisma.auditLog.deleteMany({ where: { tenantId: testTenantId } });
         await prisma.transaction.deleteMany({ where: { tenantId: testTenantId } });
         await prisma.wallet.deleteMany({ where: { tenantId: testTenantId } });
-        await prisma.adminUser.deleteMany({ where: { tenantId: testTenantId, supabaseUid: 'test-admin-uuid' } });
+        await prisma.adminUser.deleteMany({ where: { tenantId: testTenantId } });
         
         // Note: We don't delete the 'default' tenant as it might be shared across tests
         // and the mocked auth depends on it. Use deleteMany for safety if needed:
@@ -621,29 +658,9 @@ describe('Admin API Endpoints', () => {
 
   describe('GET /admin/tenants', () => {
     it('should list tenants for superadmin', async () => {
-      // Create a superadmin user for this test
-      await prisma.adminUser.upsert({
-        where: {
-          tenantId_supabaseUid: {
-            tenantId: 'default',
-            supabaseUid: 'superadmin-uuid',
-          },
-        },
-        update: {},
-        create: {
-          tenantId: 'default',
-          supabaseUid: 'superadmin-uuid',
-          email: 'superadmin@test.com',
-          role: 'superadmin',
-          isActive: true,
-        },
-      });
-
-      const superadminToken = 'Bearer mock-superadmin-jwt-token';
-
       const response = await request(app)
         .get('/api/v1/admin/tenants')
-        .set('Authorization', superadminToken);
+        .set('Authorization', adminAuthToken);
 
       expect(response.status).toBe(200);
       expect(response.body.data).toBeDefined();
@@ -656,26 +673,6 @@ describe('Admin API Endpoints', () => {
     });
 
     it('should reject tenant listing for non-superadmin', async () => {
-      // Create a non-superadmin user (support role)
-      await prisma.adminUser.upsert({
-        where: {
-          tenantId_supabaseUid: {
-            tenantId: 'default',
-            supabaseUid: 'support-uuid',
-          },
-        },
-        update: {},
-        create: {
-          tenantId: 'default',
-          supabaseUid: 'support-uuid',
-          email: 'support@test.com',
-          role: 'support',
-          isActive: true,
-        },
-      });
-
-      const supportAuthToken = 'Bearer support-jwt-token';
-
       const response = await request(app)
         .get('/api/v1/admin/tenants')
         .set('Authorization', supportAuthToken);
@@ -687,24 +684,6 @@ describe('Admin API Endpoints', () => {
 
   describe('GET /admin/search/* authorization', () => {
     it('should reject wallet search for non-superadmin users', async () => {
-      await prisma.adminUser.upsert({
-        where: {
-          tenantId_supabaseUid: {
-            tenantId: 'default',
-            supabaseUid: 'support-uuid',
-          },
-        },
-        update: { role: AdminRole.support, isActive: true },
-        create: {
-          tenantId: 'default',
-          supabaseUid: 'support-uuid',
-          email: 'support@test.com',
-          role: AdminRole.support,
-          isActive: true,
-        },
-      });
-
-      const supportAuthToken = 'Bearer support-jwt-token';
       const response = await request(app)
         .get('/api/v1/admin/search/wallets?q=tx_foo')
         .set('Authorization', supportAuthToken);
@@ -714,7 +693,6 @@ describe('Admin API Endpoints', () => {
     });
 
     it('should reject transaction search for non-superadmin users', async () => {
-      const supportAuthToken = 'Bearer support-jwt-token';
       const response = await request(app)
         .get('/api/v1/admin/search/transactions?transactionId=tx_foo')
         .set('Authorization', supportAuthToken);
@@ -727,7 +705,7 @@ describe('Admin API Endpoints', () => {
   describe('Tenant-scoped admin session routes', () => {
     beforeEach(async () => {
       await prisma.adminUser.updateMany({
-        where: { tenantId: testTenantId, supabaseUid: 'test-admin-uuid' },
+        where: { tenantId: testTenantId, email: 'admin@test.com' },
         data: { role: AdminRole.tenant_admin, isActive: true },
       });
 
@@ -759,7 +737,7 @@ describe('Admin API Endpoints', () => {
 
     afterEach(async () => {
       await prisma.adminUser.updateMany({
-        where: { tenantId: testTenantId, supabaseUid: 'test-admin-uuid' },
+        where: { tenantId: testTenantId, email: 'admin@test.com' },
         data: { role: AdminRole.superadmin, isActive: true },
       });
     });
