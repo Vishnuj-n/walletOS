@@ -62,6 +62,10 @@ export async function adminAuthMiddleware(
       return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Admin user not found'));
     }
 
+    if (session.tenantId !== adminUser.tenantId) {
+      return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Session tenant mismatch'));
+    }
+
     if (!adminUser.isActive) {
       return next(new AppError(403, ErrorCode.FORBIDDEN, 'Admin user is inactive'));
     }

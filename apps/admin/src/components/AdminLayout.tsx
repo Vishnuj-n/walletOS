@@ -19,11 +19,14 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
   const pathname = usePathname();
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement | null>(null);
+  const profileTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (!profileRef.current) return;
-      if (e.target instanceof Node && !profileRef.current.contains(e.target as Node)) {
+      if (!(e.target instanceof Node)) return;
+      const clickedDropdown = profileRef.current?.contains(e.target) ?? false;
+      const clickedTrigger = profileTriggerRef.current?.contains(e.target) ?? false;
+      if (!clickedDropdown && !clickedTrigger) {
         setProfileOpen(false);
       }
     }
@@ -34,8 +37,8 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
   const handleSignOut = async () => {
     try {
       await signOut();
-    } catch (error) {
-      console.error('Sign out failed:', error);
+    } catch {
+      console.error('Sign out failed');
     } finally {
       router.push('/login');
     }
@@ -77,6 +80,7 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
               </div>
               <div className="relative flex items-center">
                 <button
+                  ref={profileTriggerRef}
                   type="button"
                   className="flex items-center gap-3 rounded-md p-2 hover:bg-gray-100 focus:outline-none"
                   onClick={() => setProfileOpen((o) => !o)}

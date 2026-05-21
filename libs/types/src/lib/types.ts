@@ -327,6 +327,49 @@ export interface TransactionSearchResponse {
   results: TransactionSearchResult[];
 }
 
+export interface UnifiedSearchWalletResult {
+  id: string;
+  external_user_id: string;
+  status: string;
+  balance: string;
+  currency: string;
+  tenant_name: string;
+}
+
+export interface UnifiedSearchTransactionResult {
+  id: string;
+  type: string;
+  amount: string;
+  currency: string;
+  idempotency_key: string | null;
+  request_id: string | null;
+  wallet_id: string;
+  tenant_name: string;
+  created_at: string;
+}
+
+export interface UnifiedSearchRequestResult {
+  id: string;
+  transaction_id: string;
+  wallet_id: string;
+  tenant_name: string;
+  created_at: string;
+}
+
+export interface UnifiedSearchUserResult {
+  id: string;
+  email: string;
+  role: string;
+  tenant_name: string;
+}
+
+export interface UnifiedSearchResponse {
+  wallets: UnifiedSearchWalletResult[];
+  transactions: UnifiedSearchTransactionResult[];
+  requests: UnifiedSearchRequestResult[];
+  users: UnifiedSearchUserResult[];
+}
+
 export interface SystemBalanceResponse {
   total_live: string;
   total_sandbox: string;

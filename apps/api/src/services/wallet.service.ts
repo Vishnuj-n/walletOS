@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { generateWalletPublicId } from '../lib/publicId';
 
 /**
  * Wallet Service
@@ -47,6 +48,7 @@ export async function createWallet(params: CreateWalletParams) {
       // Create wallet
       const wallet = await tx.wallet.create({
         data: {
+          publicId: generateWalletPublicId(),
           tenantId: params.tenantId,
           externalUserId: params.externalUserId,
           currency: params.currency,

@@ -41,6 +41,7 @@ model ApiKey {
 
 model AdminUser {
   id           String    @id @default(cuid())
+  publicId     String    @unique
   tenantId     String
   email        String    @unique // This maps to: CONSTRAINT AdminUser_email_key UNIQUE (email)
   passwordHash String?
@@ -54,10 +55,12 @@ model AdminUser {
   verifications PendingVerification[]
 
   @@index([tenantId])
+  @@index([publicId])
 }
 
 model Wallet {
   id                 String        @id @default(cuid())
+  publicId           String        @unique
   tenantId           String
   externalUserId     String
   label              String?
@@ -75,10 +78,12 @@ model Wallet {
   @@unique([tenantId, externalUserId, isSandbox])
   @@index([tenantId])
   @@index([externalUserId])
+  @@index([publicId])
 }
 
 model Transaction {
   id             String          @id @default(cuid())
+  publicId       String          @unique
   tenantId       String
   walletId       String
   type           TransactionType
@@ -97,6 +102,7 @@ model Transaction {
   @@index([tenantId])
   @@index([walletId])
   @@index([referenceId])
+  @@index([publicId])
 }
 
 model AuditLog {
@@ -157,7 +163,7 @@ model WebhookDelivery {
 model SessionToken {
   id        String   @id @default(cuid())
   tenantId  String
-  tokenHash String
+  tokenHash String   @unique
   scope     String
   expiresAt DateTime
   createdAt DateTime @default(now())
@@ -165,7 +171,6 @@ model SessionToken {
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
-  @@index([tokenHash])
 }
 
 enum KeyScope {
@@ -206,6 +211,4 @@ model PendingVerification {
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   // CRITICAL FIX: This maps to your explicit FOREIGN KEY (email) REFERENCES public."AdminUser"(email) ON DELETE CASCADE
   adminUser AdminUser @relation(fields: [email], references: [email], onDelete: Cascade)
-
-  @@index([tokenHash])
 }

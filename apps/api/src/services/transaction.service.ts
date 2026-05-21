@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { lockWallet, validateWalletForTransaction } from './wallet.service';
+import { generateTransactionPublicId } from '../lib/publicId';
 
 /**
  * Transaction Service
@@ -74,6 +75,7 @@ export async function creditWallet(params: CreditParams) {
     // Create transaction
     const transaction = await tx.transaction.create({
       data: {
+        publicId: generateTransactionPublicId(),
         tenantId: params.tenantId,
         walletId: params.walletId,
         type: 'credit',
@@ -144,6 +146,7 @@ export async function debitWallet(params: DebitParams) {
     // Create transaction
     const transaction = await tx.transaction.create({
       data: {
+        publicId: generateTransactionPublicId(),
         tenantId: params.tenantId,
         walletId: params.walletId,
         type: 'debit',
@@ -236,6 +239,7 @@ export async function transferBetweenWallets(params: TransferParams) {
     // Create debit transaction
     const debitTransaction = await tx.transaction.create({
       data: {
+        publicId: generateTransactionPublicId(),
         tenantId: params.tenantId,
         walletId: params.fromWalletId,
         type: 'debit',
@@ -258,6 +262,7 @@ export async function transferBetweenWallets(params: TransferParams) {
     // Create credit transaction
     const creditTransaction = await tx.transaction.create({
       data: {
+        publicId: generateTransactionPublicId(),
         tenantId: params.tenantId,
         walletId: params.toWalletId,
         type: 'credit',
@@ -384,6 +389,7 @@ export async function reverseTransaction(params: ReverseParams) {
     // Create reversal transaction
     const reversalTransaction = await tx.transaction.create({
       data: {
+        publicId: generateTransactionPublicId(),
         tenantId: params.tenantId,
         walletId: lockedWallet.id,
         type: 'reversal',

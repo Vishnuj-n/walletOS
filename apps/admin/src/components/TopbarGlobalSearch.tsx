@@ -4,151 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
-import { searchTransactions, searchWallets } from '../services/adminService';
-import type { TransactionSearchResult, WalletSearchResult } from '@walletOS/types';
+import { useUnifiedSearch } from '../hooks/useUnifiedSearch';
 
-type SearchGroupKey = 'wallets' | 'transactions' | 'requests' | 'users';
-
-interface SearchItem {
-  id: string;
-  title: string;
-  subtitle: string;
-  href: string;
-  group: SearchGroupKey;
-  hint?: string;
-}
-
-interface SearchGroup {
-  key: SearchGroupKey;
-  label: string;
-  items: SearchItem[];
-}
-
-interface UnifiedSearchState {
-  groups: SearchGroup[];
-  loading: boolean;
-  error: string | null;
-}
-
-function toCurrency(amount: string, currency: string): string {
-  return `${currency} ${amount}`;
-}
-
-function toWalletItem(wallet: WalletSearchResult): SearchItem {
-  return {
-    id: `wallet-${wallet.wallet_id}`,
-    title: wallet.wallet_id,
-    subtitle: `${wallet.external_user_id} - ${wallet.tenant.name}`,
-    href: `/dashboard/wallets/${wallet.wallet_id}`,
-    group: 'wallets',
-    hint: `${toCurrency(wallet.balance, wallet.currency)} - ${wallet.status}`,
-  };
-}
-
-function toTransactionItem(tx: TransactionSearchResult): SearchItem {
-  return {
-    id: `transaction-${tx.transaction_id}`,
-    title: tx.transaction_id,
-    subtitle: `${tx.wallet.wallet_id} - ${tx.wallet.tenant.name}`,
-    href: `/dashboard/search?q=${encodeURIComponent(tx.transaction_id)}`,
-    group: 'transactions',
-    hint: `${tx.type} - ${toCurrency(tx.amount, tx.currency)}`,
-  };
-}
-
-function toRequestItem(tx: TransactionSearchResult): SearchItem | null {
-  if (!tx.reference_id) {
-    return null;
-  }
-
-  return {
-    id: `request-${tx.reference_id}`,
-    title: tx.reference_id,
-    subtitle: `${tx.transaction_id} - ${tx.wallet.tenant.name}`,
-    href: `/dashboard/search?q=${encodeURIComponent(tx.reference_id)}`,
-    group: 'requests',
-    hint: `${tx.type} - ${toCurrency(tx.amount, tx.currency)}`,
-  };
-}
-
-function toUserItems(wallets: WalletSearchResult[], rawQuery: string): SearchItem[] {
-  const normalized = rawQuery.trim().toLowerCase();
-  if (!normalized) {
-    return [];
-  }
-
-  return wallets
-    .filter((wallet) => wallet.external_user_id.toLowerCase().includes(normalized))
-    .map((wallet) => ({
-      id: `user-${wallet.wallet_id}`,
-      title: wallet.external_user_id,
-      subtitle: `Wallet ${wallet.wallet_id} - ${wallet.tenant.name}`,
-      href: `/dashboard/wallets/${wallet.wallet_id}`,
-      group: 'users' as const,
-      hint: wallet.status,
-    }));
-}
-
-async function runUnifiedSearch(query: string): Promise<SearchGroup[]> {
-  const trimmedQuery = query.trim();
-  if (!trimmedQuery) {
-    return [];
-  }
-
-  const [walletsResult, txByIdResult, txByRequestResult, txByIdempotencyResult] = await Promise.allSettled([
-    searchWallets(trimmedQuery),
-    searchTransactions({ transactionId: trimmedQuery }),
-    searchTransactions({ requestId: trimmedQuery }),
-    searchTransactions({ idempotencyKey: trimmedQuery }),
-  ]);
-
-  const wallets = walletsResult.status === 'fulfilled' ? walletsResult.value.results : [];
-  const txCandidates: TransactionSearchResult[] = [];
-
-  if (txByIdResult.status === 'fulfilled') {
-    txCandidates.push(...txByIdResult.value.results);
-  }
-
-  if (txByRequestResult.status === 'fulfilled') {
-    txCandidates.push(...txByRequestResult.value.results);
-  }
-
-  if (txByIdempotencyResult.status === 'fulfilled') {
-    txCandidates.push(...txByIdempotencyResult.value.results);
-  }
-
-  const txSeen = new Set<string>();
-  const transactions = txCandidates.filter((tx) => {
-    if (txSeen.has(tx.transaction_id)) {
-      return false;
-    }
-    txSeen.add(tx.transaction_id);
-    return true;
-  });
-
-  const requestSeen = new Set<string>();
-  const requests = transactions
-    .map(toRequestItem)
-    .filter((item): item is SearchItem => Boolean(item))
-    .filter((item) => {
-      if (requestSeen.has(item.title)) {
-        return false;
-      }
-      requestSeen.add(item.title);
-      return true;
-    });
-
-  const users = toUserItems(wallets, trimmedQuery);
-
-  return [
-    { key: 'wallets', label: 'Wallets', items: wallets.slice(0, 5).map(toWalletItem) },
-    { key: 'transactions', label: 'Transactions', items: transactions.slice(0, 5).map(toTransactionItem) },
-    { key: 'requests', label: 'Requests', items: requests.slice(0, 5) },
-    { key: 'users', label: 'External Users', items: users.slice(0, 5) },
-  ].filter((group) => group.items.length > 0);
-}
-
-function flattenGroups(groups: SearchGroup[]): SearchItem[] {
+function flattenGroups(groups: ReturnType<typeof useUnifiedSearch>['groups']) {
   return groups.flatMap((group) => group.items);
 }
 
@@ -163,14 +21,18 @@ export function TopbarGlobalSearch({ compact = false, autoOpen = false, initialQ
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(autoOpen);
   const [query, setQuery] = useState(initialQuery);
-  const [state, setState] = useState<UnifiedSearchState>({ groups: [], loading: false, error: null });
   const [highlightedIndex, setHighlightedIndex] = useState(0);
 
+  const state = useUnifiedSearch(query);
   const flatItems = useMemo(() => flattenGroups(state.groups), [state.groups]);
 
   useEffect(() => {
     setQuery(initialQuery);
   }, [initialQuery]);
+
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [state.groups]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -204,31 +66,9 @@ export function TopbarGlobalSearch({ compact = false, autoOpen = false, initialQ
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!query.trim()) {
-      setState({ groups: [], loading: false, error: null });
-      setHighlightedIndex(0);
-      return;
-    }
-
-    setState((prev) => ({ ...prev, loading: true, error: null }));
-
-    const timeoutId = window.setTimeout(async () => {
-      try {
-        const groups = await runUnifiedSearch(query);
-        setState({ groups, loading: false, error: null });
-        setHighlightedIndex(0);
-      } catch (error) {
-        setState({ groups: [], loading: false, error: error instanceof Error ? error.message : 'Search failed' });
-      }
-    }, 300);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [query]);
-
-  const openItem = (item: SearchItem) => {
+  const openItem = (href: string) => {
     setIsOpen(false);
-    router.push(item.href);
+    router.push(href);
   };
 
   const onInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -248,12 +88,12 @@ export function TopbarGlobalSearch({ compact = false, autoOpen = false, initialQ
 
     if (event.key === 'Enter' && flatItems[highlightedIndex]) {
       event.preventDefault();
-      openItem(flatItems[highlightedIndex]);
+      openItem(flatItems[highlightedIndex].href);
     }
   };
 
   return (
-    <div ref={containerRef} className={`relative ${compact ? 'w-full' : 'w-[30rem] max-w-[42vw] min-w-[22rem]'}`}>
+    <div ref={containerRef} className={`relative ${compact ? 'w-full' : 'w-[24rem] max-w-[36vw] min-w-[18rem]'}`}>
       <div className="relative">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
@@ -311,17 +151,17 @@ export function TopbarGlobalSearch({ compact = false, autoOpen = false, initialQ
                 {group.label}
               </div>
               {group.items.map((item) => {
-                const index = flatItems.findIndex((flatItem) => flatItem.id === item.id);
+                const index = flatItems.findIndex((flatItem) => flatItem.group === item.group && flatItem.id === item.id);
                 const isHighlighted = index === highlightedIndex;
 
                 return (
                   <button
-                    key={item.id}
+                    key={`${item.group}-${item.id}`}
                     type="button"
                     role="option"
                     aria-selected={isHighlighted}
                     onMouseEnter={() => setHighlightedIndex(index)}
-                    onClick={() => openItem(item)}
+                    onClick={() => openItem(item.href)}
                     className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left ${
                       isHighlighted ? 'bg-blue-50' : 'hover:bg-slate-50'
                     }`}

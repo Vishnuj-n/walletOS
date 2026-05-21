@@ -5,6 +5,7 @@ import { createHash, randomBytes } from 'crypto';
 import { adminAuthMiddleware, requireAdminRole } from '../middleware/adminAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
+import { generateAdminUserPublicId, generateTransactionPublicId } from '../lib/publicId';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet } from '../services/wallet.service';
 import { z } from 'zod';
@@ -42,6 +43,10 @@ const walletSearchSchema = z.object({
     .transform((value) => value === 'true'),
 });
 
+const unifiedSearchSchema = z.object({
+  q: z.string().max(255).optional(),
+});
+
 const tenantScopeSchema = z.object({
   tenantId: z.string().min(1).max(255).optional(),
 });
@@ -63,6 +68,7 @@ const adminApiKeyRotationResponseCache = new Map<
 >();
 const ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const ADMIN_API_KEY_ROTATION_CACHE_TTL_MS = ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS;
+const ADMIN_INVITE_IDEMPOTENCY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 function getValidatedIdempotencyKey(idempotencyKeyHeader: string | string[] | undefined): string {
   const idempotencyKey = Array.isArray(idempotencyKeyHeader) ? idempotencyKeyHeader[0] : idempotencyKeyHeader;
@@ -89,6 +95,27 @@ function getQueryString(value: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function parseDateFilter(value: string, parameterName: 'from' | 'to'): Date {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new AppError(400, ErrorCode.VALIDATION_ERROR, `${parameterName} must not be empty`);
+  }
+
+  const asEpoch = /^\d+$/.test(normalized) ? Number(normalized) : NaN;
+  const parsedDate = Number.isNaN(asEpoch) ? new Date(normalized) : new Date(asEpoch);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new AppError(400, ErrorCode.VALIDATION_ERROR, `Invalid ${parameterName} timestamp`);
+  }
+
+  return parsedDate;
+}
+
+function getFrontendBaseUrl(): string {
+  const baseUrl = process.env.FRONTEND_BASE_URL?.trim() || 'http://localhost:4200';
+  return baseUrl.replace(/\/+$/, '');
 }
 
 function getAdminApiKeyRotationCacheKey(tenantId: string, scope: 'live' | 'test', auditAction: string, idempotencyKey: string): string {
@@ -672,10 +699,13 @@ router.get(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid tenant scope');
     }
 
-    const tenantId = (await resolveAdminTenantScope(req, parsedTenantScope.data.tenantId))!;
+    const tenantId = await resolveAdminTenantScope(req, parsedTenantScope.data.tenantId, {
+      allowSuperadminOverride: true,
+      allowNoScope: true,
+    });
     const isSandbox = req.isSandbox || false;
 
-    const where: Prisma.WalletWhereInput = { tenantId, isSandbox };
+    const where: Prisma.WalletWhereInput = { ...(tenantId ? { tenantId } : {}), isSandbox };
 
     if (status) {
       const allowedStatuses = ['active', 'frozen', 'pending_closure', 'closed'];
@@ -838,6 +868,7 @@ router.post(
       // Create transaction
       const transaction = await tx.transaction.create({
         data: {
+          publicId: generateTransactionPublicId(),
           tenantId,
           walletId: wallet_id,
           type: 'credit',
@@ -992,6 +1023,7 @@ router.post(
       // Create transaction
       const transaction = await tx.transaction.create({
         data: {
+          publicId: generateTransactionPublicId(),
           tenantId,
           walletId: wallet_id,
           type: 'debit',
@@ -1162,6 +1194,7 @@ router.post(
       // Create reversal transaction
       const reversalTx = await tx.transaction.create({
         data: {
+          publicId: generateTransactionPublicId(),
           tenantId,
           walletId: originalTx.walletId,
           type: 'reversal',
@@ -1547,8 +1580,8 @@ router.get(
     if (actionFilter) where.action = actionFilter;
     if (fromFilter || toFilter) {
       where.timestamp = {};
-      if (fromFilter) where.timestamp.gte = new Date(fromFilter);
-      if (toFilter) where.timestamp.lte = new Date(toFilter);
+      if (fromFilter) where.timestamp.gte = parseDateFilter(fromFilter, 'from');
+      if (toFilter) where.timestamp.lte = parseDateFilter(toFilter, 'to');
     }
 
     const parsedLimit = Number(limit);
@@ -1634,10 +1667,13 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid invitation payload');
     }
 
+    const idempotencyKey = getValidatedIdempotencyKey(req.headers['idempotency-key']);
+
     const { email, role, tenant_id } = parsedPayload.data;
     const sessionTenantId = req.adminUser!.tenantId;
     const isSuperadmin = req.adminUser!.role === 'superadmin';
     const targetTenantId = tenant_id || sessionTenantId;
+    const idempotencyWindowStart = new Date(Date.now() - ADMIN_INVITE_IDEMPOTENCY_WINDOW_MS);
 
     // Authorization checks
     if (targetTenantId !== sessionTenantId && !isSuperadmin) {
@@ -1657,6 +1693,45 @@ router.post(
       throw new AppError(404, ErrorCode.NOT_FOUND, 'Target tenant not found');
     }
 
+    const cachedInviteAudit = await prisma.auditLog.findFirst({
+      where: {
+        tenantId: targetTenantId,
+        entityType: 'admin_user',
+        action: 'admin_user.invited',
+        timestamp: {
+          gte: idempotencyWindowStart,
+        },
+        changes: {
+          path: ['idempotency_key'],
+          equals: idempotencyKey,
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+    });
+
+    if (cachedInviteAudit) {
+      const cachedChanges = (cachedInviteAudit.changes as Record<string, unknown> | null) ?? {};
+      const cachedResponse = cachedChanges.response as
+        | {
+            message: string;
+            invite_link: string;
+            admin_user: {
+              id: string;
+              email: string;
+              role: 'support' | 'finance' | 'tenant_admin' | 'superadmin';
+              is_active: boolean;
+            };
+          }
+        | undefined;
+
+      if (cachedResponse) {
+        res.status((cachedChanges.response_status as number) || 200).json(cachedResponse);
+        return;
+      }
+    }
+
     // Verify if user already exists
     const existingUser = await prisma.adminUser.findUnique({
       where: { email },
@@ -1668,11 +1743,65 @@ router.post(
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours activation window
+    const inviteUrl = new URL('/claim', `${getFrontendBaseUrl()}/`);
+    inviteUrl.searchParams.set('token', rawToken);
+    const inviteLink = inviteUrl.toString();
+
+    const responsePayload = {
+      message: 'Invitation successfully created.',
+      invite_link: inviteLink,
+      admin_user: {
+        id: '',
+        email,
+        role,
+        is_active: false,
+      },
+    };
 
     const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${targetTenantId}:${idempotencyKey}:admin_user.invited`}));`;
+
+      const txCachedInviteAudit = await tx.auditLog.findFirst({
+        where: {
+          tenantId: targetTenantId,
+          entityType: 'admin_user',
+          action: 'admin_user.invited',
+          timestamp: {
+            gte: idempotencyWindowStart,
+          },
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+        orderBy: {
+          timestamp: 'desc',
+        },
+      });
+
+      if (txCachedInviteAudit) {
+        const cachedChanges = (txCachedInviteAudit.changes as Record<string, unknown> | null) ?? {};
+        const cachedResponse = cachedChanges.response as typeof responsePayload | undefined;
+
+        if (cachedResponse) {
+          return {
+            status: (cachedChanges.response_status as number) || 200,
+            payload: cachedResponse,
+          };
+        }
+      }
+
+      const txExistingUser = await tx.adminUser.findUnique({
+        where: { email },
+      });
+      if (txExistingUser) {
+        throw new AppError(409, ErrorCode.VALIDATION_ERROR, 'A user with this email address already exists');
+      }
+
       // 1. Create unactivated AdminUser row
       const adminUser = await tx.adminUser.create({
         data: {
+          publicId: generateAdminUserPublicId(),
           tenantId: targetTenantId,
           email,
           role,
@@ -1691,39 +1820,44 @@ router.post(
         },
       });
 
-      return adminUser;
-    });
-
-    const inviteLink = `http://localhost:4200/claim?token=${rawToken}`;
-
-    // Create Audit Log
-    await prisma.auditLog.create({
-      data: {
-        tenantId: targetTenantId,
-        entityType: 'admin_user',
-        entityId: result.id,
-        action: 'admin_user.invited',
-        actorId: req.adminUser!.email,
-        actorType: 'admin',
-        actorRole: req.adminUser!.role,
-        changes: {
-          invited_email: email,
-          invited_role: role,
-          invited_by: req.adminUser!.email,
+      const payload = {
+        ...responsePayload,
+        admin_user: {
+          id: adminUser.id,
+          email: adminUser.email,
+          role: adminUser.role,
+          is_active: adminUser.isActive,
         },
-      },
+      };
+
+      await tx.auditLog.create({
+        data: {
+          tenantId: targetTenantId,
+          entityType: 'admin_user',
+          entityId: adminUser.id,
+          action: 'admin_user.invited',
+          actorId: req.adminUser!.email,
+          actorType: 'admin',
+          actorRole: req.adminUser!.role,
+          isSandbox: req.isSandbox || false,
+          changes: {
+            invited_email: email,
+            invited_role: role,
+            invited_by: req.adminUser!.email,
+            idempotency_key: idempotencyKey,
+            response: payload,
+            response_status: 201,
+          },
+        },
+      });
+
+      return {
+        status: 201,
+        payload,
+      };
     });
 
-    res.status(201).json({
-      message: 'Invitation successfully created.',
-      invite_link: inviteLink,
-      admin_user: {
-        id: result.id,
-        email: result.email,
-        role: result.role,
-        is_active: result.isActive,
-      },
-    });
+    res.status(result.status).json(result.payload);
   })
 );
 
@@ -2134,6 +2268,7 @@ router.get(
     const where: Prisma.AuditLogWhereInput = {
       actorType: 'admin',
       actorRole: 'superadmin', // Fast, indexed flat-column query — no join needed
+      isSandbox: req.isSandbox || false,
     };
 
     const requestedAdminEmail = getQueryString(adminEmail);
@@ -2153,8 +2288,8 @@ router.get(
 
     if (fromFilter || toFilter) {
       where.timestamp = {};
-      if (fromFilter) where.timestamp.gte = new Date(fromFilter);
-      if (toFilter) where.timestamp.lte = new Date(toFilter);
+      if (fromFilter) where.timestamp.gte = parseDateFilter(fromFilter, 'from');
+      if (toFilter) where.timestamp.lte = parseDateFilter(toFilter, 'to');
     }
 
     const parsedLimit = Number(limit);
@@ -2273,6 +2408,253 @@ router.get(
 // ==================== GLOBAL SEARCH ENDPOINTS (SUPERADMIN ONLY) ====================
 
 /**
+ * GET /admin/search
+ * Unified cross-entity search (superadmin only)
+ */
+router.get(
+  '/search',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const parsedQuery = unifiedSearchSchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid search query');
+    }
+
+    const query = (parsedQuery.data.q ?? '').trim();
+    if (!query) {
+      return res.json({ wallets: [], transactions: [], requests: [], users: [] });
+    }
+
+    const prefixMatch = query.match(/^(wal_|txn_|req_|usr_)/i);
+    const prefix = prefixMatch?.[1]?.toLowerCase();
+
+    let wallets: Array<{
+      publicId: string;
+      externalUserId: string;
+      status: string;
+      balance: Decimal;
+      currency: string;
+      tenant: { name: string };
+    }> = [];
+    let transactions: Array<{
+      publicId: string;
+      type: string;
+      amount: Decimal;
+      currency: string;
+      idempotencyKey: string | null;
+      referenceId: string | null;
+      createdAt: Date;
+      wallet: { publicId: string; tenant: { name: string } };
+    }> = [];
+    let requests: Array<{
+      publicId: string;
+      referenceId: string | null;
+      createdAt: Date;
+      wallet: { publicId: string; tenant: { name: string } };
+    }> = [];
+    let users: Array<{
+      publicId: string;
+      email: string;
+      role: string;
+      tenant: { name: string };
+    }> = [];
+
+    if (prefix === 'wal_') {
+      wallets = await prisma.wallet.findMany({
+        where: {
+          isSandbox: req.isSandbox,
+          publicId: { equals: query, mode: 'insensitive' },
+        },
+        select: {
+          publicId: true,
+          externalUserId: true,
+          status: true,
+          balance: true,
+          currency: true,
+          tenant: { select: { name: true } },
+        },
+        take: 5,
+      });
+    } else if (prefix === 'txn_') {
+      transactions = await prisma.transaction.findMany({
+        where: {
+          wallet: { isSandbox: req.isSandbox },
+          publicId: { equals: query, mode: 'insensitive' },
+        },
+        select: {
+          publicId: true,
+          type: true,
+          amount: true,
+          currency: true,
+          idempotencyKey: true,
+          referenceId: true,
+          createdAt: true,
+          wallet: {
+            select: {
+              publicId: true,
+              tenant: { select: { name: true } },
+            },
+          },
+        },
+        take: 5,
+      });
+    } else if (prefix === 'req_') {
+      requests = await prisma.transaction.findMany({
+        where: {
+          wallet: { isSandbox: req.isSandbox },
+          referenceId: { equals: query, mode: 'insensitive' },
+        },
+        select: {
+          publicId: true,
+          referenceId: true,
+          createdAt: true,
+          wallet: {
+            select: {
+              publicId: true,
+              tenant: { select: { name: true } },
+            },
+          },
+        },
+        take: 5,
+      });
+    } else if (prefix === 'usr_') {
+      users = await prisma.adminUser.findMany({
+        where: {
+          isActive: true,
+          publicId: { equals: query, mode: 'insensitive' },
+        },
+        select: {
+          publicId: true,
+          email: true,
+          role: true,
+          tenant: { select: { name: true } },
+        },
+        take: 5,
+      });
+    } else {
+      [wallets, transactions, requests, users] = await Promise.all([
+        prisma.wallet.findMany({
+          where: {
+            isSandbox: req.isSandbox,
+            OR: [
+              { externalUserId: { contains: query, mode: 'insensitive' } },
+              { label: { contains: query, mode: 'insensitive' } },
+            ],
+          },
+          select: {
+            publicId: true,
+            externalUserId: true,
+            status: true,
+            balance: true,
+            currency: true,
+            tenant: { select: { name: true } },
+          },
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.transaction.findMany({
+          where: {
+            wallet: { isSandbox: req.isSandbox },
+            OR: [
+              { referenceId: { contains: query, mode: 'insensitive' } },
+              { idempotencyKey: { contains: query, mode: 'insensitive' } },
+              { wallet: { externalUserId: { contains: query, mode: 'insensitive' } } },
+            ],
+          },
+          select: {
+            publicId: true,
+            type: true,
+            amount: true,
+            currency: true,
+            idempotencyKey: true,
+            referenceId: true,
+            createdAt: true,
+            wallet: {
+              select: {
+                publicId: true,
+                tenant: { select: { name: true } },
+              },
+            },
+          },
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.transaction.findMany({
+          where: {
+            wallet: { isSandbox: req.isSandbox },
+            referenceId: { contains: query, mode: 'insensitive' },
+          },
+          select: {
+            publicId: true,
+            referenceId: true,
+            createdAt: true,
+            wallet: {
+              select: {
+                publicId: true,
+                tenant: { select: { name: true } },
+              },
+            },
+          },
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.adminUser.findMany({
+          where: {
+            email: { contains: query, mode: 'insensitive' },
+            isActive: true,
+          },
+          select: {
+            publicId: true,
+            email: true,
+            role: true,
+            tenant: { select: { name: true } },
+          },
+          take: 5,
+          orderBy: { invitedAt: 'desc' },
+        }),
+      ]);
+    }
+
+    return res.json({
+      wallets: wallets.map((wallet) => ({
+        id: wallet.publicId,
+        external_user_id: wallet.externalUserId,
+        status: wallet.status,
+        balance: wallet.balance.toFixed(4),
+        currency: wallet.currency,
+        tenant_name: wallet.tenant.name,
+      })),
+      transactions: transactions.map((transaction) => ({
+        id: transaction.publicId,
+        type: transaction.type,
+        amount: transaction.amount.toFixed(4),
+        currency: transaction.currency,
+        idempotency_key: transaction.idempotencyKey,
+        request_id: transaction.referenceId,
+        wallet_id: transaction.wallet.publicId,
+        tenant_name: transaction.wallet.tenant.name,
+        created_at: transaction.createdAt.toISOString(),
+      })),
+      requests: requests
+        .filter((transaction) => transaction.referenceId)
+        .map((transaction) => ({
+          id: transaction.referenceId as string,
+          transaction_id: transaction.publicId,
+          wallet_id: transaction.wallet.publicId,
+          tenant_name: transaction.wallet.tenant.name,
+          created_at: transaction.createdAt.toISOString(),
+        })),
+      users: users.map((user) => ({
+        id: user.publicId,
+        email: user.email,
+        role: user.role,
+        tenant_name: user.tenant.name,
+      })),
+    });
+  })
+);
+
+/**
  * GET /admin/search/wallets
  * Cross-tenant wallet search (superadmin only)
  */
@@ -2285,25 +2667,17 @@ router.get(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Search query "q" is required');
     }
 
-    const { q, tenantId: requestedTenantId, includeCrossTenant } = parsedQuery.data;
-    const isSuperadmin = req.adminUser!.role === 'superadmin';
-    
-    // Validate: if includeCrossTenant is requested, requestedTenantId must be provided
-    if (includeCrossTenant && !requestedTenantId) {
-      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'tenantId is required when includeCrossTenant is true');
-    }
-
-    const tenantBoundary = isSuperadmin
-      ? requestedTenantId ?? undefined
-      : req.adminUser!.tenantId;
+    const { q, tenantId: requestedTenantId } = parsedQuery.data;
+    const tenantBoundary = requestedTenantId ?? undefined;
 
     const wallets = await prisma.wallet.findMany({
       where: {
         ...(tenantBoundary ? { tenantId: tenantBoundary } : {}),
         isSandbox: req.isSandbox,
         OR: [
-          { id: { contains: q, mode: 'insensitive' } },
+          { publicId: { contains: q, mode: 'insensitive' } },
           { externalUserId: { contains: q, mode: 'insensitive' } },
+          { label: { contains: q, mode: 'insensitive' } },
         ],
       },
       include: {
@@ -2315,13 +2689,13 @@ router.get(
         },
       },
       take: 50,
-      orderBy: { id: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
 
     res.json({
       query: q,
       results: wallets.map(w => ({
-        wallet_id: w.id,
+        wallet_id: w.publicId,
         external_user_id: w.externalUserId,
         label: w.label,
         balance: w.balance.toFixed(4),

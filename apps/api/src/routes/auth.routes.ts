@@ -142,12 +142,23 @@ router.post(
     const rawToken = `adm_${randomBytes(32).toString('hex')}`;
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours expiry
+    const adminScope = `admin:${adminUser.id}`;
+
+    await prisma.sessionToken.deleteMany({
+      where: {
+        tenantId: adminUser.tenantId,
+        OR: [
+          { expiresAt: { lt: new Date() } },
+          { scope: adminScope },
+        ],
+      },
+    });
 
     await prisma.sessionToken.create({
       data: {
         tenantId: adminUser.tenantId,
         tokenHash,
-        scope: `admin:${adminUser.id}`,
+        scope: adminScope,
         expiresAt,
       },
     });

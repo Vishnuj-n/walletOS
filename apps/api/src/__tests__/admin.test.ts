@@ -1,8 +1,9 @@
 import request from 'supertest';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { AdminRole } from '@prisma/client';
 import { app } from '../main';
 import { prisma } from '../lib/prisma';
+import { generateAdminUserPublicId, generateTransactionPublicId, generateWalletPublicId } from '../lib/publicId';
 
 // Note: @supabase/supabase-js is mocked in setup.ts to ensure the middleware uses the mocked client
 // For integration tests with real Supabase, set environment variable TEST_REAL_SUPABASE=true
@@ -34,6 +35,7 @@ describe('Admin API Endpoints', () => {
     // Create test wallet
     const wallet = await prisma.wallet.create({
       data: {
+        publicId: generateWalletPublicId(),
         tenantId: testTenantId,
         externalUserId: 'admin-test-user',
         currency: 'USD',
@@ -53,6 +55,7 @@ describe('Admin API Endpoints', () => {
         tenantId: 'default',
       },
       create: {
+        publicId: generateAdminUserPublicId(),
         tenantId: 'default',
         email: 'admin@test.com',
         role: AdminRole.superadmin,
@@ -61,7 +64,7 @@ describe('Admin API Endpoints', () => {
     });
 
     // Create a real DB session token for superadmin
-    const adminToken = `adm_${require('crypto').randomBytes(32).toString('hex')}`;
+    const adminToken = `adm_${randomBytes(32).toString('hex')}`;
     const adminTokenHash = createHash('sha256').update(adminToken).digest('hex');
     await prisma.sessionToken.create({
       data: {
@@ -82,6 +85,7 @@ describe('Admin API Endpoints', () => {
         tenantId: 'default',
       },
       create: {
+        publicId: generateAdminUserPublicId(),
         tenantId: 'default',
         email: 'support@test.com',
         role: AdminRole.support,
@@ -90,7 +94,7 @@ describe('Admin API Endpoints', () => {
     });
 
     // Create a real DB session token for support
-    const supportToken = `adm_${require('crypto').randomBytes(32).toString('hex')}`;
+    const supportToken = `adm_${randomBytes(32).toString('hex')}`;
     const supportTokenHash = createHash('sha256').update(supportToken).digest('hex');
     await prisma.sessionToken.create({
       data: {
@@ -231,6 +235,7 @@ describe('Admin API Endpoints', () => {
       // Create a test transaction to reverse
       const transaction = await prisma.transaction.create({
         data: {
+          publicId: generateTransactionPublicId(),
           tenantId: testTenantId,
           walletId: testWalletId,
           type: 'credit',
@@ -318,6 +323,7 @@ describe('Admin API Endpoints', () => {
       // Create a reversal transaction
       const reversal = await prisma.transaction.create({
         data: {
+          publicId: generateTransactionPublicId(),
           tenantId: testTenantId,
           walletId: testWalletId,
           type: 'reversal',
@@ -413,6 +419,7 @@ describe('Admin API Endpoints', () => {
 
       const sandboxWallet = await prisma.wallet.create({
         data: {
+          publicId: generateWalletPublicId(),
           tenantId: testTenantId,
           externalUserId: `system-balance-sandbox-${Date.now()}`,
           currency: 'USD',
@@ -830,6 +837,7 @@ describe('Admin API Endpoints', () => {
       // Create a sandbox wallet
       const sandboxWallet = await prisma.wallet.create({
         data: {
+          publicId: generateWalletPublicId(),
           tenantId: testTenantId,
           externalUserId: 'sandbox-user',
           currency: 'USD',

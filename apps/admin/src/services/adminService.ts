@@ -19,6 +19,7 @@ import type {
   TenantApiKeySettingsResponse,
   TenantListResponse,
   TenantUsageResponse,
+  UnifiedSearchResponse,
   TransactionResponse,
   TransactionSearchQuery,
   TransactionSearchResponse,
@@ -159,6 +160,13 @@ export async function searchTransactions(
   return apiRequest<TransactionSearchResponse>('/admin/search/transactions', {
     query: params,
     fallbackMessage: 'Failed to search transactions',
+  });
+}
+
+export async function searchUnified(query: string): Promise<UnifiedSearchResponse> {
+  return apiRequest<UnifiedSearchResponse>('/admin/search', {
+    query: { q: query },
+    fallbackMessage: 'Failed to run unified search',
   });
 }
 

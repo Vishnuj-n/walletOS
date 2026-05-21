@@ -7,6 +7,7 @@
 import { PrismaClient, KeyScope } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { prisma } from '../../lib/prisma';
+import { generateWalletPublicId } from '../../lib/publicId';
 
 /**
  * Disconnect Prisma client - useful for test cleanup
@@ -105,6 +106,7 @@ export async function createTestWallet(
 ): Promise<TestWallet> {
   const wallet = await prisma.wallet.create({
     data: {
+      publicId: generateWalletPublicId(),
       tenantId,
       externalUserId,
       currency,

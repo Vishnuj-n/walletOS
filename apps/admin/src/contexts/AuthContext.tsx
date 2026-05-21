@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchAdminUser = async (accessToken?: string | null) => {
     if (!accessToken) {
       // Only clear if this is still the latest request
-      if (latestAccessTokenRef.current === accessToken) {
+      if ((!latestAccessTokenRef.current && !accessToken) || latestAccessTokenRef.current === accessToken) {
         clearAuthenticatedAdmin();
       }
       return;
@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const requestToken = accessToken;
 
     try {
-      const response = await fetch('/api/admin/me', {
+      const response = await fetch(`${API_BASE_URL}/admin/me`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
