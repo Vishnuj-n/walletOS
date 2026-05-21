@@ -378,7 +378,10 @@ export interface SystemErrorsResponse {
 
 export interface AdminAuditQuery {
   wallet_id?: string;
+  actor?: string;
   action?: string;
+  from?: string;
+  to?: string;
   limit?: number;
   after?: string;
   tenantId?: string;
@@ -387,6 +390,8 @@ export interface AdminAuditQuery {
 export interface AdminActivityQuery {
   adminEmail?: string;
   actionType?: string;
+  from?: string;
+  to?: string;
   limit?: number;
   after?: string;
 }

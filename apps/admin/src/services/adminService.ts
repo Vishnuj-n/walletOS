@@ -25,14 +25,16 @@ import type {
   WalletSearchResponse,
 } from '@walletOS/types';
 import { apiRequest } from '../lib/apiClient';
-import { withActiveTenantScope } from '../lib/adminSession';
+
 
 export async function fetchAuditLogs(
   params: AdminAuditQuery & { signal?: AbortSignal }
 ): Promise<AuditLog[]> {
   const { signal, ...query } = params;
+  // Pass tenantId from the caller; when omitted, superadmins see all tenants
+  // (the backend's allowNoScope path). Non-superadmins are scoped server-side.
   const response = await apiRequest<AuditLogListResponse>('/admin/audit', {
-    query: withActiveTenantScope(query),
+    query,
     signal,
     fallbackMessage: 'Failed to fetch audit logs',
   });

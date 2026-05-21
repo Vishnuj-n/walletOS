@@ -174,7 +174,8 @@ export async function freezeWallet(
   reason: string,
   idempotencyKey?: string,
   actorId?: string,
-  actorType?: string
+  actorType?: string,
+  actorRole?: string
 ) {
   return await prisma.$transaction(async (tx) => {
     // Lock the wallet row
@@ -216,6 +217,7 @@ export async function freezeWallet(
         },
         actorId,
         actorType,
+        actorRole,
         isSandbox,
       },
     });
@@ -234,7 +236,8 @@ export async function unfreezeWallet(
   reason: string,
   idempotencyKey?: string,
   actorId?: string,
-  actorType?: string
+  actorType?: string,
+  actorRole?: string
 ) {
   return await prisma.$transaction(async (tx) => {
     // Lock the wallet row
@@ -281,6 +284,7 @@ export async function unfreezeWallet(
         },
         actorId,
         actorType,
+        actorRole,
         isSandbox,
       },
     });

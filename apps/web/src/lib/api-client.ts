@@ -68,6 +68,7 @@ export function validateSessionBootstrap(
   if (!token) {
     return {
       token: null,
+      expiresAt,
       error: 'Missing session token. Pass `token=sess_...` when loading the wallet embed.',
       source: 'missing',
     };

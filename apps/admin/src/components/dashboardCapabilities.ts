@@ -41,14 +41,6 @@ export const DASHBOARD_CAPABILITIES: DashboardCapability[] = [
     minRole: 'superadmin',
     scope: 'platform',
   },
-  {
-    id: 'search',
-    label: 'Global Search',
-    href: '/dashboard/search',
-    description: 'Search wallets and transactions across tenants.',
-    minRole: 'superadmin',
-    scope: 'platform',
-  },
 ];
 
 export function getDashboardCapability(id: string): DashboardCapability | undefined {

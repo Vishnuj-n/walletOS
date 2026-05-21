@@ -3,24 +3,33 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PermissionGate } from './PermissionGate';
 import { DASHBOARD_CAPABILITIES } from './dashboardCapabilities';
+import { TopbarGlobalSearch } from './TopbarGlobalSearch';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
   showNav?: boolean;
 }
 
-/**
- * Unified Admin Layout Wrapper
- * Provides consistent navigation, auth context, and layout structure across admin pages
- * Reduces isolated nodes by centralizing common UI patterns
- */
 export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
   const { adminUser, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (!profileRef.current) return;
+      if (e.target instanceof Node && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    }
+    if (profileOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [profileOpen]);
 
   const handleSignOut = async () => {
     try {
@@ -44,15 +53,20 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
       {showNav && (
         <nav className="bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between h-16">
-              <div className="flex">
+            <div className="flex h-16 items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-6">
                 <div className="flex-shrink-0 flex items-center">
                   <Link href="/dashboard" className="text-xl font-bold text-gray-900 hover:text-gray-700">
                     WalletOS Admin
                   </Link>
                 </div>
-                <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                  {DASHBOARD_CAPABILITIES.map((capability) => (
+                <div className="hidden lg:block">
+                  <PermissionGate minRole="superadmin">
+                    <TopbarGlobalSearch />
+                  </PermissionGate>
+                </div>
+                <div className="hidden sm:ml-2 sm:flex sm:space-x-6">
+                  {DASHBOARD_CAPABILITIES.filter((c) => c.id !== 'settings').map((capability) => (
                     <PermissionGate key={capability.id} minRole={capability.minRole}>
                       <Link href={capability.href} className={getNavLinkClass(capability.href)}>
                         {capability.label}
@@ -61,37 +75,68 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
                   ))}
                 </div>
               </div>
-              <div className="flex items-center">
-                <div className="flex flex-col items-end mr-4">
-                  <span className="text-sm text-gray-700">
-                    {adminUser?.email}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {adminUser?.role}
-                  </span>
-                </div>
+              <div className="relative flex items-center">
                 <button
-                  onClick={handleSignOut}
-                  className="text-sm text-gray-500 hover:text-gray-700"
+                  type="button"
+                  className="flex items-center gap-3 rounded-md p-2 hover:bg-gray-100 focus:outline-none"
+                  onClick={() => setProfileOpen((o) => !o)}
+                  aria-haspopup="true"
+                  aria-expanded={profileOpen}
                 >
-                  Sign out
+                  <div className="h-8 w-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-sm font-medium">
+                    {adminUser?.email?.charAt(0).toUpperCase() || 'A'}
+                  </div>
+                  <div className="hidden sm:flex flex-col items-start">
+                    <span className="text-sm text-gray-700">{adminUser?.email}</span>
+                    <span className="text-xs text-gray-500">{adminUser?.role}</span>
+                  </div>
                 </button>
+
+                {profileOpen && (
+                  <div
+                    ref={profileRef}
+                    className="absolute right-0 top-full mt-1 w-56 bg-white border border-gray-200 rounded-md shadow-lg z-30 origin-top-right"
+                    style={{ marginTop: '0.25rem' }}
+                  >
+                    <div className="px-4 py-3">
+                      <div className="text-sm font-medium text-gray-900 truncate">{adminUser?.email}</div>
+                      <div className="text-xs text-gray-500">{adminUser?.role}</div>
+                    </div>
+                    <div className="border-t border-gray-100" />
+                    <div className="py-1">
+                      <PermissionGate minRole="support">
+                        <Link
+                          href="/dashboard/settings"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          onClick={() => setProfileOpen(false)}
+                        >
+                          Account Settings
+                        </Link>
+                      </PermissionGate>
+                      <button
+                        onClick={handleSignOut}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        Sign out
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
+            </div>
+            <div className="pb-3 lg:hidden">
+              <PermissionGate minRole="superadmin">
+                <TopbarGlobalSearch compact />
+              </PermissionGate>
             </div>
           </div>
         </nav>
       )}
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {children}
-      </main>
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">{children}</main>
     </div>
   );
 }
 
-/**
- * Page wrapper component for admin pages
- * Combines auth protection with AdminLayout
- */
 interface AdminPageProps {
   children: React.ReactNode;
   showNav?: boolean;

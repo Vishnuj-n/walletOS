@@ -108,6 +108,7 @@ model AuditLog {
   changes    Json?
   actorId    String?
   actorType  String?
+  actorRole  String?  // Immutable historical record: role stamped at exact moment of action
   timestamp  DateTime @default(now())
   isSandbox  Boolean  @default(false)
   tenant     Tenant   @relation(fields: [tenantId], references: [id])

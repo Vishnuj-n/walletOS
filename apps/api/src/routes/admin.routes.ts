@@ -78,6 +78,19 @@ function getValidatedIdempotencyKey(idempotencyKeyHeader: string | string[] | un
   return idempotencyKey;
 }
 
+function getQueryString(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const [firstValue] = value;
+    return typeof firstValue === 'string' ? firstValue : undefined;
+  }
+
+  return undefined;
+}
+
 function getAdminApiKeyRotationCacheKey(tenantId: string, scope: 'live' | 'test', auditAction: string, idempotencyKey: string): string {
   return `${tenantId}:${scope}:${auditAction}:${idempotencyKey}`;
 }
@@ -111,10 +124,16 @@ function redactApiKeyForAudit(apiKey: string): string {
 async function resolveAdminTenantScope(
   req: Express.Request,
   requestedTenantId?: string,
-  options?: { allowSuperadminOverride?: boolean }
-): Promise<string> {
+  options?: { allowSuperadminOverride?: boolean; allowNoScope?: boolean }
+): Promise<string | null> {
   const sessionTenantId = req.adminUser!.tenantId;
   const isSuperadmin = req.adminUser!.role === 'superadmin';
+
+  // Superadmin with no explicit tenantId requested: allow cross-tenant (no scope)
+  if (isSuperadmin && !requestedTenantId && options?.allowNoScope) {
+    return null;
+  }
+
   const tenantId = requestedTenantId ?? sessionTenantId;
 
   if (tenantId === sessionTenantId) {
@@ -142,10 +161,22 @@ async function resolveAdminTenantScope(
   return tenant.id;
 }
 
+async function getAdminEmailsByRole(
+  role: 'support' | 'finance' | 'tenant_admin' | 'superadmin'
+): Promise<string[]> {
+  const admins = await prisma.adminUser.findMany({
+    where: { role },
+    select: { email: true },
+  });
+
+  return admins.map((admin) => admin.email);
+}
+
 async function rotateAdminApiKeyForTenant(params: {
   tenantId: string;
   scope: 'live' | 'test';
   adminEmail: string;
+  adminRole: string;
   idempotencyKey: string;
   auditAction: 'tenant.key_rotated';
   isAuditSandbox: boolean;
@@ -154,7 +185,7 @@ async function rotateAdminApiKeyForTenant(params: {
   cachedResponse: AdminApiKeyRotationResponse;
   status: number;
 }> {
-  const { tenantId, scope, adminEmail, idempotencyKey, auditAction, isAuditSandbox } = params;
+  const { tenantId, scope, adminEmail, adminRole, idempotencyKey, auditAction, isAuditSandbox } = params;
   const idempotencyWindowStart = new Date(Date.now() - ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS);
   const isSandbox = scope === 'test';
   const cacheKey = getAdminApiKeyRotationCacheKey(tenantId, scope, auditAction, idempotencyKey);
@@ -277,6 +308,7 @@ async function rotateAdminApiKeyForTenant(params: {
         },
         actorId: adminEmail,
         actorType: 'admin',
+        actorRole: adminRole,
         isSandbox: isAuditSandbox,
       },
     });
@@ -372,6 +404,7 @@ router.post(
           changes: {
             idempotency_key: idempotencyKey,
           } as Prisma.InputJsonValue,
+          actorRole: req.adminUser!.role,
         },
       });
 
@@ -392,6 +425,7 @@ router.post(
           entityId: wallet.id,
           actorId: adminEmail,
           actorType: 'admin',
+          actorRole: req.adminUser!.role,
           changes: {
             idempotency_key: idempotencyKey,
             external_user_id,
@@ -500,6 +534,7 @@ router.patch(
         action: 'wallet.updated',
         actorId: adminEmail,
         actorType: 'admin',
+        actorRole: req.adminUser!.role,
         changes: {
           before: {
             label: prevWallet.label,
@@ -637,7 +672,7 @@ router.get(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid tenant scope');
     }
 
-    const tenantId = await resolveAdminTenantScope(req, parsedTenantScope.data.tenantId);
+    const tenantId = (await resolveAdminTenantScope(req, parsedTenantScope.data.tenantId))!;
     const isSandbox = req.isSandbox || false;
 
     const where: Prisma.WalletWhereInput = { tenantId, isSandbox };
@@ -843,6 +878,7 @@ router.post(
           },
           actorId: adminEmail,
           actorType: 'admin',
+          actorRole: req.adminUser!.role,
           isSandbox,
         },
       });
@@ -995,6 +1031,7 @@ router.post(
           },
           actorId: adminEmail,
           actorType: 'admin',
+          actorRole: req.adminUser!.role,
           isSandbox,
         },
       });
@@ -1163,6 +1200,7 @@ router.post(
           },
           actorId: adminEmail,
           actorType: 'admin',
+          actorRole: req.adminUser!.role,
           isSandbox,
         },
       });
@@ -1260,7 +1298,7 @@ router.post(
       }
     }
 
-    const updatedWallet = await freezeWallet(walletId, tenantId, isSandbox, reason, idempotencyKey, adminEmail, 'admin');
+    const updatedWallet = await freezeWallet(walletId, tenantId, isSandbox, reason, idempotencyKey, adminEmail, 'admin', req.adminUser!.role);
 
     res.json({
       wallet_id: updatedWallet.id,
@@ -1334,7 +1372,7 @@ router.post(
       }
     }
 
-    const updatedWallet = await unfreezeWallet(walletId, tenantId, wallet.isSandbox, reason, idempotencyKey, adminEmail, 'admin');
+    const updatedWallet = await unfreezeWallet(walletId, tenantId, wallet.isSandbox, reason, idempotencyKey, adminEmail, 'admin', req.adminUser!.role);
 
     res.json({
       wallet_id: updatedWallet.id,
@@ -1451,6 +1489,7 @@ router.post(
           },
           actorId: adminEmail,
           actorType: 'admin',
+          actorRole: req.adminUser!.role,
           isSandbox: req.isSandbox || false,
         },
       });
@@ -1483,18 +1522,33 @@ router.get(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid tenant scope');
     }
 
-    const tenantId = await resolveAdminTenantScope(req, parsedTenantScope.data.tenantId);
+    const tenantId = await resolveAdminTenantScope(req, parsedTenantScope.data.tenantId, {
+      allowSuperadminOverride: true,
+      allowNoScope: true,
+    });
     const isSandbox = req.isSandbox || false;
 
-    const where: Prisma.AuditLogWhereInput = { tenantId, isSandbox };
+    // Scope by tenant when one is known; superadmins with no explicit tenant see all.
+    // Exclude superadmin-role actions — those belong in the Admin Activity tab.
+    const where: Prisma.AuditLogWhereInput = {
+      ...(tenantId ? { tenantId } : {}),
+      isSandbox,
+      NOT: { actorRole: 'superadmin' },
+    };
 
-    if (wallet_id) where.entityId = Array.isArray(wallet_id) ? wallet_id[0] : wallet_id;
-    if (actor) where.actorId = Array.isArray(actor) ? actor[0] : actor;
-    if (action) where.action = Array.isArray(action) ? action[0] : action;
-    if (from || to) {
+    const walletIdFilter = getQueryString(wallet_id);
+    const actorFilter = getQueryString(actor);
+    const actionFilter = getQueryString(action);
+    const fromFilter = getQueryString(from);
+    const toFilter = getQueryString(to);
+
+    if (walletIdFilter) where.entityId = walletIdFilter;
+    if (actorFilter) where.actorId = actorFilter;
+    if (actionFilter) where.action = actionFilter;
+    if (fromFilter || toFilter) {
       where.timestamp = {};
-      if (from) where.timestamp.gte = new Date(from as string);
-      if (to) where.timestamp.lte = new Date(to as string);
+      if (fromFilter) where.timestamp.gte = new Date(fromFilter);
+      if (toFilter) where.timestamp.lte = new Date(toFilter);
     }
 
     const parsedLimit = Number(limit);
@@ -1651,6 +1705,7 @@ router.post(
         action: 'admin_user.invited',
         actorId: req.adminUser!.email,
         actorType: 'admin',
+        actorRole: req.adminUser!.role,
         changes: {
           invited_email: email,
           invited_role: role,
@@ -1749,6 +1804,7 @@ router.post(
       tenantId,
       scope,
       adminEmail,
+      adminRole: req.adminUser!.role,
       idempotencyKey: getValidatedIdempotencyKey(req.headers['idempotency-key']),
       auditAction: 'tenant.key_rotated',
       isAuditSandbox: req.isSandbox || false,
@@ -1828,6 +1884,7 @@ router.post(
       tenantId,
       scope,
       adminEmail,
+      adminRole: req.adminUser!.role,
       idempotencyKey: getValidatedIdempotencyKey(req.headers['idempotency-key']),
       auditAction: 'tenant.key_rotated',
       isAuditSandbox: req.isSandbox || false,
@@ -2042,6 +2099,7 @@ router.post(
           },
           actorId: adminEmail,
           actorType: 'admin',
+          actorRole: req.adminUser!.role,
           isSandbox: req.isSandbox || false,
         },
       });
@@ -2071,18 +2129,32 @@ router.get(
   '/audit/admin-activity',
   requireAdminRole('superadmin'),
   asyncHandler(async (req, res) => {
-    const { adminEmail, actionType, limit = 50, after } = req.query;
+    const { adminEmail, actionType, from, to, limit = 50, after } = req.query;
 
     const where: Prisma.AuditLogWhereInput = {
       actorType: 'admin',
+      actorRole: 'superadmin', // Fast, indexed flat-column query — no join needed
     };
 
-    if (adminEmail) {
-      where.actorId = Array.isArray(adminEmail) ? adminEmail[0] : adminEmail;
+    const requestedAdminEmail = getQueryString(adminEmail);
+    const actionTypeFilter = getQueryString(actionType);
+    const fromFilter = getQueryString(from);
+    const toFilter = getQueryString(to);
+
+    if (requestedAdminEmail) {
+      where.AND = [
+        { actorId: requestedAdminEmail },
+      ];
     }
 
-    if (actionType) {
-      where.action = Array.isArray(actionType) ? actionType[0] : actionType;
+    if (actionTypeFilter) {
+      where.action = actionTypeFilter;
+    }
+
+    if (fromFilter || toFilter) {
+      where.timestamp = {};
+      if (fromFilter) where.timestamp.gte = new Date(fromFilter);
+      if (toFilter) where.timestamp.lte = new Date(toFilter);
     }
 
     const parsedLimit = Number(limit);
@@ -2135,6 +2207,7 @@ router.get(
         entity_id: log.entityId,
         action: log.action,
         actor: log.actorId,
+        actor_role: log.actorRole,
         changes: log.changes,
         timestamp: log.timestamp,
         is_sandbox: log.isSandbox,
@@ -2219,14 +2292,14 @@ router.get(
     if (includeCrossTenant && !requestedTenantId) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'tenantId is required when includeCrossTenant is true');
     }
-    
-    const tenantBoundary = (isSuperadmin && includeCrossTenant && requestedTenantId)
-      ? requestedTenantId
+
+    const tenantBoundary = isSuperadmin
+      ? requestedTenantId ?? undefined
       : req.adminUser!.tenantId;
 
     const wallets = await prisma.wallet.findMany({
       where: {
-        tenantId: tenantBoundary,
+        ...(tenantBoundary ? { tenantId: tenantBoundary } : {}),
         isSandbox: req.isSandbox,
         OR: [
           { id: { contains: q, mode: 'insensitive' } },
@@ -2284,17 +2357,20 @@ router.get(
     if (includeCrossTenant && !requestedTenantId) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'tenantId is required when includeCrossTenant is true');
     }
-    
-    const tenantBoundary = (isSuperadmin && includeCrossTenant && requestedTenantId)
-      ? requestedTenantId
+
+    const tenantBoundary = isSuperadmin
+      ? requestedTenantId ?? undefined
       : req.adminUser!.tenantId;
 
     const where: Prisma.TransactionWhereInput = { 
-      tenantId: tenantBoundary,
       wallet: {
         isSandbox: req.isSandbox,
       },
     };
+
+    if (tenantBoundary) {
+      where.tenantId = tenantBoundary;
+    }
 
     if (transactionId) {
       where.id = Array.isArray(transactionId) ? transactionId[0] : transactionId;
