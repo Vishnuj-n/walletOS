@@ -345,6 +345,86 @@ describe('Admin API Endpoints', () => {
     });
   });
 
+  describe('POST /admin/users/invite', () => {
+    it('should redact the invite token and ignore sandbox audit cache entries', async () => {
+      const idempotencyKey = `test-invite-idempotency-${Date.now()}`;
+      const invitedEmail = `invite-${Date.now()}@example.com`;
+
+      await prisma.auditLog.create({
+        data: {
+          tenantId: testTenantId,
+          entityType: 'admin_user',
+          entityId: 'sandbox-cache-entry',
+          action: 'admin_user.invited',
+          actorId: 'admin@test.com',
+          actorType: 'admin',
+          actorRole: AdminRole.superadmin,
+          isSandbox: true,
+          changes: {
+            idempotency_key: idempotencyKey,
+            response_status: 200,
+            response: {
+              message: 'cached',
+              invite_link: 'https://frontend.example/claim?token=[REDACTED]',
+              admin_user: {
+                id: 'sandbox-cache-entry',
+                email: invitedEmail,
+                role: 'support',
+                is_active: false,
+              },
+            },
+          },
+        },
+      });
+
+      const response = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', idempotencyKey)
+        .send({
+          email: invitedEmail,
+          role: 'support',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.invite_link).toContain('[REDACTED]');
+
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: testTenantId,
+          entityType: 'admin_user',
+          action: 'admin_user.invited',
+          isSandbox: false,
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+      });
+
+      expect(auditLog).toBeDefined();
+      const auditChanges = (auditLog?.changes as Record<string, unknown>) ?? {};
+      expect(auditChanges.token_hash).toMatch(/^[a-f0-9]{64}$/);
+
+      const responseChanges = auditChanges.response as { invite_link?: string } | undefined;
+      expect(responseChanges?.invite_link).toContain('[REDACTED]');
+
+      await prisma.pendingVerification.deleteMany({ where: { email: invitedEmail } });
+      await prisma.adminUser.deleteMany({ where: { email: invitedEmail } });
+      await prisma.auditLog.deleteMany({
+        where: {
+          tenantId: testTenantId,
+          entityType: 'admin_user',
+          action: 'admin_user.invited',
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+      });
+    });
+  });
+
   describe('POST /admin/tenants', () => {
     it('should create a tenant with API keys', async () => {
       const response = await request(app)

@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 
 function generatePublicId(prefix: 'wal' | 'txn' | 'usr'): string {
-  return `${prefix}_${randomBytes(8).toString('hex')}`;
+  return `${prefix}_${randomBytes(16).toString('hex')}`;
 }
 
 export function generateWalletPublicId(): string {

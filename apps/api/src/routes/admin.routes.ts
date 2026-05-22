@@ -118,6 +118,10 @@ function getFrontendBaseUrl(): string {
   return baseUrl.replace(/\/+$/, '');
 }
 
+function redactInviteLink(inviteLink: string): string {
+  return inviteLink.replace(/([?&]token=)[^&]+/, '$1[REDACTED]');
+}
+
 function getAdminApiKeyRotationCacheKey(tenantId: string, scope: 'live' | 'test', auditAction: string, idempotencyKey: string): string {
   return `${tenantId}:${scope}:${auditAction}:${idempotencyKey}`;
 }
@@ -1668,6 +1672,7 @@ router.post(
     }
 
     const idempotencyKey = getValidatedIdempotencyKey(req.headers['idempotency-key']);
+    const isSandbox = req.isSandbox || false;
 
     const { email, role, tenant_id } = parsedPayload.data;
     const sessionTenantId = req.adminUser!.tenantId;
@@ -1696,6 +1701,7 @@ router.post(
     const cachedInviteAudit = await prisma.auditLog.findFirst({
       where: {
         tenantId: targetTenantId,
+        isSandbox,
         entityType: 'admin_user',
         action: 'admin_user.invited',
         timestamp: {
@@ -1727,7 +1733,10 @@ router.post(
         | undefined;
 
       if (cachedResponse) {
-        res.status((cachedChanges.response_status as number) || 200).json(cachedResponse);
+        res.status((cachedChanges.response_status as number) || 200).json({
+          ...cachedResponse,
+          invite_link: redactInviteLink(cachedResponse.invite_link),
+        });
         return;
       }
     }
@@ -1743,9 +1752,7 @@ router.post(
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours activation window
-    const inviteUrl = new URL('/claim', `${getFrontendBaseUrl()}/`);
-    inviteUrl.searchParams.set('token', rawToken);
-    const inviteLink = inviteUrl.toString();
+    const inviteLink = `${getFrontendBaseUrl()}/claim?token=[REDACTED]`;
 
     const responsePayload = {
       message: 'Invitation successfully created.',
@@ -1764,6 +1771,7 @@ router.post(
       const txCachedInviteAudit = await tx.auditLog.findFirst({
         where: {
           tenantId: targetTenantId,
+          isSandbox,
           entityType: 'admin_user',
           action: 'admin_user.invited',
           timestamp: {
@@ -1786,7 +1794,10 @@ router.post(
         if (cachedResponse) {
           return {
             status: (cachedChanges.response_status as number) || 200,
-            payload: cachedResponse,
+            payload: {
+              ...cachedResponse,
+              invite_link: redactInviteLink(cachedResponse.invite_link),
+            },
           };
         }
       }
@@ -1845,6 +1856,7 @@ router.post(
             invited_role: role,
             invited_by: req.adminUser!.email,
             idempotency_key: idempotencyKey,
+            token_hash: tokenHash,
             response: payload,
             response_status: 201,
           },
