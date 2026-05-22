@@ -19,20 +19,23 @@ import type {
   TenantApiKeySettingsResponse,
   TenantListResponse,
   TenantUsageResponse,
+  UnifiedSearchResponse,
   TransactionResponse,
   TransactionSearchQuery,
   TransactionSearchResponse,
   WalletSearchResponse,
 } from '@walletOS/types';
 import { apiRequest } from '../lib/apiClient';
-import { withActiveTenantScope } from '../lib/adminSession';
+
 
 export async function fetchAuditLogs(
   params: AdminAuditQuery & { signal?: AbortSignal }
 ): Promise<AuditLog[]> {
   const { signal, ...query } = params;
+  // Pass tenantId from the caller; when omitted, superadmins see all tenants
+  // (the backend's allowNoScope path). Non-superadmins are scoped server-side.
   const response = await apiRequest<AuditLogListResponse>('/admin/audit', {
-    query: withActiveTenantScope(query),
+    query,
     signal,
     fallbackMessage: 'Failed to fetch audit logs',
   });
@@ -157,6 +160,13 @@ export async function searchTransactions(
   return apiRequest<TransactionSearchResponse>('/admin/search/transactions', {
     query: params,
     fallbackMessage: 'Failed to search transactions',
+  });
+}
+
+export async function searchUnified(query: string): Promise<UnifiedSearchResponse> {
+  return apiRequest<UnifiedSearchResponse>('/admin/search', {
+    query: { q: query },
+    fallbackMessage: 'Failed to run unified search',
   });
 }
 

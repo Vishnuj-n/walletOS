@@ -1,5 +1,5 @@
 import { apiRequest } from '../lib/apiClient';
-import { requireActiveTenantId, withActiveTenantScope } from '../lib/adminSession';
+import { getAdminSession, requireActiveTenantId, withActiveTenantScope } from '../lib/adminSession';
 
 export interface Wallet {
   wallet_id: string;
@@ -40,8 +40,13 @@ export async function fetchWallets(params: {
   limit?: number;
   after?: string;
 }): Promise<Wallet[]> {
+  const adminSession = getAdminSession();
+  const query = adminSession?.role === 'superadmin'
+    ? params
+    : withActiveTenantScope(params);
+
   const response = await apiRequest<WalletListResponse>('/admin/wallets', {
-    query: withActiveTenantScope(params),
+    query,
     fallbackMessage: 'Failed to fetch wallets',
   });
 

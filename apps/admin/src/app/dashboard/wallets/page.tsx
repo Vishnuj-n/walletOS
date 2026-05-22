@@ -141,7 +141,7 @@ export default function WalletsPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mr-4"
             >
               <option value="">All Statuses</option>
               <option value="active">Active</option>
@@ -309,11 +309,13 @@ export default function WalletsPage() {
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Label
+                  Label *
                 </label>
                 <input
                   type="text"
                   name="label"
+                  required
+                  aria-required="true"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

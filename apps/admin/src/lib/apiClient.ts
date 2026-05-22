@@ -1,4 +1,5 @@
-import { API_BASE_URL, supabase } from './supabase';
+import { API_BASE_URL } from './supabase';
+import { getAdminToken, setAdminSession } from './adminSession';
 import { mapErrorCodeToMessage } from './errorMap';
 
 interface ApiRequestOptions {
@@ -38,28 +39,13 @@ function buildQueryString(query?: object): string {
   return queryString ? `?${queryString}` : '';
 }
 
-async function getAuthToken(): Promise<string | null> {
-  try {
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession();
-
-    if (error) {
-      await supabase.auth.signOut();
-      throw new Error('Session expired. Please sign in again.');
-    }
-
-    return session?.access_token || null;
-  } catch (err) {
-    await supabase.auth.signOut();
-    throw err instanceof Error ? err : new Error('Session expired. Please sign in again.');
-  }
+function getAuthToken(): string | null {
+  return getAdminToken();
 }
 
 async function parseApiError(response: Response, fallbackMessage: string): Promise<never> {
   if (response.status === 401) {
-    await supabase.auth.signOut();
+    setAdminSession(null);
     throw new Error('Session expired. Please sign in again.');
   }
 
@@ -76,7 +62,7 @@ async function parseApiError(response: Response, fallbackMessage: string): Promi
 }
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions): Promise<T> {
-  const token = await getAuthToken();
+  const token = getAuthToken();
   if (!token) throw new Error('No active session');
 
   const query = buildQueryString(options.query);

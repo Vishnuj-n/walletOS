@@ -14,6 +14,7 @@ import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
+import { generateWalletPublicId } from '../lib/publicId';
 
 const router = Router();
 
@@ -77,6 +78,7 @@ router.post(
       // Create wallet within transaction
       const newWallet = await tx.wallet.create({
         data: {
+          publicId: generateWalletPublicId(),
           tenantId: req.tenantId!,
           externalUserId: external_user_id,
           currency,

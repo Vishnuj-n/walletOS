@@ -16,12 +16,12 @@ interface ProtectedRouteProps {
  * Optionally enforces role-based access control
  */
 export function ProtectedRoute({ children, minRole, fallback }: ProtectedRouteProps) {
-  const { user, adminUser, loading, hasRole } = useAuth();
+  const { adminUser, loading, hasRole } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading) {
-      if (!user || !adminUser) {
+      if (!adminUser) {
         router.push('/login');
         return;
       }
@@ -31,7 +31,7 @@ export function ProtectedRoute({ children, minRole, fallback }: ProtectedRoutePr
         return;
       }
     }
-  }, [user, adminUser, loading, hasRole, minRole, router]);
+  }, [adminUser, loading, hasRole, minRole, router]);
 
   if (loading) {
     return (
@@ -41,7 +41,7 @@ export function ProtectedRoute({ children, minRole, fallback }: ProtectedRoutePr
     );
   }
 
-  if (!user || !adminUser) {
+  if (!adminUser) {
     return fallback || null;
   }
 

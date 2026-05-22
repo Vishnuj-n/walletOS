@@ -14,6 +14,7 @@ export interface AuditLogParams {
   changes?: Record<string, any>;
   actorId?: string;
   actorType?: string;
+  actorRole?: string;
 }
 
 /**
@@ -36,6 +37,7 @@ export async function createAuditLog(
       changes: params.changes,
       actorId: params.actorId,
       actorType: params.actorType,
+      actorRole: params.actorRole,
     },
   });
 }

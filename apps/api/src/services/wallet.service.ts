@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { generateWalletPublicId } from '../lib/publicId';
 
 /**
  * Wallet Service
@@ -47,6 +48,7 @@ export async function createWallet(params: CreateWalletParams) {
       // Create wallet
       const wallet = await tx.wallet.create({
         data: {
+          publicId: generateWalletPublicId(),
           tenantId: params.tenantId,
           externalUserId: params.externalUserId,
           currency: params.currency,
@@ -174,7 +176,8 @@ export async function freezeWallet(
   reason: string,
   idempotencyKey?: string,
   actorId?: string,
-  actorType?: string
+  actorType?: string,
+  actorRole?: string
 ) {
   return await prisma.$transaction(async (tx) => {
     // Lock the wallet row
@@ -216,6 +219,7 @@ export async function freezeWallet(
         },
         actorId,
         actorType,
+        actorRole,
         isSandbox,
       },
     });
@@ -234,7 +238,8 @@ export async function unfreezeWallet(
   reason: string,
   idempotencyKey?: string,
   actorId?: string,
-  actorType?: string
+  actorType?: string,
+  actorRole?: string
 ) {
   return await prisma.$transaction(async (tx) => {
     // Lock the wallet row
@@ -281,6 +286,7 @@ export async function unfreezeWallet(
         },
         actorId,
         actorType,
+        actorRole,
         isSandbox,
       },
     });
