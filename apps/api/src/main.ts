@@ -13,6 +13,7 @@ import walletRoutes from './routes/wallet.routes';
 import transactionRoutes from './routes/transaction.routes';
 import adminRoutes from './routes/admin.routes';
 import authRoutes from './routes/auth.routes';
+import { verifyGlobalSmtpHealth } from './services/mail.service';
 
 const app = express();
 
@@ -53,6 +54,7 @@ const port = process.env.PORT || 3333;
 if (process.env.NODE_ENV !== 'test') {
   const server = app.listen(port, () => {
     console.log(`Listening at http://localhost:${port}/api`);
+    void verifyGlobalSmtpHealth();
   });
   server.on('error', console.error);
 }

@@ -1,5 +1,5 @@
-import type { AdminRole, AdminUserInfo } from '@walletOS/types';
-import { hasRequiredRole } from '@walletOS/types';
+import type { AdminRole, AdminUserInfo } from '@walletos/types';
+import { hasRequiredRole } from '@walletos/types';
 
 const ADMIN_SESSION_STORAGE_KEY = 'walletos.admin.session';
 const ADMIN_TOKEN_STORAGE_KEY = 'walletos.admin.token';

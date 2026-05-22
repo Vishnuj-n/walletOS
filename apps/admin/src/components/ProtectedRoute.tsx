@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
-import type { AdminRole } from '@walletOS/types';
+import type { AdminRole } from '@walletos/types';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;

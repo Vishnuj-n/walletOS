@@ -1,4 +1,4 @@
-import type { DashboardCapability } from '@walletOS/types';
+import type { DashboardCapability } from '@walletos/types';
 
 export const DASHBOARD_CAPABILITIES: DashboardCapability[] = [
   {

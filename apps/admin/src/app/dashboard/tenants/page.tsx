@@ -10,7 +10,7 @@ import {
   fetchTenantUsage, 
   revokeTenantKey,
 } from '../../../services/adminService';
-import type { CreatedTenantResponse, Tenant, TenantUsageResponse } from '@walletOS/types';
+import type { CreatedTenantResponse, Tenant, TenantUsageResponse } from '@walletos/types';
 import { Building2, KeyRound, Plus } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 

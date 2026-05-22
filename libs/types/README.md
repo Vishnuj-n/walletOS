@@ -50,7 +50,7 @@ The actual imports into `apps/api` and `apps/admin` are currently deferred due t
 
 1. **Configure Nx project references**: Add proper project references in `apps/api/tsconfig.json` and `apps/admin/tsconfig.json` to reference the types library
 2. **Unify module systems**: Either convert the entire monorepo to ES modules or properly configure composite builds
-3. **Update imports**: Replace local type definitions in both apps with imports from `@walletOS/types`
+3. **Update imports**: Replace local type definitions in both apps with imports from `@walletos/types`
 4. **Build the types library**: Ensure the types library builds correctly before referencing it
 
 Once complete, the graph will show clear dependency lines: `admin → types` and `api → types`, demonstrating the logical coupling through shared types.

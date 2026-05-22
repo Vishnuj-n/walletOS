@@ -2,8 +2,10 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
+    "rootDir": "./src",
     "declaration": true,
     "module": "Node16",
+    "ignoreDeprecations": "5.0",
     "types": ["node"]
   },
   "composite": true,
@@ -12,6 +14,7 @@
     "jest.config.ts",
     "jest.config.cts",
     "src/**/*.spec.ts",
+    "src/**/*.spec.zts",
     "src/**/*.test.ts"
   ]
 }

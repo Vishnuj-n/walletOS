@@ -11,7 +11,7 @@ import type {
   CreditTransactionRequest,
   DebitTransactionRequest,
   ReversalTransactionRequest,
-} from '@walletOS/types';
+} from '@walletos/types';
 import { ArrowRightLeft, BadgeDollarSign, RotateCcw, ShieldAlert } from 'lucide-react';
 
 export default function ManualActionsPage() {

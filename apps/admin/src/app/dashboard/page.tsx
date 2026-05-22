@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { PermissionGate } from '../../components/PermissionGate';
 import { DASHBOARD_CAPABILITIES, getDashboardCapability } from '../../components/dashboardCapabilities';
 import { fetchSystemBalance } from '../../services/adminService';
-import type { SystemBalanceResponse } from '@walletOS/types';
+import type { SystemBalanceResponse } from '@walletos/types';
 import {
   Activity,
   ArrowRight,

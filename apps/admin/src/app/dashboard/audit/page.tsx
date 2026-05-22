@@ -9,7 +9,7 @@ import {
   fetchAdminActivity,
   fetchSystemErrors,
 } from '../../../services/adminService';
-import type { AdminActivityLog, AuditLog, SystemError } from '@walletOS/types';
+import type { AdminActivityLog, AuditLog, SystemError } from '@walletos/types';
 import { Activity, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 export default function AuditLogPage() {

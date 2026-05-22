@@ -1,22 +1,7 @@
 {
-  "compileOnSave": false,
   "compilerOptions": {
-    "rootDir": ".",
-    "sourceMap": true,
-    "declaration": false,
-    "moduleResolution": "node16",
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "importHelpers": true,
-    "target": "es2015",
-    "module": "Node16",
-    "lib": ["es2020", "dom"],
-    "skipLibCheck": true,
-    "skipDefaultLibCheck": true,
-    "isolatedModules": true,
     "paths": {
-      "@walletOS/types": ["./libs/types/src/index.ts"]
+      "@walletos/types": ["./libs/types/src/index.ts"]
     }
-  },
-  "exclude": ["node_modules", "tmp"]
+  }
 }

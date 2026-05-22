@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import type { AdminRole } from '@walletOS/types';
+import type { AdminRole } from '@walletos/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 

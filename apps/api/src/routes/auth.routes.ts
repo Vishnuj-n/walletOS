@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { createHash, randomBytes } from 'crypto';
-import bcrypt from 'bcrypt';
+import bcryptjs from 'bcryptjs';
 import { prisma } from '../lib/prisma';
 import { apiKeyAuthMiddleware } from '../middleware/auth';
 import { userSessionAuthMiddleware } from '../middleware/userSessionAuth';
@@ -133,7 +133,7 @@ router.post(
     }
 
     // Compare passwords
-    const isMatch = await bcrypt.compare(password, adminUser.passwordHash);
+    const isMatch = await bcryptjs.compare(password, adminUser.passwordHash);
     if (!isMatch) {
       throw new AppError(401, ErrorCode.UNAUTHORIZED, 'Invalid email or password');
     }
@@ -177,7 +177,7 @@ router.post(
 );
 
 router.post(
-  '/claim',
+  '/claim-account',
   asyncHandler(async (req: Request, res: Response) => {
     const { token, password } = req.body;
 
@@ -192,28 +192,27 @@ router.post(
     // Hash incoming raw token using SHA-256 to search the DB
     const tokenHash = createHash('sha256').update(token).digest('hex');
 
-    // Find verification record
-    const pendingVerification = await prisma.pendingVerification.findUnique({
-      where: { tokenHash },
-      include: { adminUser: true },
+    const pendingVerification = await prisma.pendingVerification.findFirst({
+      where: {
+        tokenHash,
+        expiresAt: { gt: new Date() },
+      },
+      select: {
+        id: true,
+        email: true,
+        tenantId: true,
+      },
     });
 
     if (!pendingVerification) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid or expired activation link');
     }
 
-    if (pendingVerification.expiresAt < new Date()) {
-      // Clean up expired verification
-      await prisma.pendingVerification.delete({ where: { id: pendingVerification.id } });
-      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Activation link has expired');
-    }
-
-    // Hash the password using bcrypt with salt rounds 12
-    const passwordHash = await bcrypt.hash(password, 12);
+    // Hash the password using bcryptjs with cost factor 12
+    const passwordHash = await bcryptjs.hash(password, 12);
 
     // Atomically activate admin user and delete token
     await prisma.$transaction(async (tx) => {
-      // 1. Update AdminUser
       await tx.adminUser.update({
         where: { email: pendingVerification.email },
         data: {
@@ -223,7 +222,6 @@ router.post(
         },
       });
 
-      // 2. Delete used verification token
       await tx.pendingVerification.delete({
         where: { id: pendingVerification.id },
       });

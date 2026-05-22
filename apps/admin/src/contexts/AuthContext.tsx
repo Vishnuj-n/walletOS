@@ -3,8 +3,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '../lib/supabase';
 import { getAdminToken, setAdminSession } from '../lib/adminSession';
-import type { AdminMeResponse, AdminRole, AdminUserInfo } from '@walletOS/types';
-import { roleRank } from '@walletOS/types';
+import type { AdminMeResponse, AdminRole, AdminUserInfo } from '@walletos/types';
+import { roleRank } from '@walletos/types';
 
 interface AuthIdentity {
   id: string;

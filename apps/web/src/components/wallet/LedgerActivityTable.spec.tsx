@@ -121,17 +121,36 @@ describe('LedgerActivityTable', () => {
       />
     );
 
+    expect(screen.queryByText('Previous')).toBeNull();
+    expect(screen.queryByText('Next')).toBeNull();
+
+    rerender(
+      <LedgerActivityTable
+        items={mockActivities}
+        currency="INR"
+        loading={false}
+        error={null}
+        nextCursor={null}
+        total={1}
+        onNextPage={jest.fn()}
+        onPrevPage={jest.fn()}
+        canGoBack={false}
+        onRetry={jest.fn()}
+        onSelect={jest.fn()}
+      />
+    );
+
     expect(screen.getByText('Previous').closest('button')).toBeDisabled();
     expect(screen.getByText('Next').closest('button')).toBeDisabled();
 
     rerender(
       <LedgerActivityTable
-        items={[]}
+        items={mockActivities}
         currency="INR"
         loading={false}
         error={null}
         nextCursor={'abc'}
-        total={0}
+        total={1}
         onNextPage={jest.fn()}
         onPrevPage={jest.fn()}
         canGoBack={true}

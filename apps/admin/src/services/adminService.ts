@@ -24,7 +24,7 @@ import type {
   TransactionSearchQuery,
   TransactionSearchResponse,
   WalletSearchResponse,
-} from '@walletOS/types';
+} from '@walletos/types';
 import { apiRequest } from '../lib/apiClient';
 
 

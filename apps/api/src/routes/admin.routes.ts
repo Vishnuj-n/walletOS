@@ -8,6 +8,7 @@ import { prisma } from '../lib/prisma';
 import { generateAdminUserPublicId, generateTransactionPublicId } from '../lib/publicId';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet } from '../services/wallet.service';
+import { buildClaimActivationUrl, sendInviteEmail } from '../services/mail.service';
 import { z } from 'zod';
 
 const router = Router();
@@ -68,7 +69,6 @@ const adminApiKeyRotationResponseCache = new Map<
 >();
 const ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const ADMIN_API_KEY_ROTATION_CACHE_TTL_MS = ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS;
-const ADMIN_INVITE_IDEMPOTENCY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 function getValidatedIdempotencyKey(idempotencyKeyHeader: string | string[] | undefined): string {
   const idempotencyKey = Array.isArray(idempotencyKeyHeader) ? idempotencyKeyHeader[0] : idempotencyKeyHeader;
@@ -111,15 +111,6 @@ function parseDateFilter(value: string, parameterName: 'from' | 'to'): Date {
   }
 
   return parsedDate;
-}
-
-function getFrontendBaseUrl(): string {
-  const baseUrl = process.env.FRONTEND_BASE_URL?.trim() || 'http://localhost:4200';
-  return baseUrl.replace(/\/+$/, '');
-}
-
-function redactInviteLink(inviteLink: string): string {
-  return inviteLink.replace(/([?&]token=)[^&]+/, '$1[REDACTED]');
 }
 
 function getAdminApiKeyRotationCacheKey(tenantId: string, scope: 'live' | 'test', auditAction: string, idempotencyKey: string): string {
@@ -1478,6 +1469,14 @@ router.post(
     // Hash keys with SHA-256
     const liveKeyHash = createHash('sha256').update(liveKey).digest('hex');
     const testKeyHash = createHash('sha256').update(testKey).digest('hex');
+    const inviteTargetEmail = typeof contact_email === 'string' ? contact_email.trim() : '';
+    const rawInviteToken = inviteTargetEmail ? randomBytes(32).toString('hex') : null;
+    const inviteTokenHash = rawInviteToken
+      ? createHash('sha256').update(rawInviteToken).digest('hex')
+      : null;
+    const inviteExpiresAt = rawInviteToken
+      ? new Date(Date.now() + 24 * 60 * 60 * 1000)
+      : null;
 
     const result = await prisma.$transaction(async (tx) => {
       // Create tenant
@@ -1511,6 +1510,29 @@ router.post(
         },
       });
 
+      if (inviteTargetEmail && inviteTokenHash && inviteExpiresAt) {
+        await tx.adminUser.create({
+          data: {
+            publicId: generateAdminUserPublicId(),
+            tenantId: tenant.id,
+            email: inviteTargetEmail,
+            role: 'tenant_admin',
+            isActive: false,
+            passwordHash: null,
+            invitedAt: new Date(),
+          },
+        });
+
+        await tx.pendingVerification.create({
+          data: {
+            tenantId: tenant.id,
+            email: inviteTargetEmail,
+            tokenHash: inviteTokenHash,
+            expiresAt: inviteExpiresAt,
+          },
+        });
+      }
+
       // Create audit log
       await tx.auditLog.create({
         data: {
@@ -1534,12 +1556,17 @@ router.post(
       return tenant;
     });
 
+    if (inviteTargetEmail && rawInviteToken) {
+      await sendInviteEmail(result.id, inviteTargetEmail, rawInviteToken);
+    }
+
     res.status(201).json({
       tenant_id: result.id,
       name: result.name,
       contact_email: result.contactEmail,
       live_key: liveKey,
       test_key: testKey,
+      bootstrap_invite_created: Boolean(rawInviteToken),
       created_at: result.createdAt,
     });
   })
@@ -1655,228 +1682,121 @@ router.get(
 const adminUserInviteSchema = z.object({
   email: z.string().email(),
   role: z.enum(['support', 'finance', 'tenant_admin', 'superadmin']),
-  tenant_id: z.string().min(1).optional(),
 });
 
 /**
- * POST /admin/users/invite
+ * POST /admin/invite-user
  * Invite a new admin user to the tenant
  */
+const inviteUserHandler = asyncHandler(async (req, res) => {
+  const parsedPayload = adminUserInviteSchema.safeParse(req.body);
+  if (!parsedPayload.success) {
+    throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid invitation payload');
+  }
+
+  const idempotencyKey = getValidatedIdempotencyKey(req.headers['idempotency-key']);
+  const { email, role } = parsedPayload.data;
+  const tenantId = req.adminUser!.tenantId;
+  const isSuperadmin = req.adminUser!.role === 'superadmin';
+
+  if (role === 'superadmin' && !isSuperadmin) {
+    throw new AppError(403, ErrorCode.FORBIDDEN, 'Only superadmins can invite other superadmins');
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true },
+  });
+  if (!tenant) {
+    throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
+  }
+
+  const rawToken = randomBytes(32).toString('hex');
+  const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const inviteLink = buildClaimActivationUrl(rawToken);
+  const redactedInviteLink = inviteLink.replace(/([?&]token=)[^&]+/, '$1[REDACTED]');
+
+  const adminUser = await prisma.$transaction(async (tx) => {
+    const createdUser = await tx.adminUser.create({
+      data: {
+        publicId: generateAdminUserPublicId(),
+        tenantId,
+        email,
+        role,
+        isActive: false,
+        passwordHash: null,
+        invitedAt: new Date(),
+      },
+    });
+
+    await tx.pendingVerification.create({
+      data: {
+        tenantId,
+        email,
+        tokenHash,
+        expiresAt,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        tenantId,
+        entityType: 'admin_user',
+        entityId: createdUser.id,
+        action: 'admin_user.invited',
+        actorId: req.adminUser!.email,
+        actorType: 'admin',
+        actorRole: req.adminUser!.role,
+        isSandbox: req.isSandbox || false,
+        changes: {
+          invited_email: email,
+          invited_role: role,
+          invited_by: req.adminUser!.email,
+          idempotency_key: idempotencyKey,
+          token_hash: tokenHash,
+          response_status: 201,
+          response: {
+            message: 'Invitation created successfully',
+            invite_link: redactedInviteLink,
+            admin_user: {
+              id: createdUser.publicId,
+              email: createdUser.email,
+              role: createdUser.role,
+              is_active: createdUser.isActive,
+            },
+          },
+        },
+      },
+    });
+
+    return createdUser;
+  });
+
+  await sendInviteEmail(tenantId, email, rawToken);
+
+  res.status(201).json({
+    message: 'Invitation created successfully',
+    invite_link: inviteLink,
+    admin_user: {
+      id: adminUser.publicId,
+      email: adminUser.email,
+      role: adminUser.role,
+      is_active: adminUser.isActive,
+    },
+  });
+});
+
+router.post(
+  '/invite-user',
+  requireAdminRole('tenant_admin'),
+  inviteUserHandler
+);
+
 router.post(
   '/users/invite',
   requireAdminRole('tenant_admin'),
-  asyncHandler(async (req, res) => {
-    const parsedPayload = adminUserInviteSchema.safeParse(req.body);
-    if (!parsedPayload.success) {
-      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid invitation payload');
-    }
-
-    const idempotencyKey = getValidatedIdempotencyKey(req.headers['idempotency-key']);
-    const isSandbox = req.isSandbox || false;
-
-    const { email, role, tenant_id } = parsedPayload.data;
-    const sessionTenantId = req.adminUser!.tenantId;
-    const isSuperadmin = req.adminUser!.role === 'superadmin';
-    const targetTenantId = tenant_id || sessionTenantId;
-    const idempotencyWindowStart = new Date(Date.now() - ADMIN_INVITE_IDEMPOTENCY_WINDOW_MS);
-
-    // Authorization checks
-    if (targetTenantId !== sessionTenantId && !isSuperadmin) {
-      throw new AppError(403, ErrorCode.FORBIDDEN, 'Only superadmins can invite users to other tenants');
-    }
-
-    // Standard tenant_admin can invite support, finance, or tenant_admin roles to their own tenant
-    if (role === 'superadmin' && !isSuperadmin) {
-      throw new AppError(403, ErrorCode.FORBIDDEN, 'Only superadmins can invite other superadmins');
-    }
-
-    // Verify tenant exists
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: targetTenantId },
-    });
-    if (!tenant) {
-      throw new AppError(404, ErrorCode.NOT_FOUND, 'Target tenant not found');
-    }
-
-    const cachedInviteAudit = await prisma.auditLog.findFirst({
-      where: {
-        tenantId: targetTenantId,
-        isSandbox,
-        entityType: 'admin_user',
-        action: 'admin_user.invited',
-        timestamp: {
-          gte: idempotencyWindowStart,
-        },
-        changes: {
-          path: ['idempotency_key'],
-          equals: idempotencyKey,
-        },
-      },
-      orderBy: {
-        timestamp: 'desc',
-      },
-    });
-
-    if (cachedInviteAudit) {
-      const cachedChanges = (cachedInviteAudit.changes as Record<string, unknown> | null) ?? {};
-      const cachedResponse = cachedChanges.response as
-        | {
-            message: string;
-            invite_link: string;
-            admin_user: {
-              id: string;
-              email: string;
-              role: 'support' | 'finance' | 'tenant_admin' | 'superadmin';
-              is_active: boolean;
-            };
-          }
-        | undefined;
-
-      if (cachedResponse) {
-        res.status((cachedChanges.response_status as number) || 200).json({
-          ...cachedResponse,
-          invite_link: redactInviteLink(cachedResponse.invite_link),
-        });
-        return;
-      }
-    }
-
-    // Verify if user already exists
-    const existingUser = await prisma.adminUser.findUnique({
-      where: { email },
-    });
-    if (existingUser) {
-      throw new AppError(409, ErrorCode.VALIDATION_ERROR, 'A user with this email address already exists');
-    }
-
-    const rawToken = randomBytes(32).toString('hex');
-    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours activation window
-    const inviteLink = `${getFrontendBaseUrl()}/claim?token=${rawToken}`;
-    const redactedInviteLink = redactInviteLink(inviteLink);
-
-    const responsePayload = {
-      message: 'Invitation successfully created.',
-      invite_link: inviteLink,
-      admin_user: {
-        id: '',
-        email,
-        role,
-        is_active: false,
-      },
-    };
-
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${targetTenantId}:${idempotencyKey}:admin_user.invited`}));`;
-
-      const txCachedInviteAudit = await tx.auditLog.findFirst({
-        where: {
-          tenantId: targetTenantId,
-          isSandbox,
-          entityType: 'admin_user',
-          action: 'admin_user.invited',
-          timestamp: {
-            gte: idempotencyWindowStart,
-          },
-          changes: {
-            path: ['idempotency_key'],
-            equals: idempotencyKey,
-          },
-        },
-        orderBy: {
-          timestamp: 'desc',
-        },
-      });
-
-      if (txCachedInviteAudit) {
-        const cachedChanges = (txCachedInviteAudit.changes as Record<string, unknown> | null) ?? {};
-        const cachedResponse = cachedChanges.response as typeof responsePayload | undefined;
-
-        if (cachedResponse) {
-          return {
-            status: (cachedChanges.response_status as number) || 200,
-            payload: {
-              ...cachedResponse,
-              invite_link: redactInviteLink(cachedResponse.invite_link),
-            },
-          };
-        }
-      }
-
-      const txExistingUser = await tx.adminUser.findUnique({
-        where: { email },
-      });
-      if (txExistingUser) {
-        throw new AppError(409, ErrorCode.VALIDATION_ERROR, 'A user with this email address already exists');
-      }
-
-      // 1. Create unactivated AdminUser row
-      const adminUser = await tx.adminUser.create({
-        data: {
-          publicId: generateAdminUserPublicId(),
-          tenantId: targetTenantId,
-          email,
-          role,
-          isActive: false,
-          invitedAt: new Date(),
-        },
-      });
-
-      // 2. Create pending verification token
-      await tx.pendingVerification.create({
-        data: {
-          email,
-          tokenHash,
-          tenantId: targetTenantId,
-          expiresAt,
-        },
-      });
-
-      const payload = {
-        ...responsePayload,
-        admin_user: {
-          id: adminUser.id,
-          email: adminUser.email,
-          role: adminUser.role,
-          is_active: adminUser.isActive,
-        },
-      };
-
-      const auditPayload = {
-        ...payload,
-        invite_link: redactedInviteLink,
-      };
-
-      await tx.auditLog.create({
-        data: {
-          tenantId: targetTenantId,
-          entityType: 'admin_user',
-          entityId: adminUser.id,
-          action: 'admin_user.invited',
-          actorId: req.adminUser!.email,
-          actorType: 'admin',
-          actorRole: req.adminUser!.role,
-          isSandbox: req.isSandbox || false,
-          changes: {
-            invited_email: email,
-            invited_role: role,
-            invited_by: req.adminUser!.email,
-            idempotency_key: idempotencyKey,
-            token_hash: tokenHash,
-            response: auditPayload,
-            response_status: 201,
-          },
-        },
-      });
-
-      return {
-        status: 201,
-        payload,
-      };
-    });
-
-    res.status(result.status).json(result.payload);
-  })
+  inviteUserHandler
 );
 
 /**

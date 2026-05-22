@@ -8,7 +8,7 @@ import {
   fetchCurrentTenantApiKeys,
   rotateCurrentTenantKey,
 } from '../../../services/adminService';
-import type { TenantApiKeyMetadata, TenantApiKeySettingsResponse } from '@walletOS/types';
+import type { TenantApiKeyMetadata, TenantApiKeySettingsResponse } from '@walletos/types';
 
 function scopeLabel(scope: TenantApiKeyMetadata['scope']): string {
   return scope === 'live' ? 'Live Key' : 'Test Key';
