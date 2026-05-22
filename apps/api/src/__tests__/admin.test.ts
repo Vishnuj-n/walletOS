@@ -387,7 +387,8 @@ describe('Admin API Endpoints', () => {
         });
 
       expect(response.status).toBe(201);
-      expect(response.body.invite_link).toContain('[REDACTED]');
+      expect(response.body.invite_link).not.toContain('[REDACTED]');
+      expect(new URL(response.body.invite_link).searchParams.get('token')).toMatch(/^[a-f0-9]{64}$/);
 
       const auditLog = await prisma.auditLog.findFirst({
         where: {

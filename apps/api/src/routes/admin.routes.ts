@@ -1752,7 +1752,8 @@ router.post(
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours activation window
-    const inviteLink = `${getFrontendBaseUrl()}/claim?token=[REDACTED]`;
+    const inviteLink = `${getFrontendBaseUrl()}/claim?token=${rawToken}`;
+    const redactedInviteLink = redactInviteLink(inviteLink);
 
     const responsePayload = {
       message: 'Invitation successfully created.',
@@ -1841,6 +1842,11 @@ router.post(
         },
       };
 
+      const auditPayload = {
+        ...payload,
+        invite_link: redactedInviteLink,
+      };
+
       await tx.auditLog.create({
         data: {
           tenantId: targetTenantId,
@@ -1857,7 +1863,7 @@ router.post(
             invited_by: req.adminUser!.email,
             idempotency_key: idempotencyKey,
             token_hash: tokenHash,
-            response: payload,
+            response: auditPayload,
             response_status: 201,
           },
         },
