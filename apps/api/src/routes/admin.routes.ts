@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { Decimal } from '@prisma/client/runtime/library';
-import { Prisma } from '@prisma/client';
+import { AdminRole, Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { adminAuthMiddleware, requireAdminRole } from '../middleware/adminAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -8,7 +8,7 @@ import { prisma } from '../lib/prisma';
 import { generateAdminUserPublicId, generateTransactionPublicId } from '../lib/publicId';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet } from '../services/wallet.service';
-import { buildClaimActivationUrl, sendInviteEmail } from '../services/mail.service';
+import { sendInviteEmail } from '../services/mail.service';
 import { z } from 'zod';
 
 const router = Router();
@@ -46,6 +46,10 @@ const walletSearchSchema = z.object({
 
 const unifiedSearchSchema = z.object({
   q: z.string().max(255).optional(),
+});
+
+const tenantEmployeeSearchSchema = z.object({
+  q: z.string().trim().max(255).optional(),
 });
 
 const tenantScopeSchema = z.object({
@@ -1703,6 +1707,12 @@ const inviteUserHandler = asyncHandler(async (req, res) => {
     throw new AppError(403, ErrorCode.FORBIDDEN, 'Only superadmins can invite other superadmins');
   }
 
+  // Only superadmins may create `tenant_admin` users. Tenant admins cannot
+  // elevate others to tenant_admin to prevent privilege escalation.
+  if (role === 'tenant_admin' && !isSuperadmin) {
+    throw new AppError(403, ErrorCode.FORBIDDEN, 'Only superadmins can invite tenant admins');
+  }
+
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { id: true },
@@ -1714,7 +1724,7 @@ const inviteUserHandler = asyncHandler(async (req, res) => {
   const rawToken = randomBytes(32).toString('hex');
   const tokenHash = createHash('sha256').update(rawToken).digest('hex');
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  const inviteLink = buildClaimActivationUrl(rawToken);
+  const inviteLink = `${process.env.ADMIN_CLAIM_REDIRECT_URL}/claim?token=${rawToken}`;
   const redactedInviteLink = inviteLink.replace(/([?&]token=)[^&]+/, '$1[REDACTED]');
 
   const adminUser = await prisma.$transaction(async (tx) => {
@@ -1851,6 +1861,69 @@ router.get(
           last_used_at: null,
           is_active: apiKey.isActive,
         })),
+    });
+  })
+);
+
+/**
+ * GET /admin/account/users
+ * List current tenant employees with optional tenant-scoped search
+ */
+router.get(
+  '/account/users',
+  requireAdminRole('tenant_admin'),
+  asyncHandler(async (req, res) => {
+    const parsedQuery = tenantEmployeeSearchSchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid employee search query');
+    }
+
+    const tenantId = req.adminUser!.tenantId;
+    const normalizedQuery = parsedQuery.data.q?.trim() || undefined;
+    const normalizedRoleQuery: AdminRole | undefined =
+      normalizedQuery === 'support' ||
+      normalizedQuery === 'finance' ||
+      normalizedQuery === 'tenant_admin' ||
+      normalizedQuery === 'superadmin'
+        ? normalizedQuery
+        : undefined;
+
+    const employees = await prisma.adminUser.findMany({
+      where: {
+        tenantId,
+        ...(normalizedQuery
+          ? {
+              OR: [
+                { email: { contains: normalizedQuery, mode: 'insensitive' } },
+                { publicId: { contains: normalizedQuery, mode: 'insensitive' } },
+                ...(normalizedRoleQuery ? [{ role: normalizedRoleQuery }] : []),
+              ],
+            }
+          : {}),
+      },
+      select: {
+        publicId: true,
+        email: true,
+        role: true,
+        isActive: true,
+        invitedAt: true,
+        activatedAt: true,
+      },
+      orderBy: [{ isActive: 'desc' }, { invitedAt: 'desc' }, { email: 'asc' }],
+    });
+
+    res.json({
+      tenant_id: tenantId,
+      total: employees.length,
+      query: normalizedQuery ?? null,
+      data: employees.map((employee) => ({
+        id: employee.publicId,
+        email: employee.email,
+        role: employee.role,
+        is_active: employee.isActive,
+        invited_at: employee.invitedAt?.toISOString() ?? null,
+        activated_at: employee.activatedAt?.toISOString() ?? null,
+      })),
     });
   })
 );

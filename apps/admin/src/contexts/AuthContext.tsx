@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/supabase';
 import { getAdminToken, setAdminSession } from '../lib/adminSession';
 import type { AdminMeResponse, AdminRole, AdminUserInfo } from '@walletos/types';
@@ -43,6 +44,17 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: 1,
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
   const [user, setUser] = useState<AuthIdentity | null>(null);
   const [adminUser, setAdminUser] = useState<AdminUserInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -166,9 +178,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isSuperadmin = adminUser?.role === 'superadmin';
 
   return (
-    <AuthContext.Provider value={{ user, adminUser, loading, signIn, signOut, hasRole, isSuperadmin }}>
-      {children}
-    </AuthContext.Provider>
+    <QueryClientProvider client={queryClient}>
+      <AuthContext.Provider value={{ user, adminUser, loading, signIn, signOut, hasRole, isSuperadmin }}>
+        {children}
+      </AuthContext.Provider>
+    </QueryClientProvider>
   );
 }
 

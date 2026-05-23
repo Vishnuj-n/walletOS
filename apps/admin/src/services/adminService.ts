@@ -6,6 +6,8 @@ import type {
   AuditLogListResponse,
   CreateTenantRequest,
   CreatedTenantResponse,
+  InviteAdminUserRequest,
+  InviteAdminUserResponse,
   CreditTransactionRequest,
   DebitTransactionRequest,
   ReversalTransactionRequest,
@@ -16,6 +18,7 @@ import type {
   SystemBalanceResponse,
   SystemErrorsResponse,
   Tenant,
+  TenantEmployeeListResponse,
   TenantApiKeySettingsResponse,
   TenantListResponse,
   TenantUsageResponse,
@@ -114,6 +117,22 @@ export async function createTenant(request: CreateTenantRequest): Promise<Create
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+export async function inviteTenantUser(request: InviteAdminUserRequest): Promise<InviteAdminUserResponse> {
+  return apiRequest<InviteAdminUserResponse>('/admin/users/invite', {
+    method: 'POST',
+    body: request,
+    requireIdempotencyKey: true,
+    fallbackMessage: 'Failed to send employee invite',
+  });
+}
+
+export async function fetchCurrentTenantEmployees(search?: string): Promise<TenantEmployeeListResponse> {
+  return apiRequest<TenantEmployeeListResponse>('/admin/account/users', {
+    query: { q: search },
+    fallbackMessage: 'Failed to fetch tenant employees',
+  });
 }
 
 export async function rotateTenantKey(

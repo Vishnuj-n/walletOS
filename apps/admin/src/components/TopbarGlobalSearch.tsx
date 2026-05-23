@@ -93,7 +93,10 @@ export function TopbarGlobalSearch({ compact = false, autoOpen = false, initialQ
   };
 
   return (
-    <div ref={containerRef} className={`relative ${compact ? 'w-full' : 'w-[24rem] max-w-[36vw] min-w-[18rem]'}`}>
+    <div
+      ref={containerRef}
+      className={`relative ${compact ? 'w-full' : 'max-w-[28rem] w-full'} flex-shrink`}
+    >
       <div className="relative">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input

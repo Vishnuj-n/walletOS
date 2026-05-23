@@ -26,6 +26,14 @@ export const DASHBOARD_CAPABILITIES: DashboardCapability[] = [
     scope: 'tenant',
   },
   {
+    id: 'team',
+    label: 'Team',
+    href: '/dashboard/team',
+    description: 'Manage tenant employees and invite members.',
+    minRole: 'support',
+    scope: 'tenant',
+  },
+  {
     id: 'settings',
     label: 'Account Settings',
     href: '/dashboard/settings',
