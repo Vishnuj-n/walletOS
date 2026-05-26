@@ -12,6 +12,15 @@ const globalSmtpTransporter = nodemailer.createTransport({
 
 const DEFAULT_ADMIN_CLAIM_REDIRECT_URL = 'http://localhost:3000';
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function getAdminClaimRedirectBaseUrl(): string {
   const configuredBaseUrl = process.env.ADMIN_CLAIM_REDIRECT_URL?.trim();
   if (!configuredBaseUrl) {
@@ -42,6 +51,8 @@ export function buildClaimActivationUrl(rawToken: string): string {
 
 export async function sendInviteEmail(tenantId: string, email: string, rawToken: string): Promise<void> {
   const activationUrl = buildClaimActivationUrl(rawToken);
+  const escapedTenantId = escapeHtml(tenantId);
+  const escapedActivationUrl = escapeHtml(activationUrl);
 
   try {
     await globalSmtpTransporter.sendMail({
@@ -51,10 +62,10 @@ export async function sendInviteEmail(tenantId: string, email: string, rawToken:
       html: `
         <div>
           <p>You have been invited to WalletOS.</p>
-          <p>Tenant: ${tenantId}</p>
+          <p>Tenant: ${escapedTenantId}</p>
           <p>
             Activate your account:
-            <a href="${activationUrl}">${activationUrl}</a>
+            <a href="${escapedActivationUrl}">${escapedActivationUrl}</a>
           </p>
           <p>This link expires in 24 hours.</p>
         </div>
@@ -62,7 +73,7 @@ export async function sendInviteEmail(tenantId: string, email: string, rawToken:
     });
   } catch (error) {
     console.error('sendInviteEmail failed', error);
-    console.log(`INVITE_ACTIVATION_URL: ${activationUrl}`);
+    console.error('INVITE_ACTIVATION_URL redacted');
   }
 }
 

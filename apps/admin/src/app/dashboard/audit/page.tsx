@@ -230,13 +230,29 @@ export default function AuditLogPage() {
                 onChange={(e) => setWalletFilter(e.target.value)}
                 className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <input
-                type="text"
-                placeholder="Filter by action..."
+              <select
                 value={actionFilter}
                 onChange={(e) => setActionFilter(e.target.value)}
-                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                aria-label="Filter by action..."
+                className="flex-1 px-4 py-2 border border-slate-300 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Actions</option>
+                <option value="wallet.created">Wallet Created</option>
+                <option value="wallet.updated">Wallet Updated</option>
+                <option value="wallet.closed">Wallet Closed</option>
+                <option value="wallet.frozen">Wallet Frozen</option>
+                <option value="wallet.unfrozen">Wallet Unfrozen</option>
+                <option value="admin.credit">Manual Credit</option>
+                <option value="admin.debit">Manual Debit</option>
+                <option value="admin.reverse">Manual Reversal</option>
+                <option value="admin_user.invited">Member Invited</option>
+                <option value="tenant.key_rotated">API Key Rotated</option>
+                <option value="tenant.key_revoked">API Key Revoked</option>
+                <option value="credit">Credit (Legacy)</option>
+                <option value="debit">Debit (Legacy)</option>
+                <option value="freeze">Freeze (Legacy)</option>
+                <option value="unfreeze">Unfreeze (Legacy)</option>
+              </select>
             </div>
           </div>
 
@@ -321,13 +337,29 @@ export default function AuditLogPage() {
                   onChange={(e) => setAdminEmailFilter(e.target.value)}
                 className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <input
-                  type="text"
-                  placeholder="Filter by action type..."
-                  value={adminActionFilter}
-                  onChange={(e) => setAdminActionFilter(e.target.value)}
-                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+              <select
+                value={adminActionFilter}
+                onChange={(e) => setAdminActionFilter(e.target.value)}
+                aria-label="Filter by admin action..."
+                className="flex-1 px-4 py-2 border border-slate-300 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Actions</option>
+                <option value="tenant.created">Tenant Created</option>
+                <option value="tenant.key_rotated">API Key Rotated</option>
+                <option value="tenant.key_revoked">API Key Revoked</option>
+                <option value="wallet.created">Wallet Created</option>
+                <option value="wallet.updated">Wallet Updated</option>
+                <option value="wallet.closed">Wallet Closed</option>
+                <option value="wallet.frozen">Wallet Frozen</option>
+                <option value="wallet.unfrozen">Wallet Unfrozen</option>
+                <option value="admin.credit">Manual Credit</option>
+                <option value="admin.debit">Manual Debit</option>
+                <option value="admin_user.invited">Member Invited</option>
+                <option value="credit">Credit (Legacy)</option>
+                <option value="debit">Debit (Legacy)</option>
+                <option value="freeze">Freeze (Legacy)</option>
+                <option value="unfreeze">Unfreeze (Legacy)</option>
+              </select>
               </div>
             </div>
 

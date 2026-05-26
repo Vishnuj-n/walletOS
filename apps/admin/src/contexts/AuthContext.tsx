@@ -67,6 +67,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const clearAuthenticatedAdmin = () => {
+    void queryClient.cancelQueries();
+    queryClient.removeQueries();
+    queryClient.clear();
     setUser(null);
     setAdminUser(null);
     setAdminSession(null);

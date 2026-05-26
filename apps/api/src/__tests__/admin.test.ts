@@ -431,69 +431,71 @@ describe('Admin API Endpoints', () => {
       const activeEmail = `tenant-user-${Date.now()}@example.com`;
       const pendingEmail = `pending-user-${Date.now()}@example.com`;
 
-      await prisma.adminUser.createMany({
-        data: [
-          {
-            publicId: generateAdminUserPublicId(),
-            tenantId: testTenantId,
-            email: activeEmail,
-            role: AdminRole.finance,
-            isActive: true,
-            invitedAt: new Date('2026-05-23T10:00:00.000Z'),
-            activatedAt: new Date('2026-05-23T10:05:00.000Z'),
-          },
-          {
-            publicId: generateAdminUserPublicId(),
-            tenantId: testTenantId,
-            email: pendingEmail,
-            role: AdminRole.support,
-            isActive: false,
-            invitedAt: new Date('2026-05-23T11:00:00.000Z'),
-          },
-        ],
-      });
+      try {
+        await prisma.adminUser.createMany({
+          data: [
+            {
+              publicId: generateAdminUserPublicId(),
+              tenantId: testTenantId,
+              email: activeEmail,
+              role: AdminRole.finance,
+              isActive: true,
+              invitedAt: new Date('2026-05-23T10:00:00.000Z'),
+              activatedAt: new Date('2026-05-23T10:05:00.000Z'),
+            },
+            {
+              publicId: generateAdminUserPublicId(),
+              tenantId: testTenantId,
+              email: pendingEmail,
+              role: AdminRole.support,
+              isActive: false,
+              invitedAt: new Date('2026-05-23T11:00:00.000Z'),
+            },
+          ],
+        });
 
-      const response = await request(app)
-        .get('/api/v1/admin/account/users')
-        .set('Authorization', adminAuthToken);
+        const response = await request(app)
+          .get('/api/v1/admin/account/users')
+          .set('Authorization', adminAuthToken);
 
-      expect(response.status).toBe(200);
-      expect(response.body.tenant_id).toBe(testTenantId);
-      expect(response.body.data).toEqual(
-        expect.arrayContaining([
+        expect(response.status).toBe(200);
+        expect(response.body.tenant_id).toBe(testTenantId);
+        expect(response.body.data).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              email: activeEmail,
+              role: 'finance',
+              is_active: true,
+            }),
+            expect.objectContaining({
+              email: pendingEmail,
+              role: 'support',
+              is_active: false,
+            }),
+          ])
+        );
+
+        const filteredResponse = await request(app)
+          .get(`/api/v1/admin/account/users?q=${encodeURIComponent('finance')}`)
+          .set('Authorization', adminAuthToken);
+
+        expect(filteredResponse.status).toBe(200);
+        expect(filteredResponse.body.query).toBe('finance');
+        expect(filteredResponse.body.data).toEqual([
           expect.objectContaining({
             email: activeEmail,
             role: 'finance',
-            is_active: true,
           }),
-          expect.objectContaining({
-            email: pendingEmail,
-            role: 'support',
-            is_active: false,
-          }),
-        ])
-      );
-
-      const filteredResponse = await request(app)
-        .get(`/api/v1/admin/account/users?q=${encodeURIComponent('finance')}`)
-        .set('Authorization', adminAuthToken);
-
-      expect(filteredResponse.status).toBe(200);
-      expect(filteredResponse.body.query).toBe('finance');
-      expect(filteredResponse.body.data).toEqual([
-        expect.objectContaining({
-          email: activeEmail,
-          role: 'finance',
-        }),
-      ]);
-
-      await prisma.adminUser.deleteMany({
-        where: {
-          email: {
-            in: [activeEmail, pendingEmail],
+        ]);
+      } finally {
+        await prisma.adminUser.deleteMany({
+          where: {
+            email: {
+              in: [activeEmail, pendingEmail],
+            },
           },
-        },
-      });
+        });
+      }
     });
   });
 

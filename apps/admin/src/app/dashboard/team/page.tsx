@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Mail, Search, UserPlus, Users, ShieldCheck, RefreshCcw, UserCheck, Clock } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { PermissionGate } from '../../../components/PermissionGate';
@@ -36,6 +36,7 @@ export default function TeamPage() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const inviteTimeoutRef = useRef<number | null>(null);
 
   const loadEmployees = useCallback(async (search?: string) => {
     setLoading(true);
@@ -63,6 +64,15 @@ export default function TeamPage() {
   useEffect(() => {
     loadEmployees(debouncedEmployeeSearch || undefined);
   }, [debouncedEmployeeSearch, loadEmployees]);
+
+  useEffect(() => {
+    return () => {
+      if (inviteTimeoutRef.current !== null) {
+        window.clearTimeout(inviteTimeoutRef.current);
+        inviteTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const openInviteModal = () => {
     setInviteError(null);
@@ -109,7 +119,10 @@ export default function TeamPage() {
       setInviteSuccess(`Invitation successfully created for ${response.admin_user.email}.`);
       
       // Auto-clear success message after 5 seconds
-      setTimeout(() => {
+      if (inviteTimeoutRef.current !== null) {
+        window.clearTimeout(inviteTimeoutRef.current);
+      }
+      inviteTimeoutRef.current = window.setTimeout(() => {
         setInviteSuccess(null);
       }, 5000);
     } catch (err) {

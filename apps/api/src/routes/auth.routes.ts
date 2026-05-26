@@ -222,6 +222,21 @@ router.post(
         },
       });
 
+      await tx.auditLog.create({
+        data: {
+          tenantId: pendingVerification.tenantId,
+          entityType: 'admin_user',
+          entityId: pendingVerification.email,
+          action: 'account_activation',
+          actorId: pendingVerification.email,
+          actorType: 'user',
+          changes: {
+            email: pendingVerification.email,
+            activated_at: new Date().toISOString(),
+          },
+        },
+      });
+
       await tx.pendingVerification.delete({
         where: { id: pendingVerification.id },
       });

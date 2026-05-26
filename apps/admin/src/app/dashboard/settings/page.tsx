@@ -91,43 +91,67 @@ export default function SettingsPage() {
   // Load API settings and local storage webhooks on mount
   useEffect(() => {
     loadSettings();
+
+    const intervalId = window.setInterval(() => {
+      loadSettings();
+    }, 300000);
+
+    return () => window.clearInterval(intervalId);
   }, [loadSettings]);
 
-  const tenantId = adminUser?.tenantId || 'default-tenant';
+  const tenantId = adminUser?.tenantId;
 
   // Load and sync mock webhooks from localStorage
   useEffect(() => {
     if (!tenantId) return;
-    const stored = localStorage.getItem(`walletos_webhooks_${tenantId}`);
+    const storageKey = `walletos_webhooks_${tenantId}`;
+    const stored = localStorage.getItem(storageKey);
+
     if (stored) {
-      setWebhooks(JSON.parse(stored));
-    } else {
-      // Default mock webhooks for beautiful first-use state
-      const defaultWebhooks: WebhookEndpoint[] = [
-        {
-          id: 'clwh_8f9e12da',
-          url: 'https://api.merchant.io/v1/walletos-receiver',
-          events: ['wallet.credited', 'wallet.debited'],
-          secret: 'whsec_7d2f9b1c5e8a0d4c6b2e3f0a',
-          is_active: true,
-          created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: 'clwh_d5a8e32f',
-          url: 'https://webhook.site/demo-endpoint',
-          events: ['wallet.frozen', 'wallet.closed'],
-          secret: 'whsec_c8b7f2a1d0e9a5c3b4e8f1d2',
-          is_active: true,
-          created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-        }
-      ];
-      localStorage.setItem(`walletos_webhooks_${tenantId}`, JSON.stringify(defaultWebhooks));
-      setWebhooks(defaultWebhooks);
+      try {
+        setWebhooks(JSON.parse(stored));
+        return;
+      } catch (error) {
+        console.error('Failed to parse stored webhooks', error);
+      }
     }
+
+    const defaultWebhooks: WebhookEndpoint[] = [
+      {
+        id: 'clwh_8f9e12da',
+        url: 'https://api.merchant.io/v1/walletos-receiver',
+        events: ['wallet.credited', 'wallet.debited'],
+        secret: 'placeholder_secret',
+        is_active: true,
+        created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'clwh_d5a8e32f',
+        url: 'https://webhook.site/demo-endpoint',
+        events: ['wallet.frozen', 'wallet.closed'],
+        secret: 'placeholder_secret',
+        is_active: true,
+        created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ];
+
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(defaultWebhooks));
+    } catch (error) {
+      console.error('Failed to persist default webhooks', error);
+    }
+
+    setWebhooks(defaultWebhooks);
   }, [tenantId]);
 
   const saveWebhooksToStorage = (updatedWebhooks: WebhookEndpoint[]) => {
-    localStorage.setItem(`walletos_webhooks_${tenantId}`, JSON.stringify(updatedWebhooks));
+    if (tenantId) {
+      try {
+        localStorage.setItem(`walletos_webhooks_${tenantId}`, JSON.stringify(updatedWebhooks));
+      } catch (error) {
+        console.error('Failed to persist webhooks', error);
+      }
+    }
     setWebhooks(updatedWebhooks);
   };
 
@@ -177,7 +201,12 @@ export default function SettingsPage() {
     }
 
     try {
-      new URL(urlTrimmed);
+      const parsedUrl = new URL(urlTrimmed);
+      const isLocalhostEndpoint = parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
+      if (parsedUrl.protocol !== 'https:' && !(parsedUrl.protocol === 'http:' && isLocalhostEndpoint)) {
+        setWebhookError('Endpoint URL must use the HTTPS scheme');
+        return;
+      }
     } catch {
       setWebhookError('Endpoint URL must be a valid fully-qualified absolute URL (e.g. https://domain.com/webhook)');
       return;
@@ -189,11 +218,15 @@ export default function SettingsPage() {
     }
 
     // Generate credentials
+    const secretBytes = new Uint8Array(24);
+    crypto.getRandomValues(secretBytes);
+    const secret = `whsec_${Array.from(secretBytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+
     const newEndpoint: WebhookEndpoint = {
       id: `clwh_${Math.random().toString(36).substring(2, 10)}`,
       url: urlTrimmed,
       events: selectedEvents,
-      secret: `whsec_${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+      secret,
       is_active: true,
       created_at: new Date().toISOString(),
     };
@@ -268,10 +301,38 @@ export default function SettingsPage() {
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-slate-50 p-6 text-sm text-slate-500 flex items-center justify-center gap-3">
-      <RefreshCcw className="animate-spin text-indigo-500" size={18} />
-      Loading Account Settings...
-    </div>;
+    return (
+      <div className="min-h-screen bg-slate-50 p-6 space-y-6 animate-pulse">
+        <div>
+          <div className="h-7 w-56 rounded bg-slate-200" />
+          <div className="mt-3 h-4 w-[28rem] max-w-full rounded bg-slate-200" />
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-2">
+              <div className="h-4 w-40 rounded bg-slate-200" />
+              <div className="h-3 w-72 max-w-full rounded bg-slate-200" />
+            </div>
+            <div className="h-10 w-36 rounded-lg bg-slate-200" />
+          </div>
+
+          <div className="mt-5 grid gap-5 md:grid-cols-3">
+            <div className="h-20 rounded-xl bg-slate-100" />
+            <div className="h-20 rounded-xl bg-slate-100" />
+            <div className="h-20 rounded-xl bg-slate-100" />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="h-4 w-32 rounded bg-slate-200" />
+          <div className="mt-6 grid gap-5 lg:grid-cols-2">
+            <div className="h-40 rounded-2xl bg-slate-100" />
+            <div className="h-40 rounded-2xl bg-slate-100" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

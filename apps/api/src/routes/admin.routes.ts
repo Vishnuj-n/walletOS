@@ -715,6 +715,8 @@ router.get(
     if (currency) where.currency = Array.isArray(currency) ? currency[0] : currency;
     if (search) {
       where.OR = [
+        { id: { contains: search as string, mode: 'insensitive' } },
+        { publicId: { contains: search as string, mode: 'insensitive' } },
         { externalUserId: { contains: search as string, mode: 'insensitive' } },
         { label: { contains: search as string, mode: 'insensitive' } },
       ];
@@ -1597,11 +1599,11 @@ router.get(
     const isSandbox = req.isSandbox || false;
 
     // Scope by tenant when one is known; superadmins with no explicit tenant see all.
-    // Exclude superadmin-role actions — those belong in the Admin Activity tab.
+    // Exclude superadmin-role actions only when doing a global cross-tenant view.
     const where: Prisma.AuditLogWhereInput = {
       ...(tenantId ? { tenantId } : {}),
       isSandbox,
-      NOT: { actorRole: 'superadmin' },
+      ...(tenantId ? {} : { NOT: { actorRole: 'superadmin' } }),
     };
 
     const walletIdFilter = getQueryString(wallet_id);
@@ -1610,9 +1612,15 @@ router.get(
     const fromFilter = getQueryString(from);
     const toFilter = getQueryString(to);
 
-    if (walletIdFilter) where.entityId = walletIdFilter;
-    if (actorFilter) where.actorId = actorFilter;
-    if (actionFilter) where.action = actionFilter;
+    if (walletIdFilter) {
+      where.entityId = { contains: walletIdFilter, mode: 'insensitive' };
+    }
+    if (actorFilter) {
+      where.actorId = { contains: actorFilter, mode: 'insensitive' };
+    }
+    if (actionFilter) {
+      where.action = { contains: actionFilter, mode: 'insensitive' };
+    }
     if (fromFilter || toFilter) {
       where.timestamp = {};
       if (fromFilter) where.timestamp.gte = parseDateFilter(fromFilter, 'from');
@@ -1880,12 +1888,13 @@ router.get(
 
     const tenantId = req.adminUser!.tenantId;
     const normalizedQuery = parsedQuery.data.q?.trim() || undefined;
+    const normalizedQueryLower = normalizedQuery?.toLowerCase();
     const normalizedRoleQuery: AdminRole | undefined =
-      normalizedQuery === 'support' ||
-      normalizedQuery === 'finance' ||
-      normalizedQuery === 'tenant_admin' ||
-      normalizedQuery === 'superadmin'
-        ? normalizedQuery
+        normalizedQueryLower === 'support' ||
+        normalizedQueryLower === 'finance' ||
+        normalizedQueryLower === 'tenant_admin' ||
+        normalizedQueryLower === 'superadmin'
+          ? (normalizedQueryLower as AdminRole)
         : undefined;
 
     const employees = await prisma.adminUser.findMany({
@@ -2288,13 +2297,11 @@ router.get(
     const toFilter = getQueryString(to);
 
     if (requestedAdminEmail) {
-      where.AND = [
-        { actorId: requestedAdminEmail },
-      ];
+      where.actorId = { contains: requestedAdminEmail, mode: 'insensitive' };
     }
 
     if (actionTypeFilter) {
-      where.action = actionTypeFilter;
+      where.action = { contains: actionTypeFilter, mode: 'insensitive' };
     }
 
     if (fromFilter || toFilter) {

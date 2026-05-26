@@ -74,7 +74,7 @@ describe('AuditLogPage', () => {
     (fetchAuditLogs as jest.Mock).mockResolvedValue([]);
     render(<AuditLogPage />);
     expect(await screen.findByPlaceholderText('Filter by entity ID...')).toBeInTheDocument();
-    expect(await screen.findByPlaceholderText('Filter by action...')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Filter by action...')).toBeInTheDocument();
   });
 
   it('should call fetchAuditLogs on mount with no filters', () => {
@@ -180,7 +180,7 @@ describe('AuditLogPage', () => {
     (fetchAuditLogs as jest.Mock).mockResolvedValue([]);
     render(<AuditLogPage />);
 
-    const actionFilter = await screen.findByPlaceholderText('Filter by action...');
+    const actionFilter = await screen.findByLabelText('Filter by action...');
     fireEvent.change(actionFilter, { target: { value: 'credit' } });
 
     // Should not call immediately
@@ -201,7 +201,7 @@ describe('AuditLogPage', () => {
     render(<AuditLogPage />);
 
     const walletFilter = await screen.findByPlaceholderText('Filter by entity ID...');
-    const actionFilter = await screen.findByPlaceholderText('Filter by action...');
+    const actionFilter = await screen.findByLabelText('Filter by action...');
 
     fireEvent.change(walletFilter, { target: { value: 'wallet-123' } });
     fireEvent.change(actionFilter, { target: { value: 'debit' } });

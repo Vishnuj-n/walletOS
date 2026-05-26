@@ -14,6 +14,7 @@ jest.mock('../src/lib/supabase', () => ({
 }));
 
 const { useRouter, useSearchParams } = require('next/navigation');
+const originalFetch = global.fetch;
 
 describe('ClaimAccountPage', () => {
   beforeEach(() => {
@@ -29,6 +30,11 @@ describe('ClaimAccountPage', () => {
       ok: true,
       json: jest.fn().mockResolvedValue({}),
     } as unknown as Response);
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
   });
 
   it('submits the claim form when Activate Account is clicked', async () => {
