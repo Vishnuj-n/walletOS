@@ -1795,7 +1795,7 @@ const inviteUserHandler = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     message: 'Invitation created successfully',
-    invite_link: inviteLink,
+    invite_link: redactedInviteLink,
     admin_user: {
       id: adminUser.publicId,
       email: adminUser.email,

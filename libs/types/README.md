@@ -41,10 +41,7 @@ This library serves as the single source of truth for shared TypeScript type def
 
 **Shared types are defined here as the source of truth.**
 
-The actual imports into `apps/api` and `apps/admin` are currently deferred due to TypeScript configuration complexity:
-- Module system mismatch: `libs/types` uses CommonJS while `apps/admin` uses ES modules
-- Nx project reference configuration requires proper composite project setup
-- Path mapping in `tsconfig.base.json` needs project references to resolve correctly
+Both `apps/api` and `apps/admin` consume `@walletos/types` directly as the canonical shared types library.
 
 ### Next Steps to Complete Monorepo Best Practices
 
@@ -52,4 +49,4 @@ The actual imports into `apps/api` and `apps/admin` are currently deferred due t
 2. **Build the types library**: Keep `@walletos/types` building cleanly so both apps consume the shared contract instead of drifting copies.
 3. **Document any module-format follow-up**: Record only the remaining ESM/CJS work that still blocks publishing or runtime consumption.
 
-The repo has already moved past deferred shared imports: `api` and `admin` should treat `@walletos/types` as the common source of truth.
+The `api` and `admin` apps treat `@walletos/types` as the common, canonical source of truth.

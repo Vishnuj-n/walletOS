@@ -213,7 +213,7 @@ router.post(
 
     // Atomically activate admin user and delete token
     await prisma.$transaction(async (tx) => {
-      await tx.adminUser.update({
+      const adminUser = await tx.adminUser.update({
         where: { email: pendingVerification.email },
         data: {
           passwordHash,
@@ -226,7 +226,7 @@ router.post(
         data: {
           tenantId: pendingVerification.tenantId,
           entityType: 'admin_user',
-          entityId: pendingVerification.email,
+          entityId: adminUser.id,
           action: 'account_activation',
           actorId: pendingVerification.email,
           actorType: 'user',

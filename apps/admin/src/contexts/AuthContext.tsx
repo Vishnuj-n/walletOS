@@ -66,8 +66,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAdminSession(nextAdminUser, token);
   };
 
-  const clearAuthenticatedAdmin = () => {
-    void queryClient.cancelQueries();
+  const clearAuthenticatedAdmin = async () => {
+    await queryClient.cancelQueries();
     queryClient.removeQueries();
     queryClient.clear();
     setUser(null);
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!accessToken) {
       // Only clear if this is still the latest request
       if ((!latestAccessTokenRef.current && !accessToken) || latestAccessTokenRef.current === accessToken) {
-        clearAuthenticatedAdmin();
+        await clearAuthenticatedAdmin();
       }
       return;
     }
@@ -105,15 +105,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isAdminMeResponse(data)) {
           setAuthenticatedAdmin(data.adminUser, requestToken);
         } else {
-          clearAuthenticatedAdmin();
+          await clearAuthenticatedAdmin();
         }
       } else {
-        clearAuthenticatedAdmin();
+        await clearAuthenticatedAdmin();
       }
     } catch {
       // Only apply error state if this request is still the latest
       if (requestToken === latestAccessTokenRef.current) {
-        clearAuthenticatedAdmin();
+        await clearAuthenticatedAdmin();
       }
     }
   };
@@ -126,10 +126,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           latestAccessTokenRef.current = storedToken;
           await fetchAdminUser(storedToken);
         } else {
-          clearAuthenticatedAdmin();
+          await clearAuthenticatedAdmin();
         }
       } catch {
-        clearAuthenticatedAdmin();
+        await clearAuthenticatedAdmin();
       } finally {
         setLoading(false);
       }
@@ -168,7 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     latestAccessTokenRef.current = '';
-    clearAuthenticatedAdmin();
+    await clearAuthenticatedAdmin();
   };
 
   const hasRole = (minRole: AdminRole): boolean => {

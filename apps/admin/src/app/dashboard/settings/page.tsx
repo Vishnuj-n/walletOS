@@ -19,6 +19,20 @@ interface WebhookEndpoint {
   created_at: string;
 }
 
+function isWebhookEndpoint(item: unknown): item is WebhookEndpoint {
+  if (!item || typeof item !== 'object') return false;
+  const w = item as Record<string, unknown>;
+  return (
+    typeof w.id === 'string' &&
+    typeof w.url === 'string' &&
+    Array.isArray(w.events) &&
+    w.events.every((e) => typeof e === 'string') &&
+    typeof w.secret === 'string' &&
+    typeof w.is_active === 'boolean' &&
+    typeof w.created_at === 'string'
+  );
+}
+
 interface WebhookDeliveryLog {
   id: string;
   event: string;
@@ -109,8 +123,13 @@ export default function SettingsPage() {
 
     if (stored) {
       try {
-        setWebhooks(JSON.parse(stored));
-        return;
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(isWebhookEndpoint)) {
+          setWebhooks(parsed);
+          return;
+        } else {
+          console.warn('Stored webhooks validation failed or empty array. Discarding stored state.');
+        }
       } catch (error) {
         console.error('Failed to parse stored webhooks', error);
       }

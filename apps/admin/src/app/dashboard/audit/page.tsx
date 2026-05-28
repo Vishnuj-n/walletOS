@@ -230,13 +230,16 @@ export default function AuditLogPage() {
                 onChange={(e) => setWalletFilter(e.target.value)}
                 className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <select
+              <input
+                type="text"
+                list="action-suggestions"
                 value={actionFilter}
                 onChange={(e) => setActionFilter(e.target.value)}
                 aria-label="Filter by action..."
+                placeholder="Filter by action..."
                 className="flex-1 px-4 py-2 border border-slate-300 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Actions</option>
+              />
+              <datalist id="action-suggestions">
                 <option value="wallet.created">Wallet Created</option>
                 <option value="wallet.updated">Wallet Updated</option>
                 <option value="wallet.closed">Wallet Closed</option>
@@ -252,7 +255,7 @@ export default function AuditLogPage() {
                 <option value="debit">Debit (Legacy)</option>
                 <option value="freeze">Freeze (Legacy)</option>
                 <option value="unfreeze">Unfreeze (Legacy)</option>
-              </select>
+              </datalist>
             </div>
           </div>
 
@@ -337,13 +340,16 @@ export default function AuditLogPage() {
                   onChange={(e) => setAdminEmailFilter(e.target.value)}
                 className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-              <select
+              <input
+                type="text"
+                list="admin-action-suggestions"
                 value={adminActionFilter}
                 onChange={(e) => setAdminActionFilter(e.target.value)}
                 aria-label="Filter by admin action..."
+                placeholder="Filter by admin action..."
                 className="flex-1 px-4 py-2 border border-slate-300 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Actions</option>
+              />
+              <datalist id="admin-action-suggestions">
                 <option value="tenant.created">Tenant Created</option>
                 <option value="tenant.key_rotated">API Key Rotated</option>
                 <option value="tenant.key_revoked">API Key Revoked</option>
@@ -359,7 +365,7 @@ export default function AuditLogPage() {
                 <option value="debit">Debit (Legacy)</option>
                 <option value="freeze">Freeze (Legacy)</option>
                 <option value="unfreeze">Unfreeze (Legacy)</option>
-              </select>
+              </datalist>
               </div>
             </div>
 

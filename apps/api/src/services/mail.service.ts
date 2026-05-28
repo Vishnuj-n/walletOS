@@ -74,6 +74,7 @@ export async function sendInviteEmail(tenantId: string, email: string, rawToken:
   } catch (error) {
     console.error('sendInviteEmail failed', error);
     console.error('INVITE_ACTIVATION_URL redacted');
+    throw error;
   }
 }
 
