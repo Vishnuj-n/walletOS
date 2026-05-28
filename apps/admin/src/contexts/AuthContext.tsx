@@ -1,10 +1,11 @@
 'use client';
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/supabase';
 import { getAdminToken, setAdminSession } from '../lib/adminSession';
-import type { AdminMeResponse, AdminRole, AdminUserInfo } from '@walletOS/types';
-import { roleRank } from '@walletOS/types';
+import type { AdminMeResponse, AdminRole, AdminUserInfo } from '@walletos/types';
+import { roleRank } from '@walletos/types';
 
 interface AuthIdentity {
   id: string;
@@ -43,6 +44,17 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: 1,
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
   const [user, setUser] = useState<AuthIdentity | null>(null);
   const [adminUser, setAdminUser] = useState<AdminUserInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,7 +66,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAdminSession(nextAdminUser, token);
   };
 
-  const clearAuthenticatedAdmin = () => {
+  const clearAuthenticatedAdmin = async () => {
+    await queryClient.cancelQueries();
+    queryClient.removeQueries();
+    queryClient.clear();
     setUser(null);
     setAdminUser(null);
     setAdminSession(null);
@@ -64,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!accessToken) {
       // Only clear if this is still the latest request
       if ((!latestAccessTokenRef.current && !accessToken) || latestAccessTokenRef.current === accessToken) {
-        clearAuthenticatedAdmin();
+        await clearAuthenticatedAdmin();
       }
       return;
     }
@@ -90,15 +105,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isAdminMeResponse(data)) {
           setAuthenticatedAdmin(data.adminUser, requestToken);
         } else {
-          clearAuthenticatedAdmin();
+          await clearAuthenticatedAdmin();
         }
       } else {
-        clearAuthenticatedAdmin();
+        await clearAuthenticatedAdmin();
       }
     } catch {
       // Only apply error state if this request is still the latest
       if (requestToken === latestAccessTokenRef.current) {
-        clearAuthenticatedAdmin();
+        await clearAuthenticatedAdmin();
       }
     }
   };
@@ -111,10 +126,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           latestAccessTokenRef.current = storedToken;
           await fetchAdminUser(storedToken);
         } else {
-          clearAuthenticatedAdmin();
+          await clearAuthenticatedAdmin();
         }
       } catch {
-        clearAuthenticatedAdmin();
+        await clearAuthenticatedAdmin();
       } finally {
         setLoading(false);
       }
@@ -153,7 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     latestAccessTokenRef.current = '';
-    clearAuthenticatedAdmin();
+    await clearAuthenticatedAdmin();
   };
 
   const hasRole = (minRole: AdminRole): boolean => {
@@ -166,9 +181,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isSuperadmin = adminUser?.role === 'superadmin';
 
   return (
-    <AuthContext.Provider value={{ user, adminUser, loading, signIn, signOut, hasRole, isSuperadmin }}>
-      {children}
-    </AuthContext.Provider>
+    <QueryClientProvider client={queryClient}>
+      <AuthContext.Provider value={{ user, adminUser, loading, signIn, signOut, hasRole, isSuperadmin }}>
+        {children}
+      </AuthContext.Provider>
+    </QueryClientProvider>
   );
 }
 

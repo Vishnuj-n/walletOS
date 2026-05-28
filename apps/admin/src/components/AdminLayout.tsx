@@ -56,8 +56,8 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
       {showNav && (
         <nav className="bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex h-16 items-center justify-between gap-4">
-              <div className="flex min-w-0 items-center gap-6">
+            <div className="flex h-16 items-center justify-start gap-4 flex-nowrap">
+              <div className="flex min-w-0 items-center gap-6 flex-1">
                 <div className="flex-shrink-0 flex items-center">
                   <Link href="/dashboard" className="text-xl font-bold text-gray-900 hover:text-gray-700">
                     WalletOS Admin
@@ -68,7 +68,7 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
                     <TopbarGlobalSearch />
                   </PermissionGate>
                 </div>
-                <div className="hidden sm:ml-2 sm:flex sm:space-x-6">
+                <div className="hidden sm:ml-2 sm:flex sm:space-x-6 sm:flex-shrink-0">
                   {DASHBOARD_CAPABILITIES.filter((c) => c.id !== 'settings').map((capability) => (
                     <PermissionGate key={capability.id} minRole={capability.minRole}>
                       <Link href={capability.href} className={getNavLinkClass(capability.href)}>
@@ -78,7 +78,7 @@ export function AdminLayout({ children, showNav = true }: AdminLayoutProps) {
                   ))}
                 </div>
               </div>
-              <div className="relative flex items-center">
+              <div className="relative flex items-center ml-auto">
                 <button
                   ref={profileTriggerRef}
                   type="button"

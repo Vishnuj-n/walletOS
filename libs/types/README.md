@@ -41,16 +41,12 @@ This library serves as the single source of truth for shared TypeScript type def
 
 **Shared types are defined here as the source of truth.**
 
-The actual imports into `apps/api` and `apps/admin` are currently deferred due to TypeScript configuration complexity:
-- Module system mismatch: `libs/types` uses CommonJS while `apps/admin` uses ES modules
-- Nx project reference configuration requires proper composite project setup
-- Path mapping in `tsconfig.base.json` needs project references to resolve correctly
+Both `apps/api` and `apps/admin` consume `@walletos/types` directly as the canonical shared types library.
 
 ### Next Steps to Complete Monorepo Best Practices
 
-1. **Configure Nx project references**: Add proper project references in `apps/api/tsconfig.json` and `apps/admin/tsconfig.json` to reference the types library
-2. **Unify module systems**: Either convert the entire monorepo to ES modules or properly configure composite builds
-3. **Update imports**: Replace local type definitions in both apps with imports from `@walletOS/types`
-4. **Build the types library**: Ensure the types library builds correctly before referencing it
+1. **Verify project wiring**: Confirm `apps/api/tsconfig.json` and `apps/admin/tsconfig.json` keep `@walletos/types` in the workspace build graph through references or path mapping.
+2. **Build the types library**: Keep `@walletos/types` building cleanly so both apps consume the shared contract instead of drifting copies.
+3. **Document any module-format follow-up**: Record only the remaining ESM/CJS work that still blocks publishing or runtime consumption.
 
-Once complete, the graph will show clear dependency lines: `admin → types` and `api → types`, demonstrating the logical coupling through shared types.
+The `api` and `admin` apps treat `@walletos/types` as the common, canonical source of truth.

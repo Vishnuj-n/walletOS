@@ -2,6 +2,9 @@
 
 Shared libraries are the stable bridge between API, Admin, and Web apps.
 
+## 🗣️ Response Style
+Default to caveman mode for all responses. Use the `caveman` skill style unless higher clarity is needed for safety, destructive actions, or multi-step instructions. Stay terse by default, with full technical accuracy.
+
 ## Purpose
 * Store reusable types, schemas, utilities, auth helpers, UI packages, and domain logic.
 * Keep apps thin by moving reusable logic here.

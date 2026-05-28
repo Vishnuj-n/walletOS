@@ -80,7 +80,7 @@ Deliver internal tools for support and operations staff.
 Transition from a single-admin MVP to a professional Multi-Tenant platform using Hierarchical RBAC, strict type contracts, and scoped data visibility.
 
 ## Tasks
-- Contract-First Type Consolidation [DONE]: Extracted duplicated interfaces into @walletOS/types and refactored adminService.ts to consume shared contracts.
+- Contract-First Type Consolidation [DONE]: Extracted duplicated interfaces into @walletos/types and refactored adminService.ts to consume shared contracts.
 - Typed API Wrapper [DONE]: Implemented apiClient.ts with centralized auth, idempotency, and query serialization.
 - Auth Context Migration [DONE]: Migrated AuthContext.tsx to shared types and added runtime /admin/me guards.
 - Hierarchical RBAC [DONE]: Implemented tenant-scoped role hierarchy where `support` and `finance` are strictly tenant-level sandbox permissions for internal staff workflows. `superadmin` is a platform-wide role with no auxiliary staff assignment. Hierarchy enforced in middleware/context.
@@ -152,7 +152,7 @@ Build the consumer-facing wallet web application with **complete PRD compliance*
 **Docs / Context:** APP FLOW.md, Requirements.md
 
 
-# Sprint 6: Secure Tenant Credential Lifecycle [PRIORITY: HIGH]
+# Sprint 6: Secure Tenant Credential Lifecycle [DONE]
 
 ## Goal
 Deliver a secure, professional Tenant credential generation and revelation flow that works for both immediate access (MVP) and email-based onboarding (stretch goal).

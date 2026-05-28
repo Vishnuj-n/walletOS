@@ -268,6 +268,38 @@ export interface CreatedTenantResponse {
   created_at: string;
 }
 
+export interface InviteAdminUserRequest {
+  email: string;
+  role: AdminRole;
+}
+
+export interface InviteAdminUserResponse {
+  message: string;
+  invite_link: string;
+  admin_user: {
+    id: string;
+    email: string;
+    role: AdminRole;
+    is_active: boolean;
+  };
+}
+
+export interface TenantEmployee {
+  id: string;
+  email: string;
+  role: AdminRole;
+  is_active: boolean;
+  invited_at: string | null;
+  activated_at: string | null;
+}
+
+export interface TenantEmployeeListResponse {
+  tenant_id: string;
+  total: number;
+  query: string | null;
+  data: TenantEmployee[];
+}
+
 export interface WalletSearchResult {
   wallet_id: string;
   external_user_id: string;

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../../contexts/AuthContext';
 import { PermissionGate } from '../../../components/PermissionGate';
 import { 
@@ -10,8 +11,20 @@ import {
   fetchTenantUsage, 
   revokeTenantKey,
 } from '../../../services/adminService';
-import type { CreatedTenantResponse, Tenant, TenantUsageResponse } from '@walletOS/types';
-import { Building2, KeyRound, Plus } from 'lucide-react';
+import type { CreatedTenantResponse, Tenant, TenantUsageResponse } from '@walletos/types';
+import { 
+  Building2, 
+  KeyRound, 
+  MoreHorizontal, 
+  Plus, 
+  Search, 
+  RefreshCcw, 
+  Clock, 
+  Mail, 
+  Activity,
+  Layers,
+  ArrowUpRight
+} from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface UsageModalProps {
@@ -27,45 +40,35 @@ interface AlertModalProps {
 }
 
 function AlertModal({ message, type, onClose }: AlertModalProps) {
-  const bgColor = type === 'success' ? 'bg-green-50' : 'bg-red-50';
-  const borderColor = type === 'success' ? 'border-green-200' : 'border-red-200';
-  const textColor = type === 'success' ? 'text-green-700' : 'text-red-700';
-  const iconColor = type === 'success' ? 'text-green-600' : 'text-red-600';
+  const bgColor = type === 'success' ? 'bg-emerald-50' : 'bg-rose-50';
+  const borderColor = type === 'success' ? 'border-emerald-200' : 'border-rose-200';
+  const textColor = type === 'success' ? 'text-emerald-800' : 'text-rose-800';
+  const dotColor = type === 'success' ? 'bg-emerald-500' : 'bg-rose-500';
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
-      <div className={`${bgColor} ${borderColor} border rounded-xl p-6 max-w-md w-full shadow-xl`}>
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className={`${bgColor} ${borderColor} border rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4 transform scale-100 transition-all`}>
         <div className="flex items-start gap-3">
-          <div className={`${iconColor} mt-0.5`}>
-            {type === 'success' ? (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            )}
-          </div>
+          <div className={`h-2 w-2 rounded-full ${dotColor} mt-2 animate-pulse`} />
           <div className="flex-1">
-            <h3 className={`text-sm font-semibold ${type === 'success' ? 'text-green-900' : 'text-red-900'} mb-2`}>
-              {type === 'success' ? 'Success' : 'Error'}
+            <h3 className={`text-sm font-bold capitalize ${type === 'success' ? 'text-emerald-900' : 'text-rose-900'} mb-1`}>
+              {type === 'success' ? 'Operation Success' : 'Error Occurred'}
             </h3>
-            <p className={`text-sm ${textColor} whitespace-pre-wrap`}>{message}</p>
+            <p className={`text-xs font-mono whitespace-pre-wrap bg-white/50 border border-slate-100 rounded-lg p-3 ${textColor}`}>{message}</p>
           </div>
           <button
             onClick={onClose}
-            className={`text-gray-400 hover:text-gray-600`}
+            className="text-slate-400 hover:text-slate-600 transition-colors font-bold text-lg p-1"
           >
             ×
           </button>
         </div>
-        <div className="mt-4 flex justify-end">
+        <div className="flex justify-end pt-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 text-sm font-semibold"
+            className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-xs font-semibold shadow-sm transition-colors"
           >
-            Close
+            Dismiss
           </button>
         </div>
       </div>
@@ -96,41 +99,51 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
   }, [tenantId]);
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
-      <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto shadow-xl">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-sm font-semibold text-slate-900 inline-flex items-center gap-2">
-            <Building2 size={16} className="text-blue-600" />
-            API Usage - {tenantName}
-          </h3>
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl space-y-4">
+        <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900 inline-flex items-center gap-2">
+              <Activity size={18} className="text-blue-600 animate-pulse" />
+              API Usage Logs &mdash; {tenantName}
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">Real-time metrics charting requests generated by tenant workload.</p>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-slate-400 hover:text-slate-600 transition-colors font-bold text-lg p-1"
           >
             ×
           </button>
         </div>
 
-        {loading && <p className="text-gray-500">Loading usage data...</p>}
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-500 text-sm">
+            <RefreshCcw className="animate-spin text-blue-500" size={24} />
+            <span>Retrieving telemetry data...</span>
+          </div>
+        )}
+
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-700">{error}</p>
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-sm text-rose-800 flex items-center gap-3">
+            <div className="h-2 w-2 rounded-full bg-rose-500" />
+            <span>{error}</span>
           </div>
         )}
 
         {usage && (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <p className="text-sm text-gray-600">
-                API requests per hour for the last {usage.hours} hours
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
+              <p className="text-xs font-semibold text-slate-500">
+                API requests aggregated hourly over the past {usage.hours} hours
               </p>
-              <p className="text-xs text-gray-500">
-                Last updated: {new Date().toLocaleTimeString()}
+              <p className="text-[10px] font-mono text-slate-400">
+                Last Telemetry Sync: {new Date().toLocaleTimeString()}
               </p>
             </div>
             
-            <div className="bg-slate-50 rounded-lg p-4">
-              <ResponsiveContainer width="100%" height={300}>
+            <div className="bg-slate-50/50 border border-slate-150 rounded-xl p-4">
+              <ResponsiveContainer width="100%" height={320}>
                 <AreaChart data={usage.usage.map(hour => ({
                   time: new Date(hour.hour).toLocaleTimeString('en-US', { 
                     hour: 'numeric', 
@@ -139,17 +152,23 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
                   hour: new Date(hour.hour).toLocaleString(),
                   requests: hour.requests
                 }))}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <defs>
+                    <linearGradient id="colorRequests" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis 
                     dataKey="time" 
-                    stroke="#64748b"
-                    fontSize={12}
+                    stroke="#94a3b8"
+                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis 
-                    stroke="#64748b"
-                    fontSize={12}
+                    stroke="#94a3b8"
+                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                   />
@@ -157,8 +176,9 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
                     contentStyle={{ 
                       backgroundColor: '#ffffff',
                       border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      fontSize: '12px'
+                      borderRadius: '12px',
+                      fontSize: '11px',
+                      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05)'
                     }}
                     labelFormatter={(value) => `Time: ${value}`}
                     formatter={(value) => [typeof value === 'number' ? `${value} requests` : '0 requests', 'API Calls']}
@@ -166,24 +186,21 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
                   <Area 
                     type="monotone" 
                     dataKey="requests" 
-                    stroke="#2563eb" 
-                    fill="#2563eb" 
-                    fillOpacity={0.1}
-                    strokeWidth={2}
+                    stroke="#3b82f6" 
+                    fillOpacity={1}
+                    fill="url(#colorRequests)"
+                    strokeWidth={2.5}
                   />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
 
-            <div className="mt-4 text-xs text-gray-500 text-center">
+            <div className="text-[10px] text-slate-400 text-center italic bg-slate-50 rounded-lg py-2 border border-slate-100">
               {usage.usage.length > 0 && (
                 <p>
-                  Current hour data may not be available yet. 
+                  Current hour telemetry is buffered.
                   {usage.usage[usage.usage.length - 1].requests === 0 && 
-                    ` Data for ${new Date().toLocaleTimeString('en-US', { 
-                      hour: 'numeric', 
-                      hour12: true 
-                    })} is still being processed.`
+                    ` Data processing pipeline is currently indexing telemetry logs.`
                   }
                 </p>
               )}
@@ -197,9 +214,16 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
 
 export default function TenantsPage() {
   useAuth();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const { data: tenants = [], isLoading, error, refetch, isFetching } = useQuery<Tenant[]>({
+    queryKey: ['tenants'],
+    queryFn: fetchTenants,
+    refetchOnWindowFocus: false,
+  });
+
+  const [tenantSearch, setTenantSearch] = useState('');
+  const [debouncedTenantSearch, setDebouncedTenantSearch] = useState('');
+  
   const [usageModal, setUsageModal] = useState<{ tenantId: string; tenantName: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -213,23 +237,62 @@ export default function TenantsPage() {
   const [createSuccess, setCreateSuccess] = useState('');
   const [createdTenant, setCreatedTenant] = useState<CreatedTenantResponse | null>(null);
   const [copyStatus, setCopyStatus] = useState<string>('');
+  const [openActionsMenuTenantId, setOpenActionsMenuTenantId] = useState<string | null>(null);
+  const actionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Debounced search trigger
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedTenantSearch(tenantSearch.trim().toLowerCase());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [tenantSearch]);
 
   useEffect(() => {
-    loadTenants();
-  }, []);
+    if (!openActionsMenuTenantId) return;
+    const openTenantId = openActionsMenuTenantId;
 
-  const loadTenants = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchTenants();
-      setTenants(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch tenants');
-    } finally {
-      setLoading(false);
+    function handleClickOutside(event: MouseEvent) {
+      if (!(event.target instanceof Node)) return;
+      const openMenu = actionMenuRefs.current[openTenantId];
+      if (!openMenu?.contains(event.target)) {
+        setOpenActionsMenuTenantId(null);
+      }
     }
-  };
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpenActionsMenuTenantId(null);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [openActionsMenuTenantId]);
+
+  const filteredTenants = React.useMemo(() => {
+    if (!debouncedTenantSearch) return tenants;
+    return tenants.filter(
+      (tenant) =>
+        tenant.name.toLowerCase().includes(debouncedTenantSearch) ||
+        tenant.tenant_id.toLowerCase().includes(debouncedTenantSearch) ||
+        (tenant.contact_email && tenant.contact_email.toLowerCase().includes(debouncedTenantSearch))
+    );
+  }, [tenants, debouncedTenantSearch]);
+
+  // Analytics stats
+  const stats = React.useMemo(() => {
+    const total = tenants.length;
+    const keys = total * 2; // live and test key per tenant
+    const pendingBootstrap = tenants.filter(t => t.admin_count === 0).length;
+    return { total, keys, pendingBootstrap };
+  }, [tenants]);
 
   const handleRotateKey = async (tenantId: string, tenantName: string, scope: 'live' | 'test') => {
     if (!confirm(`Are you sure you want to rotate the ${scope} API key for ${tenantName}? This will invalidate the existing key.`)) {
@@ -240,10 +303,10 @@ export default function TenantsPage() {
     try {
       const result = await rotateTenantKey(tenantId, { scope });
       setAlertModal({
-        message: `New ${scope} API key generated: ${result.api_key}\n\nSave this key now - it won't be shown again!`,
+        message: `New ${scope} API key generated:\n\n${result.api_key}\n\nSave this key now - it will not be shown again!`,
         type: 'success'
       });
-      await loadTenants(); // Refresh the list
+      await refetch();
     } catch (err) {
       setAlertModal({
         message: err instanceof Error ? err.message : 'Failed to rotate key',
@@ -266,7 +329,7 @@ export default function TenantsPage() {
         message: `${scope} API keys revoked successfully for ${tenantName}`,
         type: 'success'
       });
-      await loadTenants(); // Refresh the list
+      await refetch();
     } catch (err) {
       setAlertModal({
         message: err instanceof Error ? err.message : 'Failed to revoke keys',
@@ -310,7 +373,7 @@ export default function TenantsPage() {
       setCreateSuccess('Tenant created successfully!');
       setName('');
       setContactEmail('');
-      await loadTenants(); // Refresh the list
+      await refetch();
     } catch (err: unknown) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create tenant');
     } finally {
@@ -335,7 +398,7 @@ export default function TenantsPage() {
       minRole="superadmin"
       fallback={
         <div className="p-6">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
             <h3 className="text-lg font-medium text-yellow-800">Access Denied</h3>
             <p className="text-yellow-700 mt-2">This feature is only available to superadmins.</p>
           </div>
@@ -343,211 +406,388 @@ export default function TenantsPage() {
       }
     >
       <div className="min-h-screen bg-slate-50 p-6">
+        
+        {/* Header section with layout matching wallets spec */}
         <div className="mb-6 flex justify-between items-center">
           <div>
             <h1 className="text-lg font-semibold text-slate-900">Tenant Management</h1>
-            <p className="text-xs text-slate-500">Manage all tenants and their API keys</p>
+            <p className="text-xs text-slate-500">
+              Manage corporate workspaces, environment settings, and bootstrap activation claims.
+            </p>
           </div>
-          <button
-            onClick={() => setCreateModalOpen(true)}
-            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold inline-flex items-center gap-2"
-          >
-            <Plus size={16} /> Create New Tenant
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => refetch()}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-semibold inline-flex items-center gap-2 transition-colors border border-slate-200 shadow-sm"
+            >
+              <RefreshCcw size={15} className={`${isFetching ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+            
+            <button
+              onClick={() => setCreateModalOpen(true)}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold inline-flex items-center gap-2 transition-colors shadow-sm"
+            >
+              <Plus size={16} />
+              Create Tenant
+            </button>
+          </div>
         </div>
 
+        {/* Error Banner */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-            <h3 className="text-sm font-semibold text-red-800">Error</h3>
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-sm text-rose-800 flex items-center gap-3 mb-4">
+            <div className="h-2 w-2 rounded-full bg-rose-500" />
+            <span>{error instanceof Error ? error.message : 'Error fetching tenants.'}</span>
           </div>
         )}
 
-        {loading ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500">Loading tenants...</p>
+        {/* Overview Cards Row */}
+        <div className="grid gap-4 md:grid-cols-3 mb-4">
+          
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex items-center justify-between hover:shadow-md transition-shadow">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Total Provisioned Tenants</p>
+              <p className="text-2xl font-bold text-slate-900">{isLoading ? '...' : stats.total}</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-2.5 text-slate-600 border border-slate-100">
+              <Building2 size={20} />
+            </div>
           </div>
-        ) : (
-          <div className="bg-white border border-slate-200 shadow-sm overflow-hidden rounded-xl">
+
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex items-center justify-between hover:shadow-md transition-shadow">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">System Key Volume Counters</p>
+              <p className="text-2xl font-bold text-emerald-600">{isLoading ? '...' : stats.keys}</p>
+            </div>
+            <div className="rounded-lg bg-emerald-50 p-2.5 text-emerald-600 border border-emerald-100">
+              <KeyRound size={20} />
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex items-center justify-between hover:shadow-md transition-shadow">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Pending Bootstrap Claims</p>
+              <p className="text-2xl font-bold text-amber-600">{isLoading ? '...' : stats.pendingBootstrap}</p>
+            </div>
+            <div className="rounded-lg bg-amber-50 p-2.5 text-amber-600 border border-amber-100">
+              <Clock size={20} />
+            </div>
+          </div>
+
+        </div>
+
+        {/* Spacious Grid Section */}
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-4">
+          
+          {/* Search controls bar */}
+          <div className="p-4 border-b border-slate-100 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-slate-50/50">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">Workspace Management Directory</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Filter workspace records by organization name, ID, or master contact.</p>
+            </div>
+            <div className="relative w-full sm:w-80">
+              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={tenantSearch}
+                onChange={(event) => setTenantSearch(event.target.value)}
+                placeholder="Search workspace tenants..."
+                className="w-full rounded-lg border border-slate-300 py-1.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all bg-white"
+                aria-label="Search tenants"
+              />
+            </div>
+          </div>
+
+          {/* Data Table */}
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tenant
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Contact
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Wallets
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Admins
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tenant Details</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Environment Configuration Indicators</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Master Contact Email</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Active Onboarding Status</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-slate-100">
-                {tenants.map((tenant) => (
-                  <tr key={tenant.tenant_id} className="hover:bg-slate-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-semibold text-slate-900">{tenant.name}</div>
-                      <div className="text-[11px] font-mono text-slate-400">{tenant.tenant_id}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {tenant.contact_email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(tenant.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {tenant.wallet_count}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {tenant.admin_count}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleRotateKey(tenant.tenant_id, tenant.name, 'live')}
-                          disabled={actionLoading === `${tenant.tenant_id}-live`}
-                          className="text-indigo-600 hover:text-indigo-900 text-xs disabled:opacity-50"
-                        >
-                          {actionLoading === `${tenant.tenant_id}-live` ? 'Rotating...' : 'Rotate Live Key'}
-                        </button>
-                        <button
-                          onClick={() => handleRotateKey(tenant.tenant_id, tenant.name, 'test')}
-                          disabled={actionLoading === `${tenant.tenant_id}-test`}
-                          className="text-indigo-600 hover:text-indigo-900 text-xs disabled:opacity-50"
-                        >
-                          {actionLoading === `${tenant.tenant_id}-test` ? 'Rotating...' : 'Rotate Test Key'}
-                        </button>
-                        <button
-                          onClick={() => handleRevokeKey(tenant.tenant_id, tenant.name, 'live')}
-                          disabled={actionLoading === `${tenant.tenant_id}-revoke-live`}
-                          className="text-red-600 hover:text-red-900 text-xs disabled:opacity-50"
-                        >
-                          {actionLoading === `${tenant.tenant_id}-revoke-live` ? 'Revoking...' : 'Revoke Live'}
-                        </button>
-                        <button
-                          onClick={() => handleRevokeKey(tenant.tenant_id, tenant.name, 'test')}
-                          disabled={actionLoading === `${tenant.tenant_id}-revoke-test`}
-                          className="text-red-600 hover:text-red-900 text-xs disabled:opacity-50"
-                        >
-                          {actionLoading === `${tenant.tenant_id}-revoke-test` ? 'Revoking...' : 'Revoke Test'}
-                        </button>
-                        <button
-                          onClick={() => setUsageModal({ tenantId: tenant.tenant_id, tenantName: tenant.name })}
-                          className="text-green-600 hover:text-green-900 text-xs"
-                        >
-                          View Usage
-                        </button>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {isLoading && filteredTenants.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-400">
+                      <div className="flex flex-col items-center justify-center gap-3">
+                        <RefreshCcw className="animate-spin text-blue-500" size={24} />
+                        <span>Loading directory items...</span>
                       </div>
                     </td>
                   </tr>
-                ))}
+                ) : filteredTenants.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-16 text-center text-sm text-slate-400">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <Building2 className="text-slate-300" size={32} />
+                        <span className="font-semibold text-slate-600">No workspace items found</span>
+                        <span className="text-xs text-slate-400">Try broadening your filter criteria or create a tenant workspace.</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTenants.map((tenant) => {
+                    const initial = tenant.name?.charAt(0).toUpperCase() || 'T';
+                    const isPendingClaim = tenant.admin_count === 0;
+
+                    return (
+                      <tr key={tenant.tenant_id} className="hover:bg-slate-50/80 transition-colors group">
+                        
+                        <td className="px-4 py-3 flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold shadow-sm group-hover:scale-105 transition-transform">
+                            {initial}
+                          </div>
+                          <div>
+                            <div className="text-sm font-semibold text-slate-900">{tenant.name}</div>
+                            <div className="text-[10px] font-mono text-slate-400 mt-0.5">{tenant.tenant_id}</div>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3 text-sm text-slate-700">
+                          <div className="flex gap-2">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700 border border-green-150">
+                              <span className="h-1 w-1 rounded-full bg-green-500" />
+                              Live Key
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700 border border-violet-150">
+                              <span className="h-1 w-1 rounded-full bg-violet-500" />
+                              Test Key
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3 text-sm text-slate-500">
+                          <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium">
+                            <Mail size={14} className="text-slate-400" />
+                            {tenant.contact_email || <span className="text-slate-400 italic font-normal">No contact email</span>}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold border transition-colors ${
+                            !isPendingClaim
+                              ? 'bg-green-50 text-green-700 border-green-150'
+                              : 'bg-amber-50 text-amber-700 border-amber-150'
+                          }`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${!isPendingClaim ? 'bg-green-500' : 'bg-amber-500'}`} />
+                            {!isPendingClaim ? 'Bootstrap Complete' : 'Pending Claim'}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3 text-right text-sm font-medium">
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => setUsageModal({ tenantId: tenant.tenant_id, tenantName: tenant.name })}
+                              className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-800 bg-emerald-50/50 hover:bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100/50 text-xs font-semibold transition-all shadow-sm"
+                            >
+                              View Usage
+                              <ArrowUpRight size={12} />
+                            </button>
+                            
+                            <div
+                              className="relative"
+                              ref={(node) => {
+                                actionMenuRefs.current[tenant.tenant_id] = node;
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenActionsMenuTenantId((current) =>
+                                    current === tenant.tenant_id ? null : tenant.tenant_id
+                                  )
+                                }
+                                aria-label="Open tenant actions"
+                                aria-haspopup="menu"
+                                aria-expanded={openActionsMenuTenantId === tenant.tenant_id}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                              >
+                                <span className="sr-only">Open tenant actions</span>
+                                <MoreHorizontal size={16} />
+                              </button>
+
+                              {openActionsMenuTenantId === tenant.tenant_id && (
+                                <div className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg animate-fade-in">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenActionsMenuTenantId(null);
+                                      handleRotateKey(tenant.tenant_id, tenant.name, 'live');
+                                    }}
+                                    disabled={actionLoading === `${tenant.tenant_id}-live`}
+                                    className="block w-full px-4 py-2.5 text-left text-xs text-blue-600 hover:bg-slate-50 font-medium transition-colors border-b border-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {actionLoading === `${tenant.tenant_id}-live` ? 'Rotating...' : 'Rotate Live Key'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenActionsMenuTenantId(null);
+                                      handleRotateKey(tenant.tenant_id, tenant.name, 'test');
+                                    }}
+                                    disabled={actionLoading === `${tenant.tenant_id}-test`}
+                                    className="block w-full px-4 py-2.5 text-left text-xs text-blue-600 hover:bg-slate-50 font-medium transition-colors border-b border-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {actionLoading === `${tenant.tenant_id}-test` ? 'Rotating...' : 'Rotate Test Key'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenActionsMenuTenantId(null);
+                                      handleRevokeKey(tenant.tenant_id, tenant.name, 'live');
+                                    }}
+                                    disabled={actionLoading === `${tenant.tenant_id}-revoke-live`}
+                                    className="block w-full px-4 py-2.5 text-left text-xs text-rose-600 hover:bg-slate-50 font-medium transition-colors border-b border-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {actionLoading === `${tenant.tenant_id}-revoke-live` ? 'Revoking...' : 'Revoke Live Key'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenActionsMenuTenantId(null);
+                                      handleRevokeKey(tenant.tenant_id, tenant.name, 'test');
+                                    }}
+                                    disabled={actionLoading === `${tenant.tenant_id}-revoke-test`}
+                                    className="block w-full px-4 py-2.5 text-left text-xs text-rose-600 hover:bg-slate-50 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {actionLoading === `${tenant.tenant_id}-revoke-test` ? 'Revoking...' : 'Revoke Test Key'}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
-            {tenants.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-gray-500">No tenants found</p>
-              </div>
-            )}
           </div>
-        )}
+
+        </div>
 
         {/* Create Tenant Modal */}
         {createModalOpen && (
-          <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50">
-            <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-md w-full shadow-xl">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-sm font-semibold text-slate-900 inline-flex items-center gap-2"><Building2 size={16} className="text-blue-600" />Create New Tenant</h3>
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4 transform scale-100 transition-all">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <h3 className="text-base font-semibold text-slate-900 inline-flex items-center gap-2">
+                  <Building2 size={18} className="text-blue-600" />
+                  Provision Tenant Workspace
+                </h3>
                 <button
-                  onClick={() => setCreateModalOpen(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  onClick={() => {
+                    setCreateModalOpen(false);
+                    setCreatedTenant(null);
+                    setCreateSuccess('');
+                    setCreateError('');
+                  }}
+                  className="text-slate-400 hover:text-slate-600 transition-colors font-bold text-lg p-1"
                 >
                   ×
                 </button>
               </div>
 
               {createError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs px-4 py-3 rounded-xl">
                   {createError}
                 </div>
               )}
 
               {createSuccess && (
-                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-4">
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-4 py-3 rounded-xl">
                   {createSuccess}
                 </div>
               )}
 
               {copyStatus && (
-                <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-4">
+                <div className="bg-blue-50 border border-blue-200 text-blue-800 text-xs px-4 py-3 rounded-xl">
                   {copyStatus}
                 </div>
               )}
 
               {!createdTenant ? (
-                <form onSubmit={handleCreateTenant}>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tenant Name *
+                <form onSubmit={handleCreateTenant} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                      Organization Name *
                     </label>
                     <input
                       type="text"
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all text-sm"
                       placeholder="Enter tenant name"
                     />
                   </div>
 
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contact Email
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                      Master Contact Email
                     </label>
-                    <input
-                      type="email"
-                      value={contactEmail}
-                      onChange={(e) => setContactEmail(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Enter contact email (optional)"
-                      pattern="[^\s@]+@[^\s@]+\.[^\s@]+"
-                      title="Please enter a valid email address"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Optional - must be a valid email if provided</p>
+                    <div className="relative">
+                      <Mail size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="email"
+                        value={contactEmail}
+                        onChange={(e) => setContactEmail(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all text-sm"
+                        placeholder="admin@workspace.com"
+                        pattern="[^\s@]+@[^\s@]+\.[^\s@]+"
+                        title="Please enter a valid email address"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">Assigns ownership. Used for bootstrap invitation dispatch.</p>
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={createLoading}
-                    className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {createLoading ? 'Creating...' : 'Create Tenant'}
-                  </button>
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setCreateModalOpen(false)}
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={createLoading}
+                      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 shadow transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {createLoading ? (
+                        <>
+                          <RefreshCcw size={14} className="animate-spin" />
+                          Provisioning...
+                        </>
+                      ) : (
+                        'Provision Workspace'
+                      )}
+                    </button>
+                  </div>
                 </form>
               ) : (
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-900 mb-4 inline-flex items-center gap-2">
-                    <KeyRound size={16} className="text-blue-600" /> API Keys - Save These Now!
-                  </h4>
-                  <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg mb-4">
-                    <p className="font-medium">Important:</p>
-                    <p className="text-sm">
-                      These API keys will only be shown once. Please save them securely.
+                <div className="space-y-4">
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl space-y-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                      <KeyRound size={16} className="text-amber-600 animate-pulse" />
+                      API Keys Generated &mdash; Save Now!
+                    </h4>
+                    <p className="text-[11px] font-medium leading-relaxed">
+                      For security, these credentials will only be shown once. Please record them in a secure password vault before exiting.
                     </p>
                   </div>
 
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
                         Live API Key
                       </label>
                       <div className="flex gap-2">
@@ -555,20 +795,20 @@ export default function TenantsPage() {
                           type="text"
                           readOnly
                           value={createdTenant.live_key}
-                          className="flex-1 px-4 py-2 border border-gray-300 rounded-md bg-gray-50 font-mono text-sm"
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 font-mono text-xs focus:outline-none"
                         />
                         <button
                           type="button"
                           onClick={() => copyToClipboard(createdTenant.live_key)}
-                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs transition-colors border border-slate-200"
                         >
                           Copy
                         </button>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
                         Test API Key (Sandbox)
                       </label>
                       <div className="flex gap-2">
@@ -576,12 +816,12 @@ export default function TenantsPage() {
                           type="text"
                           readOnly
                           value={createdTenant.test_key}
-                          className="flex-1 px-4 py-2 border border-gray-300 rounded-md bg-gray-50 font-mono text-sm"
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 font-mono text-xs focus:outline-none"
                         />
                         <button
                           type="button"
                           onClick={() => copyToClipboard(createdTenant.test_key)}
-                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs transition-colors border border-slate-200"
                         >
                           Copy
                         </button>
@@ -593,10 +833,11 @@ export default function TenantsPage() {
                     onClick={() => {
                       setCreateModalOpen(false);
                       setCreatedTenant(null);
+                      setCreateSuccess('');
                     }}
-                    className="w-full mt-6 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 text-sm font-semibold"
+                    className="w-full mt-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold shadow transition-colors"
                   >
-                    Done
+                    Done &amp; Close Workspace Wizard
                   </button>
                 </div>
               )}

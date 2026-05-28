@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminRole } from '@walletOS/types';
+import type { AdminRole } from '@walletos/types';
 import { useAuth } from '../contexts/AuthContext';
 
 interface PermissionGateProps {

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { PermissionGate } from '../../components/PermissionGate';
 import { DASHBOARD_CAPABILITIES, getDashboardCapability } from '../../components/dashboardCapabilities';
 import { fetchSystemBalance } from '../../services/adminService';
-import type { SystemBalanceResponse } from '@walletOS/types';
+import type { SystemBalanceResponse } from '@walletos/types';
 import {
   Activity,
   ArrowRight,
@@ -18,6 +18,7 @@ import {
   Search,
   ShieldCheck,
   Wallet,
+  Users,
 } from 'lucide-react';
 
 function SystemBalanceWidget() {
@@ -155,6 +156,7 @@ const capabilityIcons = {
   wallets: Wallet,
   actions: HandCoins,
   audit: ShieldCheck,
+  team: Users,
   settings: Cog,
   tenants: Building2,
   search: Search,
@@ -164,6 +166,7 @@ const capabilityAccent = {
   wallets: 'bg-blue-50 text-blue-600',
   actions: 'bg-emerald-50 text-emerald-600',
   audit: 'bg-amber-50 text-amber-600',
+  team: 'bg-violet-50 text-violet-600',
   settings: 'bg-slate-100 text-slate-700',
   tenants: 'bg-indigo-50 text-indigo-600',
   search: 'bg-cyan-50 text-cyan-600',
@@ -173,6 +176,7 @@ const capabilityActionLabel = {
   wallets: 'Manage Wallets',
   actions: 'Open Actions',
   audit: 'View Audit Logs',
+  team: 'Manage Team',
   settings: 'Open Settings',
   tenants: 'Manage Tenants',
   search: 'Open Search',

@@ -1,4 +1,4 @@
-import type { DashboardCapability } from '@walletOS/types';
+import type { DashboardCapability } from '@walletos/types';
 
 export const DASHBOARD_CAPABILITIES: DashboardCapability[] = [
   {
@@ -22,6 +22,14 @@ export const DASHBOARD_CAPABILITIES: DashboardCapability[] = [
     label: 'Audit Log',
     href: '/dashboard/audit',
     description: 'Inspect tenant activity and audit trails.',
+    minRole: 'support',
+    scope: 'tenant',
+  },
+  {
+    id: 'team',
+    label: 'Team',
+    href: '/dashboard/team',
+    description: 'Manage tenant employees and invite members.',
     minRole: 'support',
     scope: 'tenant',
   },
