@@ -216,8 +216,17 @@ The API will be available at `http://localhost:3333`
 npx nx test admin
 ```
 
-**Run all API tests:**
+**Run all API tests (requires local Postgres container):**
 ```bash
+# 1. Start test database container from root
+docker compose up -d
+
+# 2. Run migrations on the test database
+cd apps/api
+npx dotenv-cli -e ../../.env.test -- npx prisma migrate dev
+
+# 3. Run the tests (from repo root)
+cd ../..
 npx dotenv-cli -e .env.test -- npx nx test api --silent
 ```
 

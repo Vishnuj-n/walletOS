@@ -183,11 +183,10 @@ CREATE INDEX "AuditLog_entityType_entityId_idx" ON "AuditLog"("entityType", "ent
 
 -- CreateIndex
 CREATE INDEX "AuditLog_timestamp_idx" ON "AuditLog"("timestamp");
-
--- CreateIndexAuditLog_isSandbox_idx" ON "AuditLog"("isSandbox");
+-- CreateIndex
+CREATE INDEX "AuditLog_isSandbox_idx" ON "AuditLog"("isSandbox");
 
 -- CreateIndex
-CREATE INDEX "
 CREATE INDEX "Webhook_tenantId_idx" ON "Webhook"("tenantId");
 
 -- CreateIndex

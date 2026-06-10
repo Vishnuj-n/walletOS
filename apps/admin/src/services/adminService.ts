@@ -208,3 +208,148 @@ export async function fetchSystemErrors(limit = 50): Promise<SystemErrorsRespons
     fallbackMessage: 'Failed to fetch system errors',
   });
 }
+
+// ─── Webhook CRUD ─────────────────────────────────────────────────────────────
+
+export interface WebhookRecord {
+  id: string;
+  url: string;
+  events: string[];
+  status: string;
+  is_active: boolean;
+  failure_count: number;
+  last_attempt: string | null;
+  delivery_count: number;
+  created_at: string;
+}
+
+export interface CreateWebhookResponse {
+  id: string;
+  url: string;
+  events: string[];
+  secret: string;
+  status: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export async function fetchWebhooks(): Promise<WebhookRecord[]> {
+  return apiRequest<WebhookRecord[]>('/admin/webhooks', {
+    fallbackMessage: 'Failed to fetch webhooks',
+  });
+}
+
+export async function createWebhook(payload: {
+  url: string;
+  events: string[];
+}): Promise<CreateWebhookResponse> {
+  return apiRequest<CreateWebhookResponse>('/admin/webhooks', {
+    method: 'POST',
+    body: payload,
+    fallbackMessage: 'Failed to create webhook',
+  });
+}
+
+export async function deleteWebhook(webhookId: string): Promise<{ id: string; is_active: boolean; status: string }> {
+  return apiRequest<{ id: string; is_active: boolean; status: string }>(`/admin/webhooks/${webhookId}`, {
+    method: 'DELETE',
+    fallbackMessage: 'Failed to delete webhook',
+  });
+}
+
+export async function testWebhook(webhookId: string): Promise<{ delivery_id: string; message: string }> {
+  return apiRequest<{ delivery_id: string; message: string }>(`/admin/webhooks/${webhookId}/test`, {
+    method: 'POST',
+    fallbackMessage: 'Failed to send test webhook',
+  });
+}
+
+// ─── Tenant Config ─────────────────────────────────────────────────────────────
+
+export interface TenantConfigResponse {
+  id: string;
+  tenant_id: string;
+  default_currency: string;
+  auto_create_wallet: boolean;
+  updated_at: string;
+}
+
+export async function fetchTenantConfig(): Promise<TenantConfigResponse> {
+  return apiRequest<TenantConfigResponse>('/admin/tenant-config', {
+    fallbackMessage: 'Failed to fetch tenant config',
+  });
+}
+
+export async function updateTenantConfig(payload: {
+  defaultCurrency?: string;
+  autoCreateWallet?: boolean;
+}): Promise<TenantConfigResponse> {
+  return apiRequest<TenantConfigResponse>('/admin/tenant-config', {
+    method: 'PUT',
+    body: payload,
+    fallbackMessage: 'Failed to update tenant config',
+  });
+}
+
+// ─── Reporting & Exports ──────────────────────────────────────────────────────
+
+export interface TransactionMetricsDay {
+  date: string;
+  credits: string;
+  debits: string;
+  reversals: string;
+  net: string;
+  count: number;
+}
+
+export interface TransactionMetricsResponse {
+  from: string;
+  to: string;
+  is_sandbox: boolean;
+  summary: {
+    total_credits: string;
+    total_debits: string;
+    total_reversals: string;
+    net_change: string;
+    transaction_count: number;
+  };
+  daily: TransactionMetricsDay[];
+}
+
+export async function fetchTransactionMetrics(params?: {
+  from?: string;
+  to?: string;
+  is_sandbox?: boolean;
+}): Promise<TransactionMetricsResponse> {
+  return apiRequest<TransactionMetricsResponse>('/admin/reporting/transactions', {
+    query: params,
+    fallbackMessage: 'Failed to fetch transaction metrics',
+  });
+}
+
+export async function exportAuditLogsCsv(params?: {
+  from?: string;
+  to?: string;
+  entity_type?: string;
+}): Promise<Blob> {
+  const query = new URLSearchParams();
+  if (params?.from) query.set('from', params.from);
+  if (params?.to) query.set('to', params.to);
+  if (params?.entity_type) query.set('entity_type', params.entity_type);
+
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? '/api';
+  const url = `${baseUrl}/admin/audit-logs/export${query.toString() ? `?${query.toString()}` : ''}`;
+
+  const res = await fetch(url, {
+    credentials: 'include',
+    headers: {
+      Accept: 'text/csv',
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`CSV export failed: ${res.statusText}`);
+  }
+
+  return res.blob();
+}

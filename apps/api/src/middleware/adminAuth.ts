@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createHash } from 'crypto';
 import { prisma } from '../lib/prisma';
-import { AdminUser } from '@prisma/client';
+import { AdminUser, AdminRole } from '@prisma/client';
 import { AppError, ErrorCode } from './errorHandler';
 
 /**
@@ -98,21 +98,27 @@ export async function adminAuthMiddleware(
  * Checks if admin user has required role or higher
  * Role hierarchy: support(0) < finance(1) < tenant_admin(2) < superadmin(3)
  */
-export function requireAdminRole(minRole: 'support' | 'finance' | 'tenant_admin' | 'superadmin') {
+export function requireAdminRole(minRoleOrRoles: AdminRole | readonly AdminRole[] | AdminRole[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
-  const roleRank: Record<string, number> = { support: 0, finance: 1, tenant_admin: 2, superadmin: 3 };
+    const roleRank: Record<AdminRole, number> = { support: 0, finance: 1, tenant_admin: 2, superadmin: 3 };
 
     if (!req.adminUser) {
       return next(new AppError(401, ErrorCode.UNAUTHORIZED, 'Authentication required'));
     }
 
-    const userRoleRank = roleRank[req.adminUser.role];
-    const requiredRank = roleRank[minRole];
+    const userRole = req.adminUser.role as AdminRole;
+    const userRoleRank = roleRank[userRole];
 
     // Explicitly reject unknown roles
     if (userRoleRank === undefined) {
       return next(new AppError(403, ErrorCode.FORBIDDEN, 'Insufficient permissions'));
     }
+
+    const minRole: AdminRole = typeof minRoleOrRoles === 'string'
+      ? minRoleOrRoles
+      : (minRoleOrRoles as readonly AdminRole[]).reduce<AdminRole>((min, r) => (roleRank[r] < roleRank[min] ? r : min), minRoleOrRoles[0]);
+
+    const requiredRank = roleRank[minRole];
 
     if (userRoleRank < requiredRank) {
       return next(new AppError(403, ErrorCode.FORBIDDEN, 'Insufficient permissions'));

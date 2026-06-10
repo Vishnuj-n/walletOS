@@ -14,6 +14,8 @@ import transactionRoutes from './routes/transaction.routes';
 import adminRoutes from './routes/admin.routes';
 import authRoutes from './routes/auth.routes';
 import { verifyGlobalSmtpHealth } from './services/mail.service';
+import { startWebhookRetryWorker } from './services/webhook.service';
+
 
 const app = express();
 
@@ -55,6 +57,7 @@ if (process.env.NODE_ENV !== 'test') {
   const server = app.listen(port, () => {
     console.log(`Listening at http://localhost:${port}/api`);
     void verifyGlobalSmtpHealth();
+    startWebhookRetryWorker();
   });
   server.on('error', console.error);
 }

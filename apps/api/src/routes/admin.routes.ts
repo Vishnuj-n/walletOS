@@ -9,6 +9,7 @@ import { generateAdminUserPublicId, generateTransactionPublicId } from '../lib/p
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet } from '../services/wallet.service';
 import { sendInviteEmail } from '../services/mail.service';
+import { signPayload, dispatchWebhookDelivery } from '../services/webhook.service';
 import { z } from 'zod';
 
 const router = Router();
@@ -2895,6 +2896,388 @@ router.get(
       total_sandbox: sandboxTotal.toFixed(4),
       currency_breakdown: currencyBreakdown,
       calculated_at: new Date().toISOString(),
+    });
+  })
+);
+
+// ─── Webhook CRUD ─────────────────────────────────────────────────────────────
+
+const webhookCreateSchema = z.object({
+  url: z.string().url('url must be a valid URL'),
+  events: z.array(z.string().min(1)).min(1, 'At least one event type is required'),
+});
+
+/**
+ * POST /admin/webhooks
+ * Create a new webhook endpoint for the admin's tenant
+ */
+router.post(
+  '/admin/webhooks',
+  adminAuthMiddleware,
+  requireAdminRole(['tenant_admin', 'superadmin'] as const),
+  asyncHandler(async (req, res) => {
+    const parsed = webhookCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, parsed.error.issues[0].message);
+    }
+    const { url, events } = parsed.data;
+    const secret = randomBytes(32).toString('hex');
+
+    const webhook = await prisma.webhook.create({
+      data: {
+        tenantId: req.adminUser!.tenantId,
+        url,
+        events,
+        secret,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId: req.adminUser!.tenantId,
+        entityType: 'Webhook',
+        entityId: webhook.id,
+        action: 'webhook.created',
+        changes: { url, events },
+        actorId: req.adminUser!.id,
+        actorType: 'admin',
+        actorRole: req.adminUser!.role,
+        isSandbox: false,
+      },
+    });
+
+    res.status(201).json({
+      id: webhook.id,
+      url: webhook.url,
+      events: webhook.events,
+      secret,
+      status: webhook.status,
+      is_active: webhook.isActive,
+      created_at: webhook.createdAt.toISOString(),
+    });
+  })
+);
+
+/**
+ * GET /admin/webhooks
+ * List all webhooks for the admin's tenant
+ */
+router.get(
+  '/admin/webhooks',
+  adminAuthMiddleware,
+  asyncHandler(async (req, res) => {
+    const webhooks = await prisma.webhook.findMany({
+      where: { tenantId: req.adminUser!.tenantId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: { select: { deliveries: true } },
+      },
+    });
+
+    res.json(
+      webhooks.map((w) => ({
+        id: w.id,
+        url: w.url,
+        events: w.events,
+        status: w.status,
+        is_active: w.isActive,
+        failure_count: w.failureCount,
+        last_attempt: w.lastAttempt?.toISOString() ?? null,
+        delivery_count: w._count.deliveries,
+        created_at: w.createdAt.toISOString(),
+      }))
+    );
+  })
+);
+
+/**
+ * DELETE /admin/webhooks/:webhookId
+ * Deactivate (soft-delete) a webhook
+ */
+router.delete(
+  '/admin/webhooks/:webhookId',
+  adminAuthMiddleware,
+  requireAdminRole(['tenant_admin', 'superadmin'] as const),
+  asyncHandler(async (req, res) => {
+    const { webhookId } = req.params;
+
+    const webhook = await prisma.webhook.findUnique({
+      where: { id: webhookId },
+    });
+    if (!webhook || webhook.tenantId !== req.adminUser!.tenantId) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Webhook not found');
+    }
+
+    await prisma.webhook.update({
+      where: { id: webhookId },
+      data: { isActive: false, status: 'disabled' },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId: req.adminUser!.tenantId,
+        entityType: 'Webhook',
+        entityId: webhookId,
+        action: 'webhook.deleted',
+        changes: { webhookId },
+        actorId: req.adminUser!.id,
+        actorType: 'admin',
+        actorRole: req.adminUser!.role,
+        isSandbox: false,
+      },
+    });
+
+    res.json({ id: webhookId, is_active: false, status: 'disabled' });
+  })
+);
+
+/**
+ * POST /admin/webhooks/:webhookId/test
+ * Send a test ping payload to the webhook endpoint
+ */
+router.post(
+  '/admin/webhooks/:webhookId/test',
+  adminAuthMiddleware,
+  requireAdminRole(['tenant_admin', 'superadmin'] as const),
+  asyncHandler(async (req, res) => {
+    const { webhookId } = req.params;
+
+    const webhook = await prisma.webhook.findUnique({ where: { id: webhookId } });
+    if (!webhook || webhook.tenantId !== req.adminUser!.tenantId) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Webhook not found');
+    }
+
+    const testPayload = {
+      event: 'webhook.test',
+      tenant_id: req.adminUser!.tenantId,
+      timestamp: new Date().toISOString(),
+      data: { message: 'This is a test webhook delivery from WalletOS' },
+    };
+
+    const delivery = await prisma.webhookDelivery.create({
+      data: {
+        webhookId: webhook.id,
+        eventType: 'webhook.test',
+        payload: testPayload as any,
+        attemptNum: 1,
+      },
+    });
+
+    // Fire-and-forget
+    dispatchWebhookDelivery(delivery.id).catch(() => void 0);
+
+    res.json({ delivery_id: delivery.id, message: 'Test webhook dispatched' });
+  })
+);
+
+// ─── Tenant Config ─────────────────────────────────────────────────────────────
+
+const tenantConfigUpdateSchema = z.object({
+  defaultCurrency: z.string().length(3).optional(),
+  autoCreateWallet: z.boolean().optional(),
+});
+
+/**
+ * GET /admin/tenant-config
+ * Retrieve the tenant configuration (creates default if none exists)
+ */
+router.get(
+  '/admin/tenant-config',
+  adminAuthMiddleware,
+  asyncHandler(async (req, res) => {
+    const config = await prisma.tenantConfig.upsert({
+      where: { tenantId: req.adminUser!.tenantId },
+      create: { tenantId: req.adminUser!.tenantId },
+      update: {},
+    });
+
+    res.json({
+      id: config.id,
+      tenant_id: config.tenantId,
+      default_currency: config.defaultCurrency,
+      auto_create_wallet: config.autoCreateWallet,
+      updated_at: config.updatedAt.toISOString(),
+    });
+  })
+);
+
+/**
+ * PUT /admin/tenant-config
+ * Update tenant configuration settings
+ */
+router.put(
+  '/admin/tenant-config',
+  adminAuthMiddleware,
+  requireAdminRole(['tenant_admin', 'superadmin'] as const),
+  asyncHandler(async (req, res) => {
+    const parsed = tenantConfigUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, parsed.error.issues[0].message);
+    }
+
+    const updateData: { defaultCurrency?: string; autoCreateWallet?: boolean } = {};
+    if (parsed.data.defaultCurrency !== undefined) updateData.defaultCurrency = parsed.data.defaultCurrency;
+    if (parsed.data.autoCreateWallet !== undefined) updateData.autoCreateWallet = parsed.data.autoCreateWallet;
+
+    const config = await prisma.tenantConfig.upsert({
+      where: { tenantId: req.adminUser!.tenantId },
+      create: { tenantId: req.adminUser!.tenantId, ...updateData },
+      update: updateData,
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId: req.adminUser!.tenantId,
+        entityType: 'TenantConfig',
+        entityId: config.id,
+        action: 'tenant_config.updated',
+        changes: updateData,
+        actorId: req.adminUser!.id,
+        actorType: 'admin',
+        actorRole: req.adminUser!.role,
+        isSandbox: false,
+      },
+    });
+
+    res.json({
+      id: config.id,
+      tenant_id: config.tenantId,
+      default_currency: config.defaultCurrency,
+      auto_create_wallet: config.autoCreateWallet,
+      updated_at: config.updatedAt.toISOString(),
+    });
+  })
+);
+
+// ─── Reporting & Exports ──────────────────────────────────────────────────────
+
+/**
+ * GET /admin/audit-logs/export
+ * Export audit logs as CSV for the requesting tenant
+ */
+router.get(
+  '/admin/audit-logs/export',
+  adminAuthMiddleware,
+  requireAdminRole(['finance', 'tenant_admin', 'superadmin'] as const),
+  asyncHandler(async (req, res) => {
+    const { from, to, entity_type } = req.query as Record<string, string>;
+
+    const where: Prisma.AuditLogWhereInput = {
+      tenantId: req.adminUser!.tenantId,
+    };
+    if (from || to) {
+      where.timestamp = {};
+      if (from) where.timestamp.gte = new Date(from);
+      if (to) where.timestamp.lte = new Date(to);
+    }
+    if (entity_type) where.entityType = entity_type;
+
+    const logs = await prisma.auditLog.findMany({
+      where,
+      orderBy: { timestamp: 'asc' },
+      take: 10000,
+    });
+
+    const csvHeader = 'id,timestamp,entity_type,entity_id,action,actor_id,actor_type,actor_role,is_sandbox\n';
+    const csvRows = logs
+      .map((l) =>
+        [
+          l.id,
+          l.timestamp.toISOString(),
+          l.entityType,
+          l.entityId,
+          l.action,
+          l.actorId ?? '',
+          l.actorType ?? '',
+          l.actorRole ?? '',
+          l.isSandbox ? 'true' : 'false',
+        ]
+          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+          .join(',')
+      )
+      .join('\n');
+
+    const csv = csvHeader + csvRows;
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="audit-logs-${Date.now()}.csv"`);
+    res.send(csv);
+  })
+);
+
+/**
+ * GET /admin/reporting/transactions
+ * Returns aggregated transaction metrics (volume, count, net) grouped by day
+ */
+router.get(
+  '/admin/reporting/transactions',
+  adminAuthMiddleware,
+  requireAdminRole(['finance', 'tenant_admin', 'superadmin'] as const),
+  asyncHandler(async (req, res) => {
+    const { from, to, is_sandbox } = req.query as Record<string, string>;
+
+    const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const toDate = to ? new Date(to) : new Date();
+    const sandboxFilter = is_sandbox === 'true';
+
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        tenantId: req.adminUser!.tenantId,
+        createdAt: { gte: fromDate, lte: toDate },
+        wallet: { isSandbox: sandboxFilter },
+      },
+      select: {
+        type: true,
+        amount: true,
+        currency: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Aggregate by day
+    const byDay: Record<string, { date: string; credits: string; debits: string; reversals: string; net: string; count: number }> = {};
+    let totalCredits = new Decimal(0);
+    let totalDebits = new Decimal(0);
+    let totalReversals = new Decimal(0);
+
+    for (const tx of transactions) {
+      const day = tx.createdAt.toISOString().split('T')[0];
+      if (!byDay[day]) {
+        byDay[day] = { date: day, credits: '0', debits: '0', reversals: '0', net: '0', count: 0 };
+      }
+      const amount = new Decimal(tx.amount.toString());
+      byDay[day].count++;
+
+      if (tx.type === 'credit') {
+        const prev = new Decimal(byDay[day].credits);
+        byDay[day].credits = prev.add(amount).toFixed(4);
+        totalCredits = totalCredits.add(amount);
+      } else if (tx.type === 'debit') {
+        const prev = new Decimal(byDay[day].debits);
+        byDay[day].debits = prev.add(amount).toFixed(4);
+        totalDebits = totalDebits.add(amount);
+      } else if (tx.type === 'reversal') {
+        const prev = new Decimal(byDay[day].reversals);
+        byDay[day].reversals = prev.add(amount).toFixed(4);
+        totalReversals = totalReversals.add(amount);
+      }
+
+      const net = new Decimal(byDay[day].credits).sub(new Decimal(byDay[day].debits));
+      byDay[day].net = net.toFixed(4);
+    }
+
+    res.json({
+      from: fromDate.toISOString(),
+      to: toDate.toISOString(),
+      is_sandbox: sandboxFilter,
+      summary: {
+        total_credits: totalCredits.toFixed(4),
+        total_debits: totalDebits.toFixed(4),
+        total_reversals: totalReversals.toFixed(4),
+        net_change: totalCredits.sub(totalDebits).toFixed(4),
+        transaction_count: transactions.length,
+      },
+      daily: Object.values(byDay),
     });
   })
 );

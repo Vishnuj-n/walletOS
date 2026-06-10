@@ -223,6 +223,7 @@ export interface RotateKeyResponse {
 export interface TenantApiKeyMetadata {
   key_id: string;
   scope: 'live' | 'test';
+  keyScope?: 'read_only' | 'read_write' | 'admin';
   prefix: string;
   created_at: string;
   last_used_at: string | null;

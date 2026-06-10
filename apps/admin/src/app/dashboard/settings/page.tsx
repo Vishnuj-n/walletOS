@@ -7,6 +7,11 @@ import { PermissionGate } from '../../../components/PermissionGate';
 import {
   fetchCurrentTenantApiKeys,
   rotateCurrentTenantKey,
+  fetchWebhooks,
+  createWebhook,
+  deleteWebhook,
+  testWebhook,
+  type WebhookRecord,
 } from '../../../services/adminService';
 import type { TenantApiKeyMetadata, TenantApiKeySettingsResponse } from '@walletos/types';
 
@@ -14,8 +19,11 @@ interface WebhookEndpoint {
   id: string;
   url: string;
   events: string[];
-  secret: string;
+  secret?: string;
   is_active: boolean;
+  status?: string;
+  failure_count?: number;
+  delivery_count?: number;
   created_at: string;
 }
 
@@ -27,7 +35,6 @@ function isWebhookEndpoint(item: unknown): item is WebhookEndpoint {
     typeof w.url === 'string' &&
     Array.isArray(w.events) &&
     w.events.every((e) => typeof e === 'string') &&
-    typeof w.secret === 'string' &&
     typeof w.is_active === 'boolean' &&
     typeof w.created_at === 'string'
   );
@@ -115,64 +122,21 @@ export default function SettingsPage() {
 
   const tenantId = adminUser?.tenantId;
 
-  // Load and sync mock webhooks from localStorage
-  useEffect(() => {
-    if (!tenantId) return;
-    const storageKey = `walletos_webhooks_${tenantId}`;
-    const stored = localStorage.getItem(storageKey);
-
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(isWebhookEndpoint)) {
-          setWebhooks(parsed);
-          return;
-        } else {
-          console.warn('Stored webhooks validation failed or empty array. Discarding stored state.');
-        }
-      } catch (error) {
-        console.error('Failed to parse stored webhooks', error);
-      }
-    }
-
-    const defaultWebhooks: WebhookEndpoint[] = [
-      {
-        id: 'clwh_8f9e12da',
-        url: 'https://api.merchant.io/v1/walletos-receiver',
-        events: ['wallet.credited', 'wallet.debited'],
-        secret: 'placeholder_secret',
-        is_active: true,
-        created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: 'clwh_d5a8e32f',
-        url: 'https://webhook.site/demo-endpoint',
-        events: ['wallet.frozen', 'wallet.closed'],
-        secret: 'placeholder_secret',
-        is_active: true,
-        created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    ];
-
+  // Load webhooks from backend API
+  const loadWebhooks = useCallback(async () => {
+    if (!canManageSettings) return;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(defaultWebhooks));
-    } catch (error) {
-      console.error('Failed to persist default webhooks', error);
+      const data = await fetchWebhooks();
+      setWebhooks(data as WebhookEndpoint[]);
+    } catch (err) {
+      // Non-fatal: just log; settings still works without webhooks
+      console.warn('Failed to load webhooks:', err);
     }
+  }, [canManageSettings]);
 
-    setWebhooks(defaultWebhooks);
-  }, [tenantId]);
-
-  const saveWebhooksToStorage = (updatedWebhooks: WebhookEndpoint[]) => {
-    if (tenantId) {
-      try {
-        localStorage.setItem(`walletos_webhooks_${tenantId}`, JSON.stringify(updatedWebhooks));
-      } catch (error) {
-        console.error('Failed to persist webhooks', error);
-      }
-    }
-    setWebhooks(updatedWebhooks);
-  };
+  useEffect(() => {
+    loadWebhooks();
+  }, [loadWebhooks]);
 
   const handleRotate = async (scope: 'live' | 'test') => {
     setRotationLoading(scope);
@@ -207,8 +171,8 @@ export default function SettingsPage() {
     }
   };
 
-  // Register Webhook Endpoint
-  const handleRegisterWebhook = (e: React.FormEvent<HTMLFormElement>) => {
+  // Register Webhook Endpoint (via backend)
+  const handleRegisterWebhook = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setWebhookError(null);
     setWebhookSuccess(null);
@@ -236,87 +200,69 @@ export default function SettingsPage() {
       return;
     }
 
-    // Generate credentials
-    const secretBytes = new Uint8Array(24);
-    crypto.getRandomValues(secretBytes);
-    const secret = `whsec_${Array.from(secretBytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
-
-    const newEndpoint: WebhookEndpoint = {
-      id: `clwh_${Math.random().toString(36).substring(2, 10)}`,
-      url: urlTrimmed,
-      events: selectedEvents,
-      secret,
-      is_active: true,
-      created_at: new Date().toISOString(),
-    };
-
-    const updated = [newEndpoint, ...webhooks];
-    saveWebhooksToStorage(updated);
-    
-    setRevealedWebhookSecret(newEndpoint);
-    setNewWebhookUrl('');
-    setSelectedEvents(['wallet.credited', 'wallet.debited']);
-    setWebhookModalOpen(false);
-    setWebhookSuccess(`Webhook endpoint registered successfully.`);
+    try {
+      const response = await createWebhook({ url: urlTrimmed, events: selectedEvents });
+      const newEndpoint: WebhookEndpoint = {
+        id: response.id,
+        url: response.url,
+        events: response.events,
+        secret: response.secret,
+        is_active: response.is_active,
+        created_at: response.created_at,
+      };
+      setWebhooks((prev) => [newEndpoint, ...prev]);
+      setRevealedWebhookSecret(newEndpoint);
+      setNewWebhookUrl('');
+      setSelectedEvents(['wallet.credited', 'wallet.debited']);
+      setWebhookModalOpen(false);
+      setWebhookSuccess('Webhook endpoint registered successfully.');
+    } catch (err) {
+      setWebhookError(err instanceof Error ? err.message : 'Failed to register webhook');
+    }
   };
 
-  // Delete Webhook Endpoint
-  const handleDeleteWebhook = (id: string) => {
-    const updated = webhooks.filter(w => w.id !== id);
-    saveWebhooksToStorage(updated);
-    setWebhookSuccess('Webhook endpoint deactivated and removed.');
-    setTimeout(() => setWebhookSuccess(null), 4000);
+  // Delete Webhook Endpoint (via backend)
+  const handleDeleteWebhook = async (id: string) => {
+    try {
+      await deleteWebhook(id);
+      setWebhooks((prev) => prev.filter((w) => w.id !== id));
+      setWebhookSuccess('Webhook endpoint deactivated and removed.');
+      setTimeout(() => setWebhookSuccess(null), 4000);
+    } catch (err) {
+      setWebhookError(err instanceof Error ? err.message : 'Failed to delete webhook');
+    }
   };
 
-  // Simulate Webhook Test Action
+  // Real Webhook Test Action (fires backend delivery)
   const handleTestWebhook = async (endpoint: WebhookEndpoint) => {
     setTestingEndpoint(endpoint);
     setTestLoading(true);
-    
-    // Simulate real delay for WOW factor
-    await new Promise(r => setTimeout(r, 1200));
-    
-    const mockPayload = {
-      event: endpoint.events[0] || 'wallet.credited',
-      tenant_id: tenantId,
-      timestamp: new Date().toISOString(),
-      data: {
-        wallet: {
-          wallet_id: 'clwlt_82f1b4a9',
-          external_user_id: 'cust_9a8f2d',
-          label: 'Customer Loyalty Wallet',
-          balance: '1500.0000',
-          currency: 'INR',
-          status: 'active',
-          is_sandbox: keysByScope.get('live')?.is_active ? false : true,
-          metadata: {}
-        },
-        transaction: {
-          transaction_id: 'tx_01j8f7d9a1',
-          wallet_id: 'clwlt_82f1b4a9',
-          type: 'credit',
-          amount: '125.0000',
-          balance_before: '1375.0000',
-          balance_after: '1500.0000',
-          description: 'Promotional credit rewards',
-          reference_id: 'order_ref_8f2a1b',
-          created_at: new Date().toISOString()
-        }
-      }
-    };
 
-    const newLog: WebhookDeliveryLog = {
-      id: `wldel_${Math.random().toString(36).substring(2, 10)}`,
-      event: mockPayload.event,
-      status: 200,
-      latency_ms: Math.floor(Math.random() * 120) + 40,
-      payload: JSON.stringify(mockPayload, null, 2),
-      timestamp: new Date().toISOString()
-    };
+    try {
+      const result = await testWebhook(endpoint.id);
 
-    setTestLogs([newLog, ...testLogs]);
-    setTestLoading(false);
-    setShowTestLogModal(true);
+      const newLog: WebhookDeliveryLog = {
+        id: result.delivery_id,
+        event: 'webhook.test',
+        status: 200,
+        latency_ms: 0,
+        payload: JSON.stringify({
+          event: 'webhook.test',
+          tenant_id: tenantId,
+          timestamp: new Date().toISOString(),
+          data: { message: 'This is a test webhook delivery from WalletOS' },
+          delivery_id: result.delivery_id,
+        }, null, 2),
+        timestamp: new Date().toISOString(),
+      };
+
+      setTestLogs([newLog, ...testLogs]);
+      setShowTestLogModal(true);
+    } catch (err) {
+      setWebhookError(err instanceof Error ? err.message : 'Test delivery failed');
+    } finally {
+      setTestLoading(false);
+    }
   };
 
   if (loading) {

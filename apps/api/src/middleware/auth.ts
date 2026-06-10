@@ -34,6 +34,18 @@ export async function apiKeyAuthMiddleware(
     req.apiKeyScope = apiKeyRecord.scope;
     req.isSandbox = apiKeyRecord.isSandbox;
 
+    // Enforce API key scope limits
+    const scope = apiKeyRecord.scope;
+    const method = req.method;
+
+    if (scope === 'read_only' && method !== 'GET') {
+      return next(new AppError(403, ErrorCode.FORBIDDEN, 'API key has read_only scope. Write operations are forbidden.'));
+    }
+
+    if (scope === 'read_write' && method === 'DELETE') {
+      return next(new AppError(403, ErrorCode.FORBIDDEN, 'API key has read_write scope. Delete operations are forbidden.'));
+    }
+
     next();
   } catch (error) {
     return next(new AppError(500, ErrorCode.INTERNAL_ERROR, 'Authentication error'));
