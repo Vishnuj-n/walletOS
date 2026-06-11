@@ -5,7 +5,7 @@ import '@testing-library/jest-dom';
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://example.supabase.co';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon-key';
 
-import Page from '../src/app/dashboard/settings/page';
+import Page from '../src/app/dashboard/team/page';
 import { useAuth } from '../src/contexts/AuthContext';
 import {
   fetchCurrentTenantApiKeys,
@@ -67,9 +67,7 @@ describe('Settings employee tab', () => {
   it('loads tenant-scoped employees and forwards scoped search query', async () => {
     render(<Page />);
 
-    expect(await screen.findByText('Account Settings')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Employees' }));
+    expect(await screen.findByText('Team Management')).toBeInTheDocument();
 
     expect(await screen.findByText('alice@tenant.com')).toBeInTheDocument();
     expect(fetchCurrentTenantEmployees).toHaveBeenCalledWith(undefined);

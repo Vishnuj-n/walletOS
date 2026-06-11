@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { searchUnified } from '../services/adminService';
 
-export type SearchGroupKey = 'wallets' | 'transactions' | 'requests' | 'users';
+type SearchGroupKey = 'wallets' | 'transactions' | 'requests' | 'users';
 
-export interface SearchItem {
+interface SearchItem {
   id: string;
   title: string;
   subtitle: string;
@@ -14,7 +14,7 @@ export interface SearchItem {
   hint?: string;
 }
 
-export interface SearchResultGroup {
+interface SearchResultGroup {
   key: SearchGroupKey;
   label: string;
   items: SearchItem[];
@@ -68,49 +68,49 @@ export function useUnifiedSearch(query: string): UnifiedSearchState {
 
         const groups: SearchResultGroup[] = [
           {
-            key: 'wallets',
+            key: 'wallets' as SearchGroupKey,
             label: 'Wallets',
             items: response.wallets.map((wallet) => ({
               id: wallet.id,
               title: wallet.id,
               subtitle: `${wallet.external_user_id} - ${wallet.tenant_name}`,
               href: `/dashboard/wallets/${wallet.id}`,
-              group: 'wallets',
+              group: 'wallets' as SearchGroupKey,
               hint: `${wallet.currency} ${wallet.balance} - ${wallet.status}`,
             })),
           },
           {
-            key: 'transactions',
+            key: 'transactions' as SearchGroupKey,
             label: 'Transactions',
             items: response.transactions.map((transaction) => ({
               id: transaction.id,
               title: transaction.id,
               subtitle: `${transaction.wallet_id} - ${transaction.tenant_name}`,
-              href: `/dashboard/search?q=${encodeURIComponent(transaction.id)}`,
-              group: 'transactions',
+              href: `/dashboard/audit?entityId=${encodeURIComponent(transaction.id)}`,
+              group: 'transactions' as SearchGroupKey,
               hint: `${transaction.type} - ${transaction.currency} ${transaction.amount}`,
             })),
           },
           {
-            key: 'requests',
+            key: 'requests' as SearchGroupKey,
             label: 'Requests',
             items: response.requests.map((request) => ({
               id: request.id,
               title: request.id,
               subtitle: `${request.transaction_id} - ${request.tenant_name}`,
-              href: `/dashboard/search?q=${encodeURIComponent(request.id)}`,
-              group: 'requests',
+              href: `/dashboard/audit?entityId=${encodeURIComponent(request.id)}`,
+              group: 'requests' as SearchGroupKey,
             })),
           },
           {
-            key: 'users',
+            key: 'users' as SearchGroupKey,
             label: 'Users',
             items: response.users.map((user) => ({
               id: user.id,
               title: user.email,
               subtitle: user.tenant_name,
               href: '/dashboard/tenants',
-              group: 'users',
+              group: 'users' as SearchGroupKey,
               hint: user.role,
             })),
           },

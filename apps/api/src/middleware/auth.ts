@@ -38,7 +38,7 @@ export async function apiKeyAuthMiddleware(
     const scope = apiKeyRecord.scope;
     const method = req.method;
 
-    if (scope === 'read_only' && method !== 'GET') {
+    if (scope === 'read_only' && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
       return next(new AppError(403, ErrorCode.FORBIDDEN, 'API key has read_only scope. Write operations are forbidden.'));
     }
 

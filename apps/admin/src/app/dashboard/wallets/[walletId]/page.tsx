@@ -6,8 +6,8 @@ import {
   fetchWallet,
   freezeWallet,
   unfreezeWallet,
-  type Wallet,
 } from '../../../../services/walletService';
+import type { Wallet } from '@walletos/types';
 import { ArrowLeft, ArrowRightLeft, Snowflake, Sun } from 'lucide-react';
 
 export default function WalletDetailPage() {

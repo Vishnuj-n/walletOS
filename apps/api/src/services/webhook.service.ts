@@ -8,22 +8,14 @@ import { createHmac } from 'crypto';
  * and dispatching notifications asynchronously with exponential backoff retries.
  */
 
-export interface WebhookEventPayload {
+interface WebhookEventPayload {
   event: string;
   tenant_id: string;
   timestamp: string;
   data: Record<string, any>;
 }
 
-/**
- * Sign payload using HMAC-SHA256
- */
-export function signPayload(payload: any, secret: string): string {
-  const serialized = typeof payload === 'string' ? payload : JSON.stringify(payload);
-  const hmac = createHmac('sha256', secret);
-  hmac.update(serialized);
-  return `sha256=${hmac.digest('hex')}`;
-}
+
 
 /**
  * Publish a webhook event
@@ -36,7 +28,7 @@ export async function publishWebhookEvent(
   isSandbox = false
 ): Promise<void> {
   try {
-    // 1. Fetch active webhooks for this tenant
+    // Webhook model does not currently support isSandbox flag, so we scope all webhooks within the tenant
     const webhooks = await prisma.webhook.findMany({
       where: {
         tenantId,
@@ -128,7 +120,12 @@ export async function dispatchWebhookDelivery(deliveryId: string): Promise<void>
   let delivered = false;
 
   try {
-    const signature = signPayload(delivery.payload, delivery.webhook.secret);
+    const serialized = typeof delivery.payload === 'string'
+      ? delivery.payload
+      : JSON.stringify(delivery.payload);
+    const hmac = createHmac('sha256', delivery.webhook.secret);
+    hmac.update(serialized);
+    const signature = `sha256=${hmac.digest('hex')}`;
 
     // Call external HTTP endpoint using Node.js native fetch
     const response = await fetch(delivery.webhook.url, {
@@ -156,70 +153,93 @@ export async function dispatchWebhookDelivery(deliveryId: string): Promise<void>
 
   const latency = Date.now() - startTime;
 
-  // 1. Update delivery entry
-  await prisma.webhookDelivery.update({
-    where: { id: deliveryId },
-    data: {
-      statusCode,
-      response: responseText.slice(0, 1000), // Cap response length to fit in DB
-      deliveredAt: delivered ? new Date() : null,
-    },
-  });
-
-  // 2. Update webhook metrics and handle retry logic
-  if (delivered) {
-    await prisma.webhook.update({
-      where: { id: delivery.webhookId },
+  // Wrap related updates in a single transaction
+  await prisma.$transaction(async (tx) => {
+    // 1. Update delivery entry
+    await tx.webhookDelivery.update({
+      where: { id: deliveryId },
       data: {
-        lastAttempt: new Date(),
-        failureCount: 0,
-        status: 'active',
+        statusCode,
+        response: responseText.slice(0, 1000), // Cap response length to fit in DB
+        deliveredAt: delivered ? new Date() : null,
       },
     });
-  } else {
-    const nextAttemptNum = delivery.attemptNum + 1;
 
-    if (nextAttemptNum <= 5) {
-      const delaySeconds = getBackoffDelaySeconds(nextAttemptNum);
-      const nextAttempt = new Date(Date.now() + delaySeconds * 1000);
-
-      // Update delivery for next attempt
-      await prisma.webhookDelivery.update({
-        where: { id: deliveryId },
-        data: {
-          attemptNum: nextAttemptNum,
-          nextAttempt,
-        },
-      });
-
-      // Update Webhook failure counts
-      await prisma.webhook.update({
+    // 2. Update webhook metrics and handle retry logic
+    if (delivered) {
+      await tx.webhook.update({
         where: { id: delivery.webhookId },
         data: {
           lastAttempt: new Date(),
-          failureCount: { increment: 1 },
+          failureCount: 0,
+          status: 'active',
         },
       });
     } else {
-      // Exceeded max retries - mark delivery as failed (dead-letter queue)
-      await prisma.webhookDelivery.update({
-        where: { id: deliveryId },
-        data: {
-          nextAttempt: null, // Stop retrying
-        },
-      });
+      const nextAttemptNum = delivery.attemptNum + 1;
 
-      // Mark webhook as failed if failures keep compiling
-      await prisma.webhook.update({
-        where: { id: delivery.webhookId },
-        data: {
-          lastAttempt: new Date(),
-          failureCount: { increment: 1 },
-          status: 'failed',
-        },
-      });
+      if (nextAttemptNum <= 5) {
+        const delaySeconds = getBackoffDelaySeconds(nextAttemptNum);
+        const nextAttempt = new Date(Date.now() + delaySeconds * 1000);
+
+        // Update delivery for next attempt
+        await tx.webhookDelivery.update({
+          where: { id: deliveryId },
+          data: {
+            attemptNum: nextAttemptNum,
+            nextAttempt,
+          },
+        });
+
+        // Update Webhook failure counts
+        await tx.webhook.update({
+          where: { id: delivery.webhookId },
+          data: {
+            lastAttempt: new Date(),
+            failureCount: { increment: 1 },
+          },
+        });
+      } else {
+        // Exceeded max retries - mark delivery as failed (dead-letter queue)
+        await tx.webhookDelivery.update({
+          where: { id: deliveryId },
+          data: {
+            nextAttempt: null, // Stop retrying
+          },
+        });
+
+        // Mark webhook as failed if failures keep compiling
+        await tx.webhook.update({
+          where: { id: delivery.webhookId },
+          data: {
+            lastAttempt: new Date(),
+            failureCount: { increment: 1 },
+            status: 'failed',
+          },
+        });
+      }
+    }
+  });
+}
+
+/**
+ * Lightweight helper to limit parallel executions of async tasks
+ */
+async function runWithLimit<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>
+): Promise<void> {
+  const executing = new Set<Promise<void>>();
+  for (const item of items) {
+    const p = Promise.resolve().then(() => fn(item));
+    executing.add(p);
+    p.then(() => executing.delete(p));
+    if (executing.size >= limit) {
+      await Promise.race(executing);
     }
   }
+  await Promise.all(executing);
 }
 
 /**
@@ -253,13 +273,44 @@ export function startWebhookRetryWorker(intervalMs = 30000): void {
           console.log(`[Webhook Worker] Found ${pendingDeliveries.length} pending webhook deliveries to retry.`);
         }
 
-        for (const delivery of pendingDeliveries) {
-          dispatchWebhookDelivery(delivery.id).catch((err) => {
-            if (process.env.NODE_ENV !== 'test') {
-              console.error(`[Webhook Worker] Retry failed for delivery ${delivery.id}:`, err);
+        const limit = Number(process.env.WEBHOOK_CONCURRENCY_LIMIT) || 5;
+        await runWithLimit(pendingDeliveries, limit, async (delivery) => {
+          // Atomic claim: lease the delivery to push nextAttempt forward to prevent concurrent processing
+          const leaseTime = new Date(Date.now() + 120 * 1000);
+          try {
+            const isClaimed = await prisma.$transaction(async (tx) => {
+              const current = await tx.webhookDelivery.findUnique({
+                where: { id: delivery.id },
+                select: { id: true, deliveredAt: true, nextAttempt: true },
+              });
+
+              if (!current || current.deliveredAt !== null || !current.nextAttempt || current.nextAttempt > now) {
+                return false;
+              }
+
+              await tx.webhookDelivery.update({
+                where: { id: delivery.id },
+                data: { nextAttempt: leaseTime },
+              });
+
+              return true;
+            });
+
+            if (!isClaimed) {
+              return;
             }
-          });
-        }
+
+            await dispatchWebhookDelivery(delivery.id).catch((err) => {
+              if (process.env.NODE_ENV !== 'test') {
+                console.error(`[Webhook Worker] Retry failed for delivery ${delivery.id}:`, err);
+              }
+            });
+          } catch (err) {
+            if (process.env.NODE_ENV !== 'test') {
+              console.error(`[Webhook Worker] Lock/lease transaction failed for delivery ${delivery.id}:`, err);
+            }
+          }
+        });
       }
     } catch (error) {
       if (process.env.NODE_ENV !== 'test') {
@@ -267,14 +318,4 @@ export function startWebhookRetryWorker(intervalMs = 30000): void {
       }
     }
   }, intervalMs);
-}
-
-export function stopWebhookRetryWorker(): void {
-  if (workerIntervalId) {
-    clearInterval(workerIntervalId);
-    workerIntervalId = null;
-    if (process.env.NODE_ENV !== 'test') {
-      console.log('[Webhook Worker] Stopped background retry worker.');
-    }
-  }
 }

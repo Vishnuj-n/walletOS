@@ -41,11 +41,6 @@ export function formatDateTime(value: string) {
   }).format(date);
 }
 
-export function formatDateInputValue(value: string) {
-  if (!value) return '';
-  return value.slice(0, 10);
-}
-
 export function maskIdentifier(value: string, visible = 4) {
   const visibleCount = Math.min(visible, value.length);
   return `${'*'.repeat(Math.max(value.length - visibleCount, 3))}${value.slice(value.length - visibleCount)}`;

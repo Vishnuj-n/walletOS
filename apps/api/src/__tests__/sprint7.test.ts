@@ -30,101 +30,109 @@ describe('Sprint 7: Transfer, Close, Webhooks, Config, Reporting', () => {
     it('should transfer funds between two wallets', async () => {
       const { tenant, apiKey, wallet: fromWallet } = await createTestSetup('from_user_s7');
 
-      // Create second wallet
-      const toWalletRes = await request(app)
-        .post('/api/v1/wallets')
-        .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_create_to_wallet')
-        .send({ external_user_id: 'to_user_s7', currency: 'INR' });
-      expect(toWalletRes.status).toBe(201);
-      const toWalletId = toWalletRes.body.wallet_id;
+      try {
+        // Create second wallet
+        const toWalletRes = await request(app)
+          .post('/api/v1/wallets')
+          .set('x-api-key', apiKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_create_to_wallet')
+          .send({ external_user_id: 'to_user_s7', currency: 'INR' });
+        expect(toWalletRes.status).toBe(201);
+        const toWalletId = toWalletRes.body.wallet_id;
 
-      // Credit the source wallet
-      await request(app)
-        .post('/api/v1/transactions/credit')
-        .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_credit_source')
-        .send({ wallet_id: fromWallet.id, amount: 500, description: 'Fund source' });
+        // Credit the source wallet
+        await request(app)
+          .post('/api/v1/transactions/credit')
+          .set('x-api-key', apiKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_credit_source')
+          .send({ wallet_id: fromWallet.id, amount: 500, description: 'Fund source' });
 
-      // Transfer
-      const transferRes = await request(app)
-        .post(`/api/v1/wallets/${fromWallet.id}/transfer`)
-        .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_transfer_1')
-        .send({
-          to_wallet_id: toWalletId,
-          amount: 200,
-          description: 'P2P transfer test',
-        });
+        // Transfer
+        const transferRes = await request(app)
+          .post(`/api/v1/wallets/${fromWallet.id}/transfer`)
+          .set('x-api-key', apiKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_transfer_1')
+          .send({
+            to_wallet_id: toWalletId,
+            amount: 200,
+            description: 'P2P transfer test',
+          });
 
-      expect(transferRes.status).toBe(200);
-      expect(transferRes.body).toHaveProperty('debit_transaction_id');
-      expect(transferRes.body).toHaveProperty('credit_transaction_id');
-      expect(transferRes.body).toHaveProperty('amount', '200.0000');
-      expect(transferRes.body).toHaveProperty('from_wallet_id', fromWallet.id);
-      expect(transferRes.body).toHaveProperty('to_wallet_id', toWalletId);
-
-      await cleanupTestData(tenant.id);
+        expect(transferRes.status).toBe(200);
+        expect(transferRes.body).toHaveProperty('debit_transaction_id');
+        expect(transferRes.body).toHaveProperty('credit_transaction_id');
+        expect(transferRes.body).toHaveProperty('amount', '200.0000');
+        expect(transferRes.body).toHaveProperty('from_wallet_id', fromWallet.id);
+        expect(transferRes.body).toHaveProperty('to_wallet_id', toWalletId);
+      } finally {
+        await cleanupTestData(tenant.id);
+      }
     });
 
     it('should reject transfer with insufficient balance', async () => {
       const { tenant, apiKey, wallet: fromWallet } = await createTestSetup('from_user_insuf');
 
-      const toWalletRes = await request(app)
-        .post('/api/v1/wallets')
-        .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_create_to_wallet_insuf')
-        .send({ external_user_id: 'to_user_insuf', currency: 'INR' });
-      expect(toWalletRes.status).toBe(201);
+      try {
+        const toWalletRes = await request(app)
+          .post('/api/v1/wallets')
+          .set('x-api-key', apiKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_create_to_wallet_insuf')
+          .send({ external_user_id: 'to_user_insuf', currency: 'INR' });
+        expect(toWalletRes.status).toBe(201);
 
-      const transferRes = await request(app)
-        .post(`/api/v1/wallets/${fromWallet.id}/transfer`)
-        .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_transfer_insuf')
-        .send({
-          to_wallet_id: toWalletRes.body.wallet_id,
-          amount: 999999,
-          description: 'Should fail',
-        });
+        const transferRes = await request(app)
+          .post(`/api/v1/wallets/${fromWallet.id}/transfer`)
+          .set('x-api-key', apiKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_transfer_insuf')
+          .send({
+            to_wallet_id: toWalletRes.body.wallet_id,
+            amount: 999999,
+            description: 'Should fail',
+          });
 
-      expect(transferRes.status).toBe(422);
-      expect(transferRes.body.error).toHaveProperty('code', 'INSUFFICIENT_BALANCE');
-
-      await cleanupTestData(tenant.id);
+        expect(transferRes.status).toBe(422);
+        expect(transferRes.body.error).toHaveProperty('code', 'INSUFFICIENT_BALANCE');
+      } finally {
+        await cleanupTestData(tenant.id);
+      }
     });
 
     it('should reject self-transfer', async () => {
       const { tenant, apiKey, wallet } = await createTestSetup('self_transfer_user');
 
-      const transferRes = await request(app)
-        .post(`/api/v1/wallets/${wallet.id}/transfer`)
-        .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_self_transfer')
-        .send({
-          to_wallet_id: wallet.id,
-          amount: 100,
-          description: 'Self transfer',
-        });
+      try {
+        const transferRes = await request(app)
+          .post(`/api/v1/wallets/${wallet.id}/transfer`)
+          .set('x-api-key', apiKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_self_transfer')
+          .send({
+            to_wallet_id: wallet.id,
+            amount: 100,
+            description: 'Self transfer',
+          });
 
-      expect(transferRes.status).toBe(422);
-      expect(transferRes.body.error).toHaveProperty('code', 'INVALID_OPERATION');
-
-      await cleanupTestData(tenant.id);
+        expect(transferRes.status).toBe(422);
+        expect(transferRes.body.error).toHaveProperty('code', 'INVALID_OPERATION');
+      } finally {
+        await cleanupTestData(tenant.id);
+      }
     });
 
     it('should require all mandatory fields', async () => {
       const { tenant, apiKey, wallet } = await createTestSetup('transfer_validation_user');
 
-      const res = await request(app)
-        .post(`/api/v1/wallets/${wallet.id}/transfer`)
-        .set('x-api-key', apiKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_transfer_validation')
-        .send({ amount: 100 }); // missing to_wallet_id and description
+      try {
+        const res = await request(app)
+          .post(`/api/v1/wallets/${wallet.id}/transfer`)
+          .set('x-api-key', apiKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_transfer_validation')
+          .send({ amount: 100 }); // missing to_wallet_id and description
 
-      expect(res.status).toBe(400);
-      expect(res.body.error).toHaveProperty('code', 'VALIDATION_ERROR');
-
-      await cleanupTestData(tenant.id);
+        expect(res.status).toBe(400);
+        expect(res.body.error).toHaveProperty('code', 'VALIDATION_ERROR');
+      } finally {
+        await cleanupTestData(tenant.id);
+      }
     });
   });
 
@@ -138,7 +146,8 @@ describe('Sprint 7: Transfer, Close, Webhooks, Config, Reporting', () => {
 
       const res = await request(app)
         .delete(`/api/v1/wallets/${wallet.id}`)
-        .set('x-api-key', adminKey.plainKey);
+        .set('x-api-key', adminKey.plainKey)
+        .set('Idempotency-Key', 'sprint7_delete_wallet_zero');
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('status', 'closed');
@@ -159,7 +168,8 @@ describe('Sprint 7: Transfer, Close, Webhooks, Config, Reporting', () => {
 
       const res = await request(app)
         .delete(`/api/v1/wallets/${wallet.id}`)
-        .set('x-api-key', adminKey.plainKey);
+        .set('x-api-key', adminKey.plainKey)
+        .set('Idempotency-Key', 'sprint7_delete_wallet_nonzero');
 
       expect(res.status).toBe(422);
       expect(res.body.error).toHaveProperty('code', 'WALLET_BALANCE_NOT_ZERO');
@@ -204,7 +214,8 @@ describe('Sprint 7: Transfer, Close, Webhooks, Config, Reporting', () => {
 
       const deleteRes = await request(app)
         .delete(`/api/v1/wallets/${wallet.id}`)
-        .set('x-api-key', rwKey.plainKey);
+        .set('x-api-key', rwKey.plainKey)
+        .set('Idempotency-Key', 'sprint7_delete_wallet_forbidden');
       expect(deleteRes.status).toBe(403);
       expect(deleteRes.body.error).toHaveProperty('code', 'FORBIDDEN');
 
@@ -243,7 +254,7 @@ describe('Sprint 7: Transfer, Close, Webhooks, Config, Reporting', () => {
 
       const token = await getAdminToken(adminUser.email, adminPlain);
       if (!token) {
-        // Skip if auth not configured in test env
+        console.warn('Admin token is empty, skipping webhook CRUD test');
         await cleanupTestData(tenant.id);
         return;
       }
@@ -291,7 +302,9 @@ describe('Sprint 7: Transfer, Close, Webhooks, Config, Reporting', () => {
         expect(config.defaultCurrency).toBe('USD');
         expect(config.autoCreateWallet).toBe(false);
       } catch (err: any) {
-        if (err?.message?.includes('does not exist')) {
+        const isTableMissing = err?.code === 'P2021' || 
+          (err instanceof Error && err.message.includes('TenantConfig') && err.message.includes('does not exist'));
+        if (isTableMissing) {
           console.warn('TenantConfig table not migrated in test DB — skipping');
         } else {
           throw err;
@@ -317,7 +330,9 @@ describe('Sprint 7: Transfer, Close, Webhooks, Config, Reporting', () => {
         expect(updated.defaultCurrency).toBe('EUR');
         expect(updated.autoCreateWallet).toBe(true);
       } catch (err: any) {
-        if (err?.message?.includes('does not exist')) {
+        const isTableMissing = err?.code === 'P2021' || 
+          (err instanceof Error && err.message.includes('TenantConfig') && err.message.includes('does not exist'));
+        if (isTableMissing) {
           console.warn('TenantConfig table not migrated in test DB — skipping');
         } else {
           throw err;

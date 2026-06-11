@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import React from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '../../../contexts/AuthContext';
 import { SuperadminOnly } from '../../../components/SuperadminOnly';
 import {
@@ -13,17 +14,33 @@ import type { AdminActivityLog, AuditLog, SystemError } from '@walletos/types';
 import { Activity, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 export default function AuditLogPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 p-6 text-sm text-slate-500">Loading...</div>}>
+      <AuditLogPageContent />
+    </Suspense>
+  );
+}
+
+function AuditLogPageContent() {
   const { isSuperadmin } = useAuth();
+  const searchParams = useSearchParams();
+  const entityIdParam = searchParams ? (searchParams.get('entityId') ?? '') : '';
   const [activeTab, setActiveTab] = useState<'tenant' | 'admin' | 'errors'>('tenant');
   
   // Tenant audit logs state
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [walletFilter, setWalletFilter] = useState('');
+  const [walletFilter, setWalletFilter] = useState(entityIdParam);
   const [actionFilter, setActionFilter] = useState('');
+  const [actorFilter, setActorFilter] = useState('');
+
+  useEffect(() => {
+    setWalletFilter(entityIdParam);
+  }, [entityIdParam]);
   const [debouncedWalletFilter, setDebouncedWalletFilter] = useState('');
   const [debouncedActionFilter, setDebouncedActionFilter] = useState('');
+  const [debouncedActorFilter, setDebouncedActorFilter] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Admin activity state
@@ -50,7 +67,7 @@ export default function AuditLogPage() {
         abortControllerRef.current.abort();
       }
     };
-  }, [activeTab, debouncedWalletFilter, debouncedActionFilter]);
+  }, [activeTab, debouncedWalletFilter, debouncedActionFilter, debouncedActorFilter]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -65,6 +82,13 @@ export default function AuditLogPage() {
     }, 300);
     return () => clearTimeout(handler);
   }, [actionFilter]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedActorFilter(actorFilter);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [actorFilter]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -110,6 +134,7 @@ export default function AuditLogPage() {
       const data = await fetchAuditLogs({
         wallet_id: debouncedWalletFilter || undefined,
         action: debouncedActionFilter || undefined,
+        actor: debouncedActorFilter || undefined,
         signal: controller.signal,
       });
       setLogs(data);
@@ -228,6 +253,13 @@ export default function AuditLogPage() {
                 placeholder="Filter by entity ID..."
                 value={walletFilter}
                 onChange={(e) => setWalletFilter(e.target.value)}
+                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="text"
+                placeholder="Filter by actor email..."
+                value={actorFilter}
+                onChange={(e) => setActorFilter(e.target.value)}
                 className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <input

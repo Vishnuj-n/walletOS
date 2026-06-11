@@ -7,11 +7,12 @@ import { PermissionGate } from '../../../components/PermissionGate';
 import { 
   createTenant,
   fetchTenants, 
-  rotateTenantKey, 
   fetchTenantUsage, 
-  revokeTenantKey,
+  fetchTenantApiKeys,
+  revokeTenantApiKey,
+  emergencyRevokeTenantKeys,
 } from '../../../services/adminService';
-import type { CreatedTenantResponse, Tenant, TenantUsageResponse } from '@walletos/types';
+import type { CreatedTenantResponse, Tenant, TenantUsageResponse, TenantApiKeyMetadata } from '@walletos/types';
 import { 
   Building2, 
   KeyRound, 
@@ -22,7 +23,6 @@ import {
   Clock, 
   Mail, 
   Activity,
-  Layers,
   ArrowUpRight
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -212,6 +212,157 @@ function UsageModal({ tenantId, tenantName, onClose }: UsageModalProps) {
   );
 }
 
+interface TenantKeysModalProps {
+  tenantId: string;
+  tenantName: string;
+  onClose: () => void;
+}
+
+function TenantKeysModal({ tenantId, tenantName, onClose }: TenantKeysModalProps) {
+  const [keys, setKeys] = useState<TenantApiKeyMetadata[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  const loadKeys = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetchTenantApiKeys(tenantId);
+      setKeys(res.keys);
+    } catch {
+      setError('Failed to fetch API keys');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadKeys();
+  }, [tenantId]);
+
+  const handleRevoke = async (keyId: string, keyName: string) => {
+    if (!confirm(`Are you sure you want to revoke the API key "${keyName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setRevokingId(keyId);
+    try {
+      await revokeTenantApiKey(tenantId, keyId);
+      setKeys((prev) => prev.filter((k) => k.key_id !== keyId));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to revoke API key');
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl space-y-4">
+        <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900 inline-flex items-center gap-2">
+              <KeyRound size={18} className="text-blue-600 animate-pulse" />
+              Active API Keys &mdash; {tenantName}
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">Manage active credentials scoped to this tenant workspace.</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 transition-colors font-bold text-lg p-1"
+          >
+            ×
+          </button>
+        </div>
+
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-500 text-sm">
+            <RefreshCcw className="animate-spin text-blue-500" size={24} />
+            <span>Retrieving API credentials...</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-sm text-rose-800 flex items-center gap-3">
+            <div className="h-2 w-2 rounded-full bg-rose-500" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {!loading && !error && (
+          <div className="space-y-4">
+            {keys.length === 0 ? (
+              <div className="text-center py-12 text-slate-500 border border-dashed border-slate-200 rounded-xl">
+                <p className="text-sm font-semibold">No active API keys found</p>
+                <p className="text-xs text-slate-400 mt-1">This workspace has no active credentials.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-slate-150 rounded-xl">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Key Name</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Environment</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Scope</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Prefix</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {keys.map((key) => (
+                      <tr key={key.key_id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-slate-900">
+                          {key.name || 'Unnamed Key'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${
+                            key.scope === 'live'
+                              ? 'bg-green-50 text-green-700 border border-green-150'
+                              : 'bg-violet-50 text-violet-700 border border-violet-150'
+                          }`}>
+                            <span className={`h-1 w-1 rounded-full ${key.scope === 'live' ? 'bg-green-500' : 'bg-violet-500'}`} />
+                            {key.scope === 'live' ? 'Live' : 'Sandbox'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center rounded-md bg-slate-50 px-2 py-0.5 text-xs font-mono font-semibold text-slate-600 border border-slate-150 capitalize">
+                            {key.keyScope || 'admin'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                          {key.prefix}...
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            disabled={revokingId === key.key_id}
+                            onClick={() => handleRevoke(key.key_id, key.name || 'Unnamed Key')}
+                            className="px-2.5 py-1 text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 rounded border border-rose-150 transition-colors disabled:opacity-50"
+                          >
+                            {revokingId === key.key_id ? 'Revoking...' : 'Revoke'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex justify-end pt-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-xs font-semibold shadow transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TenantsPage() {
   useAuth();
 
@@ -225,6 +376,7 @@ export default function TenantsPage() {
   const [debouncedTenantSearch, setDebouncedTenantSearch] = useState('');
   
   const [usageModal, setUsageModal] = useState<{ tenantId: string; tenantName: string } | null>(null);
+  const [tenantKeysModal, setTenantKeysModal] = useState<{ tenantId: string; tenantName: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [alertModal, setAlertModal] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -294,39 +446,16 @@ export default function TenantsPage() {
     return { total, keys, pendingBootstrap };
   }, [tenants]);
 
-  const handleRotateKey = async (tenantId: string, tenantName: string, scope: 'live' | 'test') => {
-    if (!confirm(`Are you sure you want to rotate the ${scope} API key for ${tenantName}? This will invalidate the existing key.`)) {
+  const handleEmergencyRevokeKeys = async (tenantId: string, tenantName: string) => {
+    if (!confirm(`WARNING: Are you sure you want to revoke ALL active API keys for ${tenantName}? This is an emergency action and will instantly break all API integrations for this workspace.`)) {
       return;
     }
 
-    setActionLoading(`${tenantId}-${scope}`);
+    setActionLoading(`${tenantId}-emergency-revoke`);
     try {
-      const result = await rotateTenantKey(tenantId, { scope });
+      const result = await emergencyRevokeTenantKeys(tenantId);
       setAlertModal({
-        message: `New ${scope} API key generated:\n\n${result.api_key}\n\nSave this key now - it will not be shown again!`,
-        type: 'success'
-      });
-      await refetch();
-    } catch (err) {
-      setAlertModal({
-        message: err instanceof Error ? err.message : 'Failed to rotate key',
-        type: 'error'
-      });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleRevokeKey = async (tenantId: string, tenantName: string, scope: 'live' | 'test') => {
-    if (!confirm(`Are you sure you want to revoke all ${scope} API keys for ${tenantName}? This action cannot be undone.`)) {
-      return;
-    }
-
-    setActionLoading(`${tenantId}-revoke-${scope}`);
-    try {
-      await revokeTenantKey(tenantId, { scope });
-      setAlertModal({
-        message: `${scope} API keys revoked successfully for ${tenantName}`,
+        message: `Emergency revocation successful. Deactivated ${result.keys_deactivated} active keys for ${tenantName}.`,
         type: 'success'
       });
       await refetch();
@@ -613,50 +742,27 @@ export default function TenantsPage() {
                               </button>
 
                               {openActionsMenuTenantId === tenant.tenant_id && (
-                                <div className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg animate-fade-in">
+                                <div className="absolute right-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg animate-fade-in">
                                   <button
                                     type="button"
                                     onClick={() => {
                                       setOpenActionsMenuTenantId(null);
-                                      handleRotateKey(tenant.tenant_id, tenant.name, 'live');
+                                      setTenantKeysModal({ tenantId: tenant.tenant_id, tenantName: tenant.name });
                                     }}
-                                    disabled={actionLoading === `${tenant.tenant_id}-live`}
-                                    className="block w-full px-4 py-2.5 text-left text-xs text-blue-600 hover:bg-slate-50 font-medium transition-colors border-b border-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="block w-full px-4 py-2.5 text-left text-xs text-blue-600 hover:bg-slate-50 font-medium transition-colors border-b border-slate-50"
                                   >
-                                    {actionLoading === `${tenant.tenant_id}-live` ? 'Rotating...' : 'Rotate Live Key'}
+                                    View Active API Keys
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => {
                                       setOpenActionsMenuTenantId(null);
-                                      handleRotateKey(tenant.tenant_id, tenant.name, 'test');
+                                      handleEmergencyRevokeKeys(tenant.tenant_id, tenant.name);
                                     }}
-                                    disabled={actionLoading === `${tenant.tenant_id}-test`}
-                                    className="block w-full px-4 py-2.5 text-left text-xs text-blue-600 hover:bg-slate-50 font-medium transition-colors border-b border-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    {actionLoading === `${tenant.tenant_id}-test` ? 'Rotating...' : 'Rotate Test Key'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenActionsMenuTenantId(null);
-                                      handleRevokeKey(tenant.tenant_id, tenant.name, 'live');
-                                    }}
-                                    disabled={actionLoading === `${tenant.tenant_id}-revoke-live`}
-                                    className="block w-full px-4 py-2.5 text-left text-xs text-rose-600 hover:bg-slate-50 font-medium transition-colors border-b border-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    {actionLoading === `${tenant.tenant_id}-revoke-live` ? 'Revoking...' : 'Revoke Live Key'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenActionsMenuTenantId(null);
-                                      handleRevokeKey(tenant.tenant_id, tenant.name, 'test');
-                                    }}
-                                    disabled={actionLoading === `${tenant.tenant_id}-revoke-test`}
+                                    disabled={actionLoading === `${tenant.tenant_id}-emergency-revoke`}
                                     className="block w-full px-4 py-2.5 text-left text-xs text-rose-600 hover:bg-slate-50 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                                   >
-                                    {actionLoading === `${tenant.tenant_id}-revoke-test` ? 'Revoking...' : 'Revoke Test Key'}
+                                    {actionLoading === `${tenant.tenant_id}-emergency-revoke` ? 'Revoking...' : 'Emergency Revoke All Keys'}
                                   </button>
                                 </div>
                               )}
@@ -851,6 +957,15 @@ export default function TenantsPage() {
             tenantId={usageModal.tenantId}
             tenantName={usageModal.tenantName}
             onClose={() => setUsageModal(null)}
+          />
+        )}
+
+        {/* Tenant Keys Modal */}
+        {tenantKeysModal && (
+          <TenantKeysModal
+            tenantId={tenantKeysModal.tenantId}
+            tenantName={tenantKeysModal.tenantName}
+            onClose={() => setTenantKeysModal(null)}
           />
         )}
 

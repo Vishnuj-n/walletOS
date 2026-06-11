@@ -7,6 +7,8 @@ import { PermissionGate } from '../../../components/PermissionGate';
 import {
   fetchCurrentTenantApiKeys,
   rotateCurrentTenantKey,
+  createCurrentTenantApiKey,
+  revokeCurrentTenantApiKey,
   fetchWebhooks,
   createWebhook,
   deleteWebhook,
@@ -43,8 +45,8 @@ function isWebhookEndpoint(item: unknown): item is WebhookEndpoint {
 interface WebhookDeliveryLog {
   id: string;
   event: string;
-  status: number;
-  latency_ms: number;
+  status: string;
+  latency_ms: string | number;
   payload: string;
   timestamp: string;
 }
@@ -64,6 +66,59 @@ export default function SettingsPage() {
   const [rotationError, setRotationError] = useState<string | null>(null);
   const [rotationLoading, setRotationLoading] = useState<'live' | 'test' | null>(null);
   const [revealedKey, setRevealedKey] = useState<{ scope: 'live' | 'test'; value: string } | null>(null);
+  const [selectedScopes, setSelectedScopes] = useState<Record<'live' | 'test', 'read_only' | 'read_write' | 'admin'>>({
+    live: 'admin',
+    test: 'admin',
+  });
+
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyEnv, setNewKeyEnv] = useState<'live' | 'test'>('test');
+  const [newKeyScope, setNewKeyScope] = useState<'read_only' | 'read_write' | 'admin'>('admin');
+  const [generatedRawKey, setGeneratedRawKey] = useState<string | null>(null);
+  const [generateLoading, setGenerateLoading] = useState(false);
+  const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
+
+  const handleGenerateKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGenerateLoading(true);
+    setRotationError(null);
+    try {
+      const response = await createCurrentTenantApiKey({
+        name: newKeyName,
+        isSandbox: newKeyEnv === 'test',
+        keyScope: newKeyScope,
+      });
+      setGeneratedRawKey(response.api_key);
+      setGenerateModalOpen(false);
+      await loadSettings();
+    } catch (err) {
+      setRotationError(err instanceof Error ? err.message : 'Failed to generate API key');
+    } finally {
+      setGenerateLoading(false);
+    }
+  };
+
+  const handleRevokeKey = async (keyId: string) => {
+    if (!confirm('Are you sure you want to revoke this API key? Any applications using it will lose access immediately.')) {
+      return;
+    }
+    setRevokingKeyId(keyId);
+    setRotationError(null);
+    try {
+      await revokeCurrentTenantApiKey(keyId);
+      if (settings) {
+        setSettings({
+          ...settings,
+          keys: settings.keys.filter(k => k.key_id !== keyId)
+        });
+      }
+    } catch (err) {
+      setRotationError(err instanceof Error ? err.message : 'Failed to revoke API key');
+    } finally {
+      setRevokingKeyId(null);
+    }
+  };
 
   // Webhook States
   const [webhooks, setWebhooks] = useState<WebhookEndpoint[]>([]);
@@ -143,7 +198,10 @@ export default function SettingsPage() {
     setRotationError(null);
 
     try {
-      const response = await rotateCurrentTenantKey({ scope });
+      const response = await rotateCurrentTenantKey({
+        scope,
+        keyScope: selectedScopes[scope],
+      });
       setRevealedKey({ scope, value: response.api_key });
       await loadSettings();
     } catch (err) {
@@ -244,8 +302,8 @@ export default function SettingsPage() {
       const newLog: WebhookDeliveryLog = {
         id: result.delivery_id,
         event: 'webhook.test',
-        status: 200,
-        latency_ms: 0,
+        status: 'Queued',
+        latency_ms: 'N/A',
         payload: JSON.stringify({
           event: 'webhook.test',
           tenant_id: tenantId,
@@ -256,7 +314,7 @@ export default function SettingsPage() {
         timestamp: new Date().toISOString(),
       };
 
-      setTestLogs([newLog, ...testLogs]);
+      setTestLogs((prev) => [newLog, ...prev]);
       setShowTestLogModal(true);
     } catch (err) {
       setWebhookError(err instanceof Error ? err.message : 'Test delivery failed');
@@ -397,59 +455,92 @@ export default function SettingsPage() {
 
           {/* API Keys View */}
           {activeTab === 'api-keys' && (
-            <div className="grid gap-5 lg:grid-cols-2">
-              {(['live', 'test'] as const).map((scope) => {
-                const key = keysByScope.get(scope);
+            <div className="space-y-5 animate-fade-in">
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-slate-50/20">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">Developer API Keys</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Manage credentials to integrate with WalletOS ledger APIs.</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setNewKeyName('');
+                    setNewKeyEnv('test');
+                    setNewKeyScope('admin');
+                    setGenerateModalOpen(true);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-sm font-semibold text-white shadow transition-colors"
+                >
+                  <Plus size={16} />
+                  Generate New API Key
+                </button>
+              </div>
 
-                return (
-                  <div key={scope} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col justify-between group hover:shadow transition-shadow">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className={`rounded-xl p-2.5 ${scope === 'live' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-100'}`}>
-                            <Key size={18} />
-                          </div>
-                          <div>
-                            <h2 className="text-sm font-bold text-slate-800">{scopeLabel(scope)}</h2>
-                            <p className="text-xs text-slate-400">
-                              {scope === 'live' ? 'Used for processing production API requests.' : 'Used for dry-running in sandbox sandbox environment.'}
-                            </p>
-                          </div>
-                        </div>
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${key?.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-500'}`}>
-                          {key?.is_active ? 'Active' : 'Deactivated'}
-                        </span>
-                      </div>
-
-                      <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-semibold text-slate-400 uppercase tracking-wider text-[9px]">Prefix</span>
-                          <span className="font-mono text-slate-700 bg-white border border-slate-100 rounded px-1.5 py-0.5">{key?.prefix ?? 'N/A'}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-semibold text-slate-400 uppercase tracking-wider text-[9px]">Issued Date</span>
-                          <span className="text-slate-700 font-medium">{key ? new Date(key.created_at).toLocaleString() : 'N/A'}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-semibold text-slate-400 uppercase tracking-wider text-[9px]">Last Active Use</span>
-                          <span className="text-slate-700 font-medium">{key?.last_used_at ? new Date(key.last_used_at).toLocaleString() : 'Never accessed'}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-5 pt-3 border-t border-slate-100">
-                      <button
-                        onClick={() => handleRotate(scope)}
-                        disabled={rotationLoading !== null}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2.5 text-xs font-bold text-white shadow transition-all disabled:opacity-50 w-full"
-                      >
-                        <RefreshCcw size={14} className={rotationLoading === scope ? 'animate-spin' : ''} />
-                        {rotationLoading === scope ? 'Rotating...' : `Rotate ${scopeLabel(scope)}`}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              {/* API Keys Table */}
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-100 text-sm">
+                    <thead className="bg-slate-50/60 font-semibold text-slate-600">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs uppercase tracking-wider">Name / Prefix</th>
+                        <th className="px-6 py-4 text-left text-xs uppercase tracking-wider">Environment</th>
+                        <th className="px-6 py-4 text-left text-xs uppercase tracking-wider">Scope</th>
+                        <th className="px-6 py-4 text-left text-xs uppercase tracking-wider">Created Date</th>
+                        <th className="px-6 py-4 text-right text-xs uppercase tracking-wider">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {!settings?.keys || settings.keys.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-400">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <KeyRound className="text-slate-300" size={32} />
+                              <span className="font-semibold text-slate-600">No API Keys Generated</span>
+                              <span className="text-xs text-slate-400">Click the button above to create your first API credential.</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        settings.keys.map((key) => (
+                          <tr key={key.key_id} className="hover:bg-slate-50/50 transition-colors group">
+                            <td className="px-6 py-4">
+                              <div className="font-bold text-slate-900">{key.name ?? 'API Key'}</div>
+                              <div className="text-xs font-mono text-slate-500 mt-0.5">{key.prefix}...</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                                key.scope === 'live'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-100'
+                              }`}>
+                                {key.scope === 'live' ? 'Live' : 'Test'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-700 font-medium capitalize">
+                              {key.keyScope ? key.keyScope.replace('_', ' ') : 'admin'}
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-500">
+                              {new Date(key.created_at).toLocaleDateString(undefined, {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                              })}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button
+                                onClick={() => handleRevokeKey(key.key_id)}
+                                disabled={revokingKeyId !== null}
+                                className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-800 transition-colors bg-rose-50 hover:bg-rose-100/80 rounded px-2.5 py-1 disabled:opacity-50"
+                              >
+                                Revoke
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
@@ -551,7 +642,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Revealed Secret Section */}
-        {revealedWebhookSecret && (
+        {revealedWebhookSecret?.secret && (
           <div className="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-3 animate-fade-in">
             <div className="flex items-start gap-3">
               <AlertTriangle className="text-amber-600 mt-0.5 flex-shrink-0" size={18} />
@@ -576,25 +667,41 @@ export default function SettingsPage() {
         )}
 
         {/* Revealed API Key Section */}
-        {revealedKey && (
-          <div className="mt-6 bg-indigo-50 border border-indigo-200 rounded-2xl p-5 space-y-3 animate-fade-in">
-            <div className="flex items-start gap-3">
-              <Key className="text-indigo-600 mt-0.5 flex-shrink-0" size={18} />
-              <div>
-                <h4 className="text-sm font-bold text-indigo-900">New {scopeLabel(revealedKey.scope)} Issued</h4>
-                <p className="text-xs text-indigo-800 mt-0.5 font-medium">
-                  Store this secret API key securely. It cannot be recovered later. The previous key in this scope has been rotated.
-                </p>
+        {generatedRawKey && (
+          <div className="fixed inset-0 z-55 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="w-full max-w-lg rounded-2xl border border-indigo-200 bg-indigo-50 p-6 shadow-2xl space-y-4 transform scale-100 transition-all border-l-4 border-l-indigo-600">
+              <div className="flex items-start gap-3">
+                <Key className="text-indigo-600 mt-0.5 flex-shrink-0" size={20} />
+                <div>
+                  <h4 className="text-base font-bold text-indigo-900">New API Key Generated</h4>
+                  <p className="text-xs text-indigo-850 mt-1 leading-relaxed">
+                    Please copy your new API key now. For security reasons, it cannot be shown again.
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="rounded-xl border border-indigo-200 bg-white p-3 flex items-center justify-between">
-              <code className="break-all font-mono text-xs text-indigo-800 font-bold select-all">{revealedKey.value}</code>
-              <button 
-                onClick={() => setRevealedKey(null)}
-                className="text-xs font-bold text-indigo-950 bg-indigo-100 hover:bg-indigo-200 px-3 py-1.5 rounded transition-colors"
-              >
-                Acknowledge & Close
-              </button>
+              
+              <div className="rounded-xl border border-indigo-200 bg-white p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between shadow-inner">
+                <code className="break-all font-mono text-sm text-indigo-800 font-bold select-all leading-normal">{generatedRawKey}</code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedRawKey);
+                  }}
+                  className="text-xs font-bold text-indigo-900 bg-indigo-100 hover:bg-indigo-200 px-3 py-2 rounded transition-colors self-end sm:self-auto flex-shrink-0"
+                >
+                  Copy Key
+                </button>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button 
+                  type="button"
+                  onClick={() => setGeneratedRawKey(null)}
+                  className="w-full sm:w-auto text-center text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-6 py-2.5 rounded-lg transition-colors shadow"
+                >
+                  I have saved this key
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -682,6 +789,83 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Generate API Key Modal */}
+      {generateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4 transform scale-100 transition-all">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Generate New API Key</h3>
+                <p className="mt-1 text-xs text-slate-500">Create a new API key to authenticate requests.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGenerateModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors font-bold text-lg p-1"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleGenerateKey} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Key Name</label>
+                <input
+                  type="text"
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 py-2.5 px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-medium"
+                  placeholder="e.g. Zomato Production"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Environment</label>
+                <select
+                  value={newKeyEnv}
+                  onChange={(e) => setNewKeyEnv(e.target.value as 'live' | 'test')}
+                  className="w-full rounded-lg border border-slate-200 py-2.5 px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-medium text-slate-700 bg-white"
+                >
+                  <option value="test">Test (Sandbox)</option>
+                  <option value="live">Live (Production)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Permissions Scope</label>
+                <select
+                  value={newKeyScope}
+                  onChange={(e) => setNewKeyScope(e.target.value as 'read_only' | 'read_write' | 'admin')}
+                  className="w-full rounded-lg border border-slate-200 py-2.5 px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-medium text-slate-700 bg-white"
+                >
+                  <option value="read_only">Read-Only (read_only)</option>
+                  <option value="read_write">Read-Write (read_write)</option>
+                  <option value="admin">Administrative (admin)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setGenerateModalOpen(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={generateLoading}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-sm font-semibold text-white shadow transition-colors disabled:opacity-50"
+                >
+                  {generateLoading ? 'Generating...' : 'Generate Key'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Test Endpoint Delivery Modal */}
       {showTestLogModal && testingEndpoint && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fade-in">
@@ -710,14 +894,16 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-3 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100 text-xs">
                   <div>
                     <span className="font-semibold text-slate-400 block text-[9px] uppercase tracking-wider">Status Response</span>
-                    <span className="inline-flex items-center gap-1 font-bold text-emerald-600 mt-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      {testLogs[0].status} OK
+                    <span className={`inline-flex items-center gap-1 font-bold mt-1 ${testLogs[0].status === 'Queued' ? 'text-indigo-600' : 'text-emerald-600'}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${testLogs[0].status === 'Queued' ? 'bg-indigo-500' : 'bg-emerald-500'}`} />
+                      {testLogs[0].status}
                     </span>
                   </div>
                   <div>
                     <span className="font-semibold text-slate-400 block text-[9px] uppercase tracking-wider">Network Latency</span>
-                    <span className="font-bold text-slate-800 block mt-1">{testLogs[0].latency_ms}ms</span>
+                    <span className="font-bold text-slate-800 block mt-1">
+                      {typeof testLogs[0].latency_ms === 'number' ? `${testLogs[0].latency_ms}ms` : testLogs[0].latency_ms}
+                    </span>
                   </div>
                   <div>
                     <span className="font-semibold text-slate-400 block text-[9px] uppercase tracking-wider">Trigger Event</span>

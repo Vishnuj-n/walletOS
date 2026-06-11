@@ -10,9 +10,7 @@ jest.mock('../src/contexts/AuthContext');
 jest.mock('../src/services/adminService', () => ({
   createTenant: jest.fn(),
   fetchTenants: jest.fn(),
-  rotateTenantKey: jest.fn(),
   fetchTenantUsage: jest.fn(),
-  revokeTenantKey: jest.fn(),
 }));
 
 jest.mock('../src/components/PermissionGate', () => ({

@@ -114,6 +114,10 @@ export function requireAdminRole(minRoleOrRoles: AdminRole | readonly AdminRole[
       return next(new AppError(403, ErrorCode.FORBIDDEN, 'Insufficient permissions'));
     }
 
+    if (!minRoleOrRoles || (Array.isArray(minRoleOrRoles) && minRoleOrRoles.length === 0)) {
+      return next(new AppError(500, ErrorCode.INTERNAL_ERROR, 'minRoleOrRoles must not be empty'));
+    }
+
     const minRole: AdminRole = typeof minRoleOrRoles === 'string'
       ? minRoleOrRoles
       : (minRoleOrRoles as readonly AdminRole[]).reduce<AdminRole>((min, r) => (roleRank[r] < roleRank[min] ? r : min), minRoleOrRoles[0]);

@@ -3,6 +3,7 @@ import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { lockWallet, validateWalletForTransaction } from './wallet.service';
 import { generateTransactionPublicId } from '../lib/publicId';
 import { publishWebhookEvent } from './webhook.service';
+import { Decimal } from '@prisma/client/runtime/library';
 
 
 /**
@@ -15,7 +16,7 @@ import { publishWebhookEvent } from './webhook.service';
 export interface CreditParams {
   tenantId: string;
   walletId: string;
-  amount: number;
+  amount: number | Decimal;
   description: string;
   referenceId?: string;
   idempotencyKey?: string;
@@ -27,7 +28,7 @@ export interface CreditParams {
 export interface DebitParams {
   tenantId: string;
   walletId: string;
-  amount: number;
+  amount: number | Decimal;
   description: string;
   referenceId?: string;
   idempotencyKey?: string;
@@ -40,7 +41,7 @@ export interface TransferParams {
   tenantId: string;
   fromWalletId: string;
   toWalletId: string;
-  amount: number;
+  amount: number | Decimal;
   description: string;
   referenceId?: string;
   idempotencyKey?: string;

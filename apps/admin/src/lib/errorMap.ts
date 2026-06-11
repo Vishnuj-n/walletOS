@@ -1,4 +1,4 @@
-export const ERROR_CODE_TO_MESSAGE: Record<string, string> = {
+const ERROR_CODE_TO_MESSAGE: Record<string, string> = {
   INSUFFICIENT_BALANCE: 'Insufficient wallet balance for this operation.',
   WALLET_FROZEN: 'This wallet is frozen and cannot process transactions.',
   WALLET_CLOSED: 'This wallet is permanently closed.',

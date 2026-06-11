@@ -32,6 +32,15 @@ describe('Admin API Endpoints', () => {
     });
     testTenantId = tenant.id;
 
+    // Clean up any existing test wallet with the same external user ID to ensure test isolation
+    await prisma.wallet.deleteMany({
+      where: {
+        tenantId: testTenantId,
+        externalUserId: 'admin-test-user',
+        isSandbox: false,
+      },
+    });
+
     // Create test wallet
     const wallet = await prisma.wallet.create({
       data: {
@@ -841,6 +850,130 @@ describe('Admin API Endpoints', () => {
 
       expect(response.status).toBe(403);
       expect(response.body.error.code).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('Superadmin Tenant API Key Management', () => {
+    it('should retrieve active API keys for superadmin', async () => {
+      const response = await request(app)
+        .get(`/api/v1/admin/tenants/${testTenantId}/api-keys`)
+        .set('Authorization', adminAuthToken);
+
+      expect(response.status).toBe(200);
+      expect(response.body.tenant_id).toBe(testTenantId);
+      expect(response.body.keys).toBeDefined();
+      expect(Array.isArray(response.body.keys)).toBe(true);
+      expect(response.body.keys.length).toBeGreaterThan(0);
+      expect(response.body.keys[0]).toHaveProperty('key_id');
+      expect(response.body.keys[0]).toHaveProperty('name');
+      expect(response.body.keys[0]).toHaveProperty('scope');
+      expect(response.body.keys[0]).toHaveProperty('keyScope');
+      expect(response.body.keys[0]).toHaveProperty('prefix');
+    });
+
+    it('should reject retrieve active API keys for non-superadmin', async () => {
+      const response = await request(app)
+        .get(`/api/v1/admin/tenants/${testTenantId}/api-keys`)
+        .set('Authorization', supportAuthToken);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('should revoke a single API key and log superadmin actor metadata', async () => {
+      // Create a test key first
+      const seedKey = `wlt_live_revoke_${Date.now()}`;
+      const seedHash = createHash('sha256').update(seedKey).digest('hex');
+      const testApiKey = await prisma.apiKey.create({
+        data: {
+          tenantId: testTenantId,
+          keyHash: seedHash,
+          prefix: seedKey.substring(0, 15),
+          scope: 'admin',
+          isSandbox: false,
+          name: 'Revocation Test Target',
+        },
+      });
+
+      const idempotencyKey = `superadmin-revoke-key-${Date.now()}`;
+      const response = await request(app)
+        .post(`/api/v1/admin/tenants/${testTenantId}/api-keys/${testApiKey.id}/revoke`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', idempotencyKey)
+        .send();
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.key_id).toBe(testApiKey.id);
+
+      // Verify DB state
+      const dbKey = await prisma.apiKey.findUnique({
+        where: { id: testApiKey.id },
+      });
+      expect(dbKey?.isActive).toBe(false);
+
+      // Verify audit log
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: testTenantId,
+          action: 'tenant.key_revoked_by_superadmin',
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+      });
+      expect(auditLog).toBeDefined();
+      expect(auditLog?.actorId).toBe('admin@test.com');
+      expect(auditLog?.actorType).toBe('admin');
+      expect(auditLog?.actorRole).toBe('superadmin');
+    });
+
+    it('should emergency revoke all keys for a tenant and write audit entry', async () => {
+      // Ensure at least one active key exists
+      const seedKey = `wlt_live_emergency_${Date.now()}`;
+      const seedHash = createHash('sha256').update(seedKey).digest('hex');
+      await prisma.apiKey.create({
+        data: {
+          tenantId: testTenantId,
+          keyHash: seedHash,
+          prefix: seedKey.substring(0, 15),
+          scope: 'admin',
+          isSandbox: false,
+          name: 'Emergency Revocation Target',
+        },
+      });
+
+      const idempotencyKey = `superadmin-emergency-revoke-${Date.now()}`;
+      const response = await request(app)
+        .post(`/api/v1/admin/tenants/${testTenantId}/emergency-revoke`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', idempotencyKey)
+        .send();
+
+      expect(response.status).toBe(200);
+      expect(response.body.keys_deactivated).toBeGreaterThan(0);
+
+      // Verify DB state: all keys for tenant should be inactive
+      const activeKeysCount = await prisma.apiKey.count({
+        where: { tenantId: testTenantId, isActive: true },
+      });
+      expect(activeKeysCount).toBe(0);
+
+      // Verify audit log
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: testTenantId,
+          action: 'tenant.emergency_revoked',
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+      });
+      expect(auditLog).toBeDefined();
+      expect(auditLog?.actorId).toBe('admin@test.com');
+      expect(auditLog?.actorType).toBe('admin');
     });
   });
 

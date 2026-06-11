@@ -40,6 +40,10 @@ export default function ReportingPage() {
   const [isSandbox, setIsSandbox] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportDateRange, setExportDateRange] = useState({
+    from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    to: new Date().toISOString().split('T')[0],
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,7 +66,12 @@ export default function ReportingPage() {
     setExporting(true);
     setExportError(null);
     try {
-      const blob = await exportAuditLogsCsv();
+      const stream = await exportAuditLogsCsv({
+        from: exportDateRange.from ? new Date(exportDateRange.from).toISOString() : undefined,
+        to: exportDateRange.to ? new Date(exportDateRange.to).toISOString() : undefined,
+      });
+      const response = new Response(stream);
+      const blob = await response.blob();
       downloadBlob(blob, `audit-logs-${new Date().toISOString().split('T')[0]}.csv`);
     } catch (err) {
       setExportError(err instanceof Error ? err.message : 'Export failed');
@@ -86,7 +95,30 @@ export default function ReportingPage() {
             Aggregated volume, credits, debits, and net change over the last 30 days.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Date range filters */}
+          <div className="flex items-center gap-2 text-sm text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
+            <label className="flex items-center gap-1 font-medium">
+              <span>From:</span>
+              <input
+                type="date"
+                value={exportDateRange.from}
+                onChange={(e) => setExportDateRange(prev => ({ ...prev, from: e.target.value }))}
+                className="border-none bg-transparent p-0 text-sm focus:outline-none focus:ring-0 font-semibold text-slate-700"
+              />
+            </label>
+            <span className="text-slate-300">|</span>
+            <label className="flex items-center gap-1 font-medium">
+              <span>To:</span>
+              <input
+                type="date"
+                value={exportDateRange.to}
+                onChange={(e) => setExportDateRange(prev => ({ ...prev, to: e.target.value }))}
+                className="border-none bg-transparent p-0 text-sm focus:outline-none focus:ring-0 font-semibold text-slate-700"
+              />
+            </label>
+          </div>
+
           {/* Sandbox toggle */}
           <label className="flex items-center gap-2 text-sm font-medium text-slate-600 cursor-pointer select-none">
             <div

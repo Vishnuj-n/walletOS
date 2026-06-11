@@ -15,7 +15,8 @@ import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
-import { generateWalletPublicId } from '../lib/publicId';
+import { generateWalletPublicId, generateTransactionPublicId } from '../lib/publicId';
+import { Decimal } from '@prisma/client/runtime/library';
 
 const router = Router();
 
@@ -290,7 +291,7 @@ router.post(
       tenantId: req.tenantId!,
       fromWalletId: walletId,
       toWalletId: to_wallet_id,
-      amount: Number(amount),
+      amount: new Decimal(amount as string),
       description,
       referenceId: reference_id,
       idempotencyKey: req.idempotencyKey,
@@ -317,16 +318,42 @@ router.post(
 router.delete(
   '/wallets/:walletId',
   apiKeyAuthMiddleware,
+  idempotencyMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
     const { walletId } = req.params;
     const { reason } = req.body;
 
-    const wallet = await closeWallet(
-      walletId,
-      req.tenantId!,
-      req.isSandbox || false,
-      reason || 'Closed via API DELETE request'
-    );
+    const wallet = await prisma.$transaction(async (tx) => {
+      const closedWallet = await closeWallet(
+        walletId,
+        req.tenantId!,
+        req.isSandbox || false,
+        reason || 'Closed via API DELETE request'
+      );
+
+      // Create a dummy / closing transaction entry to satisfy idempotency cached response mapping
+      if (req.idempotencyKey) {
+        await tx.transaction.create({
+          data: {
+            publicId: generateTransactionPublicId(),
+            tenantId: req.tenantId!,
+            walletId: closedWallet.id,
+            type: 'debit',
+            amount: 0,
+            currency: closedWallet.currency,
+            balanceBefore: 0,
+            balanceAfter: 0,
+            idempotencyKey: req.idempotencyKey,
+            metadata: {
+              description: 'Wallet closed idempotency record',
+              requestFingerprint: req.requestFingerprint,
+            },
+          },
+        });
+      }
+
+      return closedWallet;
+    });
 
     res.json({
       wallet_id: walletId,

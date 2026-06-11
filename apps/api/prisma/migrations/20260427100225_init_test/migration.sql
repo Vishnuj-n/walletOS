@@ -2,7 +2,7 @@
 CREATE TYPE "KeyScope" AS ENUM ('read_only', 'read_write', 'admin');
 
 -- CreateEnum
-CREATE TYPE "AdminRole" AS ENUM ('support', 'finance', 'superadmin');
+CREATE TYPE "AdminRole" AS ENUM ('support', 'finance', 'tenant_admin', 'superadmin');
 
 -- CreateEnum
 CREATE TYPE "WalletStatus" AS ENUM ('active', 'frozen', 'pending_closure', 'closed');
@@ -108,6 +108,7 @@ CREATE TABLE "Webhook" (
     "lastAttempt" TIMESTAMP(3),
     "failureCount" INTEGER NOT NULL DEFAULT 0,
     "status" TEXT NOT NULL DEFAULT 'active',
+    "idempotencyKey" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

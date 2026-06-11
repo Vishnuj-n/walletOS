@@ -9,9 +9,8 @@ import {
   closeWallet,
   freezeWallet,
   unfreezeWallet,
-  type Wallet,
-  type CreateWalletRequest,
 } from '../../../services/walletService';
+import type { Wallet, CreateWalletRequest } from '@walletos/types';
 import { Plus, Search, Wallet as WalletIcon } from 'lucide-react';
 
 export default function WalletsPage() {

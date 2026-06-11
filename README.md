@@ -82,7 +82,7 @@ Open three terminals from the repo root:
 
 ```bash
 # Terminal 1 — API (loads .env)
-npx dotenv-cli -e .env -- npx nx run @walletOS/api:serve
+npx nx serve api
 
 # Terminal 2 — User UI (loads .env.local)
 npx nx run web:serve
@@ -195,7 +195,7 @@ cd apps/api && npx prisma migrate dev --name <migration-name>
 
 **Development mode** (loads `.env`):
 ```bash
-npx dotenv-cli -e .env -- nx serve api
+npx nx serve api
 ```
 
 **Production mode** (uses CI/CD environment variables):
@@ -227,7 +227,7 @@ npx dotenv-cli -e ../../.env.test -- npx prisma migrate dev
 
 # 3. Run the tests (from repo root)
 cd ../..
-npx dotenv-cli -e .env.test -- npx nx test api --silent
+npx nx test api
 ```
 
 **Run tests in band (sequential execution):**

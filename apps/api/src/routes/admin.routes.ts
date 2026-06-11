@@ -9,7 +9,7 @@ import { generateAdminUserPublicId, generateTransactionPublicId } from '../lib/p
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet } from '../services/wallet.service';
 import { sendInviteEmail } from '../services/mail.service';
-import { signPayload, dispatchWebhookDelivery } from '../services/webhook.service';
+import { dispatchWebhookDelivery } from '../services/webhook.service';
 import { z } from 'zod';
 
 const router = Router();
@@ -59,6 +59,7 @@ const tenantScopeSchema = z.object({
 
 const adminApiKeyRotationRequestSchema = z.object({
   scope: z.enum(['live', 'test']),
+  keyScope: z.enum(['read_only', 'read_write', 'admin']).optional().default('admin'),
 });
 
 type AdminApiKeyRotationResponse = {
@@ -118,8 +119,8 @@ function parseDateFilter(value: string, parameterName: 'from' | 'to'): Date {
   return parsedDate;
 }
 
-function getAdminApiKeyRotationCacheKey(tenantId: string, scope: 'live' | 'test', auditAction: string, idempotencyKey: string): string {
-  return `${tenantId}:${scope}:${auditAction}:${idempotencyKey}`;
+function getAdminApiKeyRotationCacheKey(tenantId: string, scope: 'live' | 'test', keyScope: string, auditAction: string, idempotencyKey: string): string {
+  return `${tenantId}:${scope}:${keyScope}:${auditAction}:${idempotencyKey}`;
 }
 
 function getCachedAdminApiKeyRotationResponse(cacheKey: string): AdminApiKeyRotationResponse | undefined {
@@ -146,6 +147,47 @@ function cacheAdminApiKeyRotationResponse(cacheKey: string, response: AdminApiKe
 
 function redactApiKeyForAudit(apiKey: string): string {
   return `${apiKey.slice(0, 15)}...[redacted]`;
+}
+
+async function resolveEntityIdFromFilter(filter: string): Promise<string> {
+  const trimmed = filter.trim();
+  if (trimmed.startsWith('wal_')) {
+    const wallet = await prisma.wallet.findUnique({
+      where: { publicId: trimmed },
+      select: { id: true },
+    });
+    return wallet?.id ?? 'non-existent-wallet-id';
+  }
+  if (trimmed.startsWith('txn_')) {
+    const txn = await prisma.transaction.findUnique({
+      where: { publicId: trimmed },
+      select: { id: true },
+    });
+    return txn?.id ?? 'non-existent-transaction-id';
+  }
+  if (trimmed.startsWith('usr_')) {
+    const user = await prisma.adminUser.findUnique({
+      where: { publicId: trimmed },
+      select: { id: true },
+    });
+    return user?.id ?? 'non-existent-user-id';
+  }
+  return trimmed;
+}
+
+async function resolveActorIdFromFilter(filter: string): Promise<string> {
+  const trimmed = filter.trim();
+  if (trimmed.includes('@')) {
+    return trimmed.toLowerCase();
+  }
+  if (trimmed.startsWith('usr_')) {
+    const user = await prisma.adminUser.findUnique({
+      where: { publicId: trimmed },
+      select: { email: true },
+    });
+    return user?.email ?? 'non-existent-actor-email';
+  }
+  return trimmed;
 }
 
 async function resolveAdminTenantScope(
@@ -202,6 +244,7 @@ async function getAdminEmailsByRole(
 async function rotateAdminApiKeyForTenant(params: {
   tenantId: string;
   scope: 'live' | 'test';
+  keyScope?: 'read_only' | 'read_write' | 'admin';
   adminEmail: string;
   adminRole: string;
   idempotencyKey: string;
@@ -212,10 +255,10 @@ async function rotateAdminApiKeyForTenant(params: {
   cachedResponse: AdminApiKeyRotationResponse;
   status: number;
 }> {
-  const { tenantId, scope, adminEmail, adminRole, idempotencyKey, auditAction, isAuditSandbox } = params;
+  const { tenantId, scope, adminEmail, adminRole, idempotencyKey, auditAction, isAuditSandbox, keyScope = 'admin' } = params;
   const idempotencyWindowStart = new Date(Date.now() - ADMIN_API_KEY_ROTATION_IDEMPOTENCY_WINDOW_MS);
   const isSandbox = scope === 'test';
-  const cacheKey = getAdminApiKeyRotationCacheKey(tenantId, scope, auditAction, idempotencyKey);
+  const cacheKey = getAdminApiKeyRotationCacheKey(tenantId, scope, keyScope, auditAction, idempotencyKey);
 
   const cachedResponse = getCachedAdminApiKeyRotationResponse(cacheKey);
   if (cachedResponse) {
@@ -286,8 +329,8 @@ async function rotateAdminApiKeyForTenant(params: {
     const deactivatedKeys = await tx.apiKey.updateMany({
       where: {
         tenantId,
-        scope: 'admin',
         isSandbox,
+        isActive: true,
       },
       data: {
         isActive: false,
@@ -299,8 +342,9 @@ async function rotateAdminApiKeyForTenant(params: {
         tenantId,
         keyHash: newKeyHash,
         prefix: newKey.substring(0, 15),
-        scope: 'admin',
+        scope: keyScope,
         isSandbox,
+        name: isSandbox ? 'Default Sandbox Key' : 'Default Live Key',
       },
     });
 
@@ -321,6 +365,7 @@ async function rotateAdminApiKeyForTenant(params: {
         action: auditAction,
         changes: {
           scope,
+          key_scope: keyScope,
           key_prefix: newKey.substring(0, 15),
           rotated_by: adminEmail,
           idempotency_key: idempotencyKey,
@@ -693,7 +738,7 @@ router.get(
   '/wallets',
   requireAdminRole('support'),
   asyncHandler(async (req, res) => {
-    const { status, currency, search, limit = 20, after } = req.query;
+    const { status, currency, search, public_id, external_user_id, label, limit = 20, after } = req.query;
     const parsedTenantScope = tenantScopeSchema.safeParse(req.query);
     if (!parsedTenantScope.success) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid tenant scope');
@@ -714,13 +759,30 @@ router.get(
       }
     }
     if (currency) where.currency = Array.isArray(currency) ? currency[0] : currency;
+
+    if (public_id) {
+      where.publicId = getQueryString(public_id);
+    }
+    if (external_user_id) {
+      where.externalUserId = getQueryString(external_user_id);
+    }
+    if (label) {
+      where.label = { contains: getQueryString(label), mode: 'insensitive' };
+    }
+
     if (search) {
-      where.OR = [
-        { id: { contains: search as string, mode: 'insensitive' } },
-        { publicId: { contains: search as string, mode: 'insensitive' } },
-        { externalUserId: { contains: search as string, mode: 'insensitive' } },
-        { label: { contains: search as string, mode: 'insensitive' } },
-      ];
+      const searchStr = getQueryString(search);
+      if (searchStr) {
+        if (searchStr.startsWith('wal_')) {
+          where.publicId = searchStr;
+        } else if (searchStr.startsWith('usr_') || searchStr.startsWith('user_')) {
+          where.externalUserId = searchStr;
+        } else if (searchStr.startsWith('c') && searchStr.length === 25) {
+          where.id = searchStr;
+        } else {
+          where.label = { contains: searchStr, mode: 'insensitive' };
+        }
+      }
     }
 
     const parsedLimit = Number(limit);
@@ -1503,6 +1565,7 @@ router.post(
           prefix: liveKey.substring(0, 15),
           scope: 'admin',
           isSandbox: false,
+          name: 'Default Live Key',
         },
       });
 
@@ -1514,6 +1577,7 @@ router.post(
           prefix: testKey.substring(0, 15),
           scope: 'admin',
           isSandbox: true,
+          name: 'Default Test Key',
         },
       });
 
@@ -1614,10 +1678,10 @@ router.get(
     const toFilter = getQueryString(to);
 
     if (walletIdFilter) {
-      where.entityId = { contains: walletIdFilter, mode: 'insensitive' };
+      where.entityId = await resolveEntityIdFromFilter(walletIdFilter);
     }
     if (actorFilter) {
-      where.actorId = { contains: actorFilter, mode: 'insensitive' };
+      where.actorId = await resolveActorIdFromFilter(actorFilter);
     }
     if (actionFilter) {
       where.action = { contains: actionFilter, mode: 'insensitive' };
@@ -1843,33 +1907,24 @@ router.get(
     const apiKeys = await prisma.apiKey.findMany({
       where: {
         tenantId,
-        scope: 'admin',
         isActive: true,
       },
       orderBy: [{ isSandbox: 'asc' }, { createdAt: 'desc' }],
     });
 
-    const latestKeyByEnvironment = new Map<boolean, (typeof apiKeys)[number]>();
-    for (const apiKey of apiKeys) {
-      if (!latestKeyByEnvironment.has(apiKey.isSandbox)) {
-        latestKeyByEnvironment.set(apiKey.isSandbox, apiKey);
-      }
-    }
-
     res.json({
       tenant_id: tenant.id,
       tenant_name: tenant.name,
-      keys: [false, true]
-        .map((isSandbox) => latestKeyByEnvironment.get(isSandbox))
-        .filter((apiKey): apiKey is NonNullable<typeof apiKey> => Boolean(apiKey))
-          .map((apiKey) => ({
-          key_id: apiKey.id,
-          scope: apiKey.isSandbox ? 'test' : 'live',
-          prefix: apiKey.prefix,
-          created_at: apiKey.createdAt.toISOString(),
-          last_used_at: null,
-          is_active: apiKey.isActive,
-        })),
+      keys: apiKeys.map((apiKey) => ({
+        key_id: apiKey.id,
+        scope: apiKey.isSandbox ? 'test' : 'live',
+        keyScope: apiKey.scope,
+        prefix: apiKey.prefix,
+        created_at: apiKey.createdAt.toISOString(),
+        last_used_at: null,
+        is_active: apiKey.isActive,
+        name: apiKey.name ?? (apiKey.isSandbox ? 'Default Sandbox Key' : 'Default Live Key'),
+      })),
     });
   })
 );
@@ -1951,13 +2006,14 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'scope must be "live" or "test"');
     }
 
-    const { scope } = parsedBody.data;
+    const { scope, keyScope } = parsedBody.data;
     const tenantId = req.adminUser!.tenantId;
     const adminEmail = req.adminUser!.email;
 
     const result = await rotateAdminApiKeyForTenant({
       tenantId,
       scope,
+      keyScope,
       adminEmail,
       adminRole: req.adminUser!.role,
       idempotencyKey: getValidatedIdempotencyKey(req.headers['idempotency-key']),
@@ -1971,6 +2027,257 @@ router.post(
       tenant_id: tenantId,
       created_at: result.cachedResponse.created_at,
     });
+  })
+);
+
+const createApiKeySchema = z.object({
+  name: z.string().min(1).max(255),
+  isSandbox: z.boolean(),
+  keyScope: z.enum(['read_only', 'read_write', 'admin']),
+});
+
+const createApiKeyResponseCache = new Map<
+  string,
+  { response: any; expiresAt: number }
+>();
+
+function getCreateApiKeyCacheKey(tenantId: string, name: string, isSandbox: boolean, keyScope: string, idempotencyKey: string): string {
+  return `${tenantId}:${name}:${isSandbox}:${keyScope}:${idempotencyKey}`;
+}
+
+/**
+ * POST /admin/account/api-keys
+ * Create a new API Key for the current tenant
+ */
+router.post(
+  '/account/api-keys',
+  requireAdminRole('tenant_admin'),
+  asyncHandler(async (req, res) => {
+    const parsedBody = createApiKeySchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid request body parameters');
+    }
+
+    const { name, isSandbox, keyScope } = parsedBody.data;
+    const tenantId = req.adminUser!.tenantId;
+    const adminEmail = req.adminUser!.email;
+    const idempotencyKey = getValidatedIdempotencyKey(req.headers['idempotency-key']);
+
+    const cacheKey = getCreateApiKeyCacheKey(tenantId, name, isSandbox, keyScope, idempotencyKey);
+    const cachedEntry = createApiKeyResponseCache.get(cacheKey);
+
+    if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
+      return res.status(201).json(cachedEntry.response);
+    }
+
+    const idempotencyWindowStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${tenantId}:${idempotencyKey}:tenant.key_created`}));`;
+
+      const cachedAudit = await tx.auditLog.findFirst({
+        where: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.key_created',
+          timestamp: {
+            gte: idempotencyWindowStart,
+          },
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+        orderBy: {
+          timestamp: 'desc',
+        },
+      });
+
+      if (cachedAudit) {
+        const cachedChanges = (cachedAudit.changes as Record<string, any> | null) ?? {};
+        const cachedResponse = cachedChanges.response;
+
+        if (cachedResponse) {
+          if (!cachedResponse.api_key.includes('[redacted]')) {
+            createApiKeyResponseCache.set(cacheKey, {
+              response: cachedResponse,
+              expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+            });
+            return {
+              response: cachedResponse,
+              status: 201,
+            };
+          }
+          throw new AppError(
+            500,
+            ErrorCode.INTERNAL_ERROR,
+            'Raw API key unavailable from audit logs; creation cannot be safely recovered'
+          );
+        }
+      }
+
+      const scope = isSandbox ? 'test' : 'live';
+      const plainKey = `wlt_${scope}_${randomBytes(24).toString('hex')}`;
+      const keyHash = createHash('sha256').update(plainKey).digest('hex');
+
+      const apiKey = await tx.apiKey.create({
+        data: {
+          tenantId,
+          keyHash,
+          prefix: plainKey.substring(0, 15),
+          scope: keyScope,
+          isSandbox,
+          name,
+        },
+      });
+
+      const response = {
+        api_key: plainKey,
+        scope,
+        keyScope,
+        tenant_id: tenantId,
+        created_at: apiKey.createdAt.toISOString(),
+        name,
+      };
+
+      createApiKeyResponseCache.set(cacheKey, {
+        response,
+        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+      });
+
+      await tx.auditLog.create({
+        data: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.key_created',
+          changes: {
+            name,
+            is_sandbox: isSandbox,
+            key_scope: keyScope,
+            key_prefix: plainKey.substring(0, 15),
+            created_by: adminEmail,
+            idempotency_key: idempotencyKey,
+            response: {
+              api_key: redactApiKeyForAudit(plainKey),
+              scope,
+              keyScope,
+              tenant_id: tenantId,
+              created_at: apiKey.createdAt.toISOString(),
+              name,
+            },
+            response_status: 201,
+          },
+          actorId: adminEmail,
+          actorType: 'admin',
+          actorRole: req.adminUser!.role,
+          isSandbox: req.isSandbox || false,
+        },
+      });
+
+      return {
+        response,
+        status: 201,
+      };
+    });
+
+    res.status(result.status).json(result.response);
+  })
+);
+
+/**
+ * POST /admin/account/api-keys/:keyId/revoke
+ * Revoke an API Key for the current tenant
+ */
+router.post(
+  '/account/api-keys/:keyId/revoke',
+  requireAdminRole('tenant_admin'),
+  asyncHandler(async (req, res) => {
+    const { keyId } = req.params;
+    const tenantId = req.adminUser!.tenantId;
+    const adminEmail = req.adminUser!.email;
+    const idempotencyKey = getValidatedIdempotencyKey(req.headers['idempotency-key']);
+
+    const idempotencyWindowStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${tenantId}:${idempotencyKey}:tenant.key_revoked`}));`;
+
+      const cachedAudit = await tx.auditLog.findFirst({
+        where: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.key_revoked',
+          timestamp: {
+            gte: idempotencyWindowStart,
+          },
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+        orderBy: {
+          timestamp: 'desc',
+        },
+      });
+
+      if (cachedAudit) {
+        const cachedChanges = (cachedAudit.changes as Record<string, any> | null) ?? {};
+        return {
+          response: cachedChanges.response || { success: true, key_id: keyId },
+          status: 200,
+        };
+      }
+
+      const apiKeyRecord = await tx.apiKey.findFirst({
+        where: {
+          id: keyId,
+          tenantId,
+          isActive: true,
+        },
+      });
+
+      if (!apiKeyRecord) {
+        throw new AppError(404, ErrorCode.NOT_FOUND, 'API Key not found or already inactive');
+      }
+
+      await tx.apiKey.update({
+        where: { id: keyId },
+        data: { isActive: false },
+      });
+
+      const response = { success: true, key_id: keyId };
+
+      await tx.auditLog.create({
+        data: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.key_revoked',
+          changes: {
+            key_id: keyId,
+            key_prefix: apiKeyRecord.prefix,
+            revoked_by: adminEmail,
+            idempotency_key: idempotencyKey,
+            response,
+            response_status: 200,
+          },
+          actorId: adminEmail,
+          actorType: 'admin',
+          actorRole: req.adminUser!.role,
+          isSandbox: req.isSandbox || false,
+        },
+      });
+
+      return {
+        response,
+        status: 200,
+      };
+    });
+
+    res.status(result.status).json(result.response);
   })
 );
 
@@ -2274,6 +2581,249 @@ router.post(
   })
 );
 
+/**
+ * GET /admin/tenants/:tenantId/api-keys
+ * Retrieve all active API keys for a tenant (superadmin only)
+ */
+router.get(
+  '/tenants/:tenantId/api-keys',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const { tenantId } = req.params;
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true, name: true },
+    });
+
+    if (!tenant) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
+    }
+
+    const apiKeys = await prisma.apiKey.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+      },
+      orderBy: [{ isSandbox: 'asc' }, { createdAt: 'desc' }],
+    });
+
+    res.json({
+      tenant_id: tenant.id,
+      tenant_name: tenant.name,
+      keys: apiKeys.map((apiKey) => ({
+        key_id: apiKey.id,
+        scope: apiKey.isSandbox ? 'test' : 'live',
+        keyScope: apiKey.scope,
+        prefix: apiKey.prefix,
+        created_at: apiKey.createdAt.toISOString(),
+        last_used_at: null,
+        is_active: apiKey.isActive,
+        name: apiKey.name ?? (apiKey.isSandbox ? 'Default Sandbox Key' : 'Default Live Key'),
+      })),
+    });
+  })
+);
+
+/**
+ * POST /admin/tenants/:tenantId/api-keys/:keyId/revoke
+ * Revoke an individual API key for a tenant (superadmin only)
+ */
+router.post(
+  '/tenants/:tenantId/api-keys/:keyId/revoke',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const { tenantId, keyId } = req.params;
+    const adminEmail = req.adminUser!.email;
+    const idempotencyKey = getValidatedIdempotencyKey(req.headers['idempotency-key']);
+
+    const idempotencyWindowStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${tenantId}:${idempotencyKey}:tenant.key_revoked_by_superadmin`}));`;
+
+      const cachedAudit = await tx.auditLog.findFirst({
+        where: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.key_revoked_by_superadmin',
+          timestamp: {
+            gte: idempotencyWindowStart,
+          },
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+        orderBy: {
+          timestamp: 'desc',
+        },
+      });
+
+      if (cachedAudit) {
+        const cachedChanges = (cachedAudit.changes as Record<string, any> | null) ?? {};
+        return {
+          response: cachedChanges.response || { success: true, key_id: keyId },
+          status: 200,
+        };
+      }
+
+      const apiKeyRecord = await tx.apiKey.findFirst({
+        where: {
+          id: keyId,
+          tenantId,
+          isActive: true,
+        },
+      });
+
+      if (!apiKeyRecord) {
+        throw new AppError(404, ErrorCode.NOT_FOUND, 'API Key not found or already inactive');
+      }
+
+      await tx.apiKey.update({
+        where: { id: keyId },
+        data: { isActive: false },
+      });
+
+      const response = { success: true, key_id: keyId };
+
+      await tx.auditLog.create({
+        data: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.key_revoked_by_superadmin',
+          changes: {
+            key_id: keyId,
+            key_prefix: apiKeyRecord.prefix,
+            revoked_by: adminEmail,
+            idempotency_key: idempotencyKey,
+            response,
+            response_status: 200,
+          },
+          actorId: adminEmail,
+          actorType: 'admin',
+          actorRole: req.adminUser!.role,
+          isSandbox: req.isSandbox || false,
+        },
+      });
+
+      return {
+        response,
+        status: 200,
+      };
+    });
+
+    res.status(result.status).json(result.response);
+  })
+);
+
+/**
+ * POST /admin/tenants/:tenantId/emergency-revoke
+ * Revoke all active API keys for a tenant (superadmin only)
+ */
+router.post(
+  '/tenants/:tenantId/emergency-revoke',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const { tenantId } = req.params;
+    const adminEmail = req.adminUser!.email;
+    const idempotencyKey = getValidatedIdempotencyKey(req.headers['idempotency-key']);
+
+    const idempotencyWindowStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
+
+    if (!tenant) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${tenantId}:${idempotencyKey}:tenant.emergency_revoked`}));`;
+
+      const cachedAudit = await tx.auditLog.findFirst({
+        where: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.emergency_revoked',
+          timestamp: {
+            gte: idempotencyWindowStart,
+          },
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+        orderBy: {
+          timestamp: 'desc',
+        },
+      });
+
+      if (cachedAudit) {
+        const cachedChanges = (cachedAudit.changes as Record<string, any> | null) ?? {};
+        const cachedResponse = cachedChanges.response as
+          | { tenant_id: string; keys_deactivated: number }
+          | undefined;
+
+        if (cachedResponse) {
+          return {
+            deactivatedKeys: { count: cachedResponse.keys_deactivated },
+            cachedResponse,
+            status: (cachedChanges.response_status as number) || 200,
+          };
+        }
+      }
+
+      const deactivatedKeys = await tx.apiKey.updateMany({
+        where: {
+          tenantId,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+        },
+      });
+
+      const response = {
+        tenant_id: tenantId,
+        keys_deactivated: deactivatedKeys.count,
+      };
+
+      await tx.auditLog.create({
+        data: {
+          tenantId,
+          entityType: 'tenant',
+          entityId: tenantId,
+          action: 'tenant.emergency_revoked',
+          changes: {
+            keys_deactivated: deactivatedKeys.count,
+            revoked_by: adminEmail,
+            idempotency_key: idempotencyKey,
+            response,
+            response_status: 200,
+          },
+          actorId: adminEmail,
+          actorType: 'admin',
+          actorRole: req.adminUser!.role,
+          isSandbox: req.isSandbox || false,
+        },
+      });
+
+      return {
+        deactivatedKeys,
+        cachedResponse: response,
+        status: 200,
+      };
+    });
+
+    res.status(result.status).json(result.cachedResponse);
+  })
+);
+
 // ==================== AUDIT LOG ENHANCEMENTS (SUPERADMIN ONLY) ====================
 
 /**
@@ -2298,7 +2848,7 @@ router.get(
     const toFilter = getQueryString(to);
 
     if (requestedAdminEmail) {
-      where.actorId = { contains: requestedAdminEmail, mode: 'insensitive' };
+      where.actorId = await resolveActorIdFromFilter(requestedAdminEmail);
     }
 
     if (actionTypeFilter) {
@@ -2482,7 +3032,7 @@ router.get(
       wallets = await prisma.wallet.findMany({
         where: {
           isSandbox: req.isSandbox,
-          publicId: { equals: query, mode: 'insensitive' },
+          publicId: { contains: query, mode: 'insensitive' },
         },
         select: {
           publicId: true,
@@ -2498,7 +3048,7 @@ router.get(
       transactions = await prisma.transaction.findMany({
         where: {
           wallet: { isSandbox: req.isSandbox },
-          publicId: { equals: query, mode: 'insensitive' },
+          publicId: { contains: query, mode: 'insensitive' },
         },
         select: {
           publicId: true,
@@ -2521,7 +3071,7 @@ router.get(
       requests = await prisma.transaction.findMany({
         where: {
           wallet: { isSandbox: req.isSandbox },
-          referenceId: { equals: query, mode: 'insensitive' },
+          referenceId: { contains: query, mode: 'insensitive' },
         },
         select: {
           publicId: true,
@@ -2540,7 +3090,7 @@ router.get(
       users = await prisma.adminUser.findMany({
         where: {
           isActive: true,
-          publicId: { equals: query, mode: 'insensitive' },
+          publicId: { contains: query, mode: 'insensitive' },
         },
         select: {
           publicId: true,
@@ -2908,42 +3458,73 @@ const webhookCreateSchema = z.object({
 });
 
 /**
- * POST /admin/webhooks
+ * POST /webhooks
  * Create a new webhook endpoint for the admin's tenant
  */
 router.post(
-  '/admin/webhooks',
-  adminAuthMiddleware,
+  '/webhooks',
   requireAdminRole(['tenant_admin', 'superadmin'] as const),
   asyncHandler(async (req, res) => {
+    const idempotencyKey = req.header('Idempotency-Key');
+    if (!idempotencyKey) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key header is required');
+    }
+
     const parsed = webhookCreateSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, parsed.error.issues[0].message);
     }
     const { url, events } = parsed.data;
-    const secret = randomBytes(32).toString('hex');
 
-    const webhook = await prisma.webhook.create({
-      data: {
+    // Check for existing webhook created with the same idempotency key in the last 30 days
+    const existingWebhook = await prisma.webhook.findFirst({
+      where: {
         tenantId: req.adminUser!.tenantId,
-        url,
-        events,
-        secret,
+        idempotencyKey,
+        createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        tenantId: req.adminUser!.tenantId,
-        entityType: 'Webhook',
-        entityId: webhook.id,
-        action: 'webhook.created',
-        changes: { url, events },
-        actorId: req.adminUser!.id,
-        actorType: 'admin',
-        actorRole: req.adminUser!.role,
-        isSandbox: false,
-      },
+    if (existingWebhook) {
+      return res.status(200).json({
+        id: existingWebhook.id,
+        url: existingWebhook.url,
+        events: existingWebhook.events,
+        secret: existingWebhook.secret,
+        status: existingWebhook.status,
+        is_active: existingWebhook.isActive,
+        created_at: existingWebhook.createdAt.toISOString(),
+      });
+    }
+
+    const secret = randomBytes(32).toString('hex');
+
+    const webhook = await prisma.$transaction(async (tx) => {
+      const created = await tx.webhook.create({
+        data: {
+          tenantId: req.adminUser!.tenantId,
+          url,
+          events,
+          secret,
+          idempotencyKey,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          tenantId: req.adminUser!.tenantId,
+          entityType: 'Webhook',
+          entityId: created.id,
+          action: 'webhook.created',
+          changes: { url, events },
+          actorId: req.adminUser!.id,
+          actorType: 'admin',
+          actorRole: req.adminUser!.role,
+          isSandbox: false,
+        },
+      });
+
+      return created;
     });
 
     res.status(201).json({
@@ -2959,12 +3540,11 @@ router.post(
 );
 
 /**
- * GET /admin/webhooks
+ * GET /webhooks
  * List all webhooks for the admin's tenant
  */
 router.get(
-  '/admin/webhooks',
-  adminAuthMiddleware,
+  '/webhooks',
   asyncHandler(async (req, res) => {
     const webhooks = await prisma.webhook.findMany({
       where: { tenantId: req.adminUser!.tenantId },
@@ -2991,12 +3571,11 @@ router.get(
 );
 
 /**
- * DELETE /admin/webhooks/:webhookId
+ * DELETE /webhooks/:webhookId
  * Deactivate (soft-delete) a webhook
  */
 router.delete(
-  '/admin/webhooks/:webhookId',
-  adminAuthMiddleware,
+  '/webhooks/:webhookId',
   requireAdminRole(['tenant_admin', 'superadmin'] as const),
   asyncHandler(async (req, res) => {
     const { webhookId } = req.params;
@@ -3032,12 +3611,11 @@ router.delete(
 );
 
 /**
- * POST /admin/webhooks/:webhookId/test
+ * POST /webhooks/:webhookId/test
  * Send a test ping payload to the webhook endpoint
  */
 router.post(
-  '/admin/webhooks/:webhookId/test',
-  adminAuthMiddleware,
+  '/webhooks/:webhookId/test',
   requireAdminRole(['tenant_admin', 'superadmin'] as const),
   asyncHandler(async (req, res) => {
     const { webhookId } = req.params;
@@ -3078,12 +3656,11 @@ const tenantConfigUpdateSchema = z.object({
 });
 
 /**
- * GET /admin/tenant-config
+ * GET /tenant-config
  * Retrieve the tenant configuration (creates default if none exists)
  */
 router.get(
-  '/admin/tenant-config',
-  adminAuthMiddleware,
+  '/tenant-config',
   asyncHandler(async (req, res) => {
     const config = await prisma.tenantConfig.upsert({
       where: { tenantId: req.adminUser!.tenantId },
@@ -3102,12 +3679,11 @@ router.get(
 );
 
 /**
- * PUT /admin/tenant-config
+ * PUT /tenant-config
  * Update tenant configuration settings
  */
 router.put(
-  '/admin/tenant-config',
-  adminAuthMiddleware,
+  '/tenant-config',
   requireAdminRole(['tenant_admin', 'superadmin'] as const),
   asyncHandler(async (req, res) => {
     const parsed = tenantConfigUpdateSchema.safeParse(req.body);
@@ -3152,12 +3728,11 @@ router.put(
 // ─── Reporting & Exports ──────────────────────────────────────────────────────
 
 /**
- * GET /admin/audit-logs/export
+ * GET /audit-logs/export
  * Export audit logs as CSV for the requesting tenant
  */
 router.get(
-  '/admin/audit-logs/export',
-  adminAuthMiddleware,
+  '/audit-logs/export',
   requireAdminRole(['finance', 'tenant_admin', 'superadmin'] as const),
   asyncHandler(async (req, res) => {
     const { from, to, entity_type } = req.query as Record<string, string>;
@@ -3167,8 +3742,8 @@ router.get(
     };
     if (from || to) {
       where.timestamp = {};
-      if (from) where.timestamp.gte = new Date(from);
-      if (to) where.timestamp.lte = new Date(to);
+      if (from) where.timestamp.gte = parseDateFilter(from, 'from');
+      if (to) where.timestamp.lte = parseDateFilter(to, 'to');
     }
     if (entity_type) where.entityType = entity_type;
 
@@ -3205,61 +3780,70 @@ router.get(
 );
 
 /**
- * GET /admin/reporting/transactions
+ * GET /reporting/transactions
  * Returns aggregated transaction metrics (volume, count, net) grouped by day
  */
 router.get(
-  '/admin/reporting/transactions',
-  adminAuthMiddleware,
+  '/reporting/transactions',
   requireAdminRole(['finance', 'tenant_admin', 'superadmin'] as const),
   asyncHandler(async (req, res) => {
     const { from, to, is_sandbox } = req.query as Record<string, string>;
 
-    const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const toDate = to ? new Date(to) : new Date();
+    const fromDate = from ? parseDateFilter(from, 'from') : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const toDate = to ? parseDateFilter(to, 'to') : new Date();
     const sandboxFilter = is_sandbox === 'true';
 
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        tenantId: req.adminUser!.tenantId,
-        createdAt: { gte: fromDate, lte: toDate },
-        wallet: { isSandbox: sandboxFilter },
-      },
-      select: {
-        type: true,
-        amount: true,
-        currency: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    // DB-side grouped aggregation to avoid OOM
+    const result: Array<{
+      day: Date;
+      type: 'credit' | 'debit' | 'reversal';
+      amount_sum: Prisma.Decimal | null;
+      cnt: bigint;
+    }> = await prisma.$queryRaw`
+      SELECT 
+        DATE_TRUNC('day', t."createdAt") AS day,
+        t.type,
+        SUM(t.amount) AS amount_sum,
+        COUNT(*)::bigint AS cnt
+      FROM "Transaction" t
+      INNER JOIN "Wallet" w ON t."walletId" = w.id
+      WHERE t."tenantId" = ${req.adminUser!.tenantId}
+        AND t."createdAt" >= ${fromDate}
+        AND t."createdAt" <= ${toDate}
+        AND w."isSandbox" = ${sandboxFilter}
+      GROUP BY DATE_TRUNC('day', t."createdAt"), t.type
+      ORDER BY day ASC;
+    `;
 
-    // Aggregate by day
+    // Aggregate results for the daily output format
     const byDay: Record<string, { date: string; credits: string; debits: string; reversals: string; net: string; count: number }> = {};
     let totalCredits = new Decimal(0);
     let totalDebits = new Decimal(0);
     let totalReversals = new Decimal(0);
+    let totalCount = 0;
 
-    for (const tx of transactions) {
-      const day = tx.createdAt.toISOString().split('T')[0];
+    for (const row of result) {
+      const day = row.day.toISOString().split('T')[0];
       if (!byDay[day]) {
         byDay[day] = { date: day, credits: '0', debits: '0', reversals: '0', net: '0', count: 0 };
       }
-      const amount = new Decimal(tx.amount.toString());
-      byDay[day].count++;
+      const sum = new Decimal(row.amount_sum ? row.amount_sum.toString() : '0');
+      const count = Number(row.cnt);
+      byDay[day].count += count;
+      totalCount += count;
 
-      if (tx.type === 'credit') {
+      if (row.type === 'credit') {
         const prev = new Decimal(byDay[day].credits);
-        byDay[day].credits = prev.add(amount).toFixed(4);
-        totalCredits = totalCredits.add(amount);
-      } else if (tx.type === 'debit') {
+        byDay[day].credits = prev.add(sum).toFixed(4);
+        totalCredits = totalCredits.add(sum);
+      } else if (row.type === 'debit') {
         const prev = new Decimal(byDay[day].debits);
-        byDay[day].debits = prev.add(amount).toFixed(4);
-        totalDebits = totalDebits.add(amount);
-      } else if (tx.type === 'reversal') {
+        byDay[day].debits = prev.add(sum).toFixed(4);
+        totalDebits = totalDebits.add(sum);
+      } else if (row.type === 'reversal') {
         const prev = new Decimal(byDay[day].reversals);
-        byDay[day].reversals = prev.add(amount).toFixed(4);
-        totalReversals = totalReversals.add(amount);
+        byDay[day].reversals = prev.add(sum).toFixed(4);
+        totalReversals = totalReversals.add(sum);
       }
 
       const net = new Decimal(byDay[day].credits).sub(new Decimal(byDay[day].debits));
@@ -3275,7 +3859,7 @@ router.get(
         total_debits: totalDebits.toFixed(4),
         total_reversals: totalReversals.toFixed(4),
         net_change: totalCredits.sub(totalDebits).toFixed(4),
-        transaction_count: transactions.length,
+        transaction_count: totalCount,
       },
       daily: Object.values(byDay),
     });

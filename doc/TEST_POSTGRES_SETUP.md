@@ -3,9 +3,8 @@
 This document explains how to spin up the local PostgreSQL container used for WalletOS test suite.
 
 ## Docker Compose File
-Create a `docker-compose.yml` in the repository root (same level as `package.json`):
+The repository already includes a `docker-compose.yml` in the repository root (same level as `package.json`):
 ```yaml
-version: "3.9"
 services:
   test-db:
     image: postgres:15-alpine
@@ -43,9 +42,9 @@ npx dotenv-cli -e ../../.env.test -- npx prisma migrate dev
 ```
 
 ## Running Tests
-Once migrations are applied, the test suite automatically picks up `.env.test` via `dotenv-cli`. From the repo root, execute:
+Once migrations are applied, the test suite automatically picks up `.env.test`. From the repo root, execute:
 ```bash
-npx dotenv-cli -e .env.test -- npx nx test api
+ npx nx test api
 ```
 
 ## Stopping the Container
