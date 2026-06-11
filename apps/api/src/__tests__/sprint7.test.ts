@@ -142,39 +142,43 @@ describe('Sprint 7: Transfer, Close, Webhooks, Config, Reporting', () => {
     it('should close a wallet with zero balance via DELETE', async () => {
       // DELETE requires admin scope
       const { tenant, wallet } = await createTestSetup('delete_wallet_user');
-      const adminKey = await createTestApiKey(tenant.id, 'admin');
+      try {
+        const adminKey = await createTestApiKey(tenant.id, 'admin');
 
-      const res = await request(app)
-        .delete(`/api/v1/wallets/${wallet.id}`)
-        .set('x-api-key', adminKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_delete_wallet_zero');
+        const res = await request(app)
+          .delete(`/api/v1/wallets/${wallet.id}`)
+          .set('x-api-key', adminKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_delete_wallet_zero');
 
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('status', 'closed');
-      expect(res.body).toHaveProperty('wallet_id', wallet.id);
-
-      await cleanupTestData(tenant.id);
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveProperty('status', 'closed');
+        expect(res.body).toHaveProperty('wallet_id', wallet.id);
+      } finally {
+        await cleanupTestData(tenant.id);
+      }
     });
 
     it('should reject closing wallet with non-zero balance', async () => {
       const { tenant, wallet } = await createTestSetup('delete_wallet_nonzero_user');
-      const adminKey = await createTestApiKey(tenant.id, 'admin');
-      // Use read_write key to credit (admin key can do everything too, but let's use it directly)
-      await request(app)
-        .post('/api/v1/transactions/credit')
-        .set('x-api-key', adminKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_credit_delete_test')
-        .send({ wallet_id: wallet.id, amount: 100, description: 'Block delete' });
+      try {
+        const adminKey = await createTestApiKey(tenant.id, 'admin');
+        // Use read_write key to credit (admin key can do everything too, but let's use it directly)
+        await request(app)
+          .post('/api/v1/transactions/credit')
+          .set('x-api-key', adminKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_credit_delete_test')
+          .send({ wallet_id: wallet.id, amount: 100, description: 'Block delete' });
 
-      const res = await request(app)
-        .delete(`/api/v1/wallets/${wallet.id}`)
-        .set('x-api-key', adminKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_delete_wallet_nonzero');
+        const res = await request(app)
+          .delete(`/api/v1/wallets/${wallet.id}`)
+          .set('x-api-key', adminKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_delete_wallet_nonzero');
 
-      expect(res.status).toBe(422);
-      expect(res.body.error).toHaveProperty('code', 'WALLET_BALANCE_NOT_ZERO');
-
-      await cleanupTestData(tenant.id);
+        expect(res.status).toBe(422);
+        expect(res.body.error).toHaveProperty('code', 'WALLET_BALANCE_NOT_ZERO');
+      } finally {
+        await cleanupTestData(tenant.id);
+      }
     });
   });
 
@@ -183,43 +187,47 @@ describe('Sprint 7: Transfer, Close, Webhooks, Config, Reporting', () => {
   describe('API Key Scope Enforcement', () => {
     it('should allow read_only key to GET but block POST', async () => {
       const { tenant, wallet } = await createTestSetup('scope_user_ro');
-      const readOnlyKey = await createTestApiKey(tenant.id, 'read_only');
+      try {
+        const readOnlyKey = await createTestApiKey(tenant.id, 'read_only');
 
-      const getRes = await request(app)
-        .get(`/api/v1/wallets/${wallet.id}`)
-        .set('x-api-key', readOnlyKey.plainKey);
-      expect(getRes.status).toBe(200);
+        const getRes = await request(app)
+          .get(`/api/v1/wallets/${wallet.id}`)
+          .set('x-api-key', readOnlyKey.plainKey);
+        expect(getRes.status).toBe(200);
 
-      const postRes = await request(app)
-        .post('/api/v1/wallets')
-        .set('x-api-key', readOnlyKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_scope_ro_create')
-        .send({ external_user_id: 'blocked_user', currency: 'INR' });
-      expect(postRes.status).toBe(403);
-      expect(postRes.body.error).toHaveProperty('code', 'FORBIDDEN');
-
-      await cleanupTestData(tenant.id);
+        const postRes = await request(app)
+          .post('/api/v1/wallets')
+          .set('x-api-key', readOnlyKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_scope_ro_create')
+          .send({ external_user_id: 'blocked_user', currency: 'INR' });
+        expect(postRes.status).toBe(403);
+        expect(postRes.body.error).toHaveProperty('code', 'FORBIDDEN');
+      } finally {
+        await cleanupTestData(tenant.id);
+      }
     });
 
     it('should allow read_write key to POST but block DELETE', async () => {
       const { tenant, wallet } = await createTestSetup('scope_user_rw');
-      const rwKey = await createTestApiKey(tenant.id, 'read_write');
+      try {
+        const rwKey = await createTestApiKey(tenant.id, 'read_write');
 
-      const createRes = await request(app)
-        .post('/api/v1/wallets')
-        .set('x-api-key', rwKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_scope_rw_create')
-        .send({ external_user_id: 'rw_new_user', currency: 'INR' });
-      expect(createRes.status).toBe(201);
+        const createRes = await request(app)
+          .post('/api/v1/wallets')
+          .set('x-api-key', rwKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_scope_rw_create')
+          .send({ external_user_id: 'rw_new_user', currency: 'INR' });
+        expect(createRes.status).toBe(201);
 
-      const deleteRes = await request(app)
-        .delete(`/api/v1/wallets/${wallet.id}`)
-        .set('x-api-key', rwKey.plainKey)
-        .set('Idempotency-Key', 'sprint7_delete_wallet_forbidden');
-      expect(deleteRes.status).toBe(403);
-      expect(deleteRes.body.error).toHaveProperty('code', 'FORBIDDEN');
-
-      await cleanupTestData(tenant.id);
+        const deleteRes = await request(app)
+          .delete(`/api/v1/wallets/${wallet.id}`)
+          .set('x-api-key', rwKey.plainKey)
+          .set('Idempotency-Key', 'sprint7_delete_wallet_forbidden');
+        expect(deleteRes.status).toBe(403);
+        expect(deleteRes.body.error).toHaveProperty('code', 'FORBIDDEN');
+      } finally {
+        await cleanupTestData(tenant.id);
+      }
     });
   });
 
@@ -250,41 +258,42 @@ describe('Sprint 7: Transfer, Close, Webhooks, Config, Reporting', () => {
 
     it('should create, list, and delete a webhook', async () => {
       const { tenant } = await createTestSetup('webhook_crud_user');
-      const { adminUser, adminPlain } = await createAdminUser(tenant.id);
+      try {
+        const { adminUser, adminPlain } = await createAdminUser(tenant.id);
 
-      const token = await getAdminToken(adminUser.email, adminPlain);
-      if (!token) {
-        console.warn('Admin token is empty, skipping webhook CRUD test');
+        const token = await getAdminToken(adminUser.email, adminPlain);
+        if (!token) {
+          console.warn('Admin token is empty, skipping webhook CRUD test');
+          return;
+        }
+
+        // Create webhook
+        const createRes = await request(app)
+          .post('/api/v1/admin/webhooks')
+          .set('Authorization', `Bearer ${token}`)
+          .send({ url: 'https://example.com/webhook', events: ['wallet.credited'] });
+        expect(createRes.status).toBe(201);
+        expect(createRes.body).toHaveProperty('id');
+        expect(createRes.body).toHaveProperty('secret');
+        const webhookId = createRes.body.id;
+
+        // List webhooks
+        const listRes = await request(app)
+          .get('/api/v1/admin/webhooks')
+          .set('Authorization', `Bearer ${token}`);
+        expect(listRes.status).toBe(200);
+        expect(Array.isArray(listRes.body)).toBe(true);
+        expect(listRes.body.some((w: any) => w.id === webhookId)).toBe(true);
+
+        // Delete webhook
+        const deleteRes = await request(app)
+          .delete(`/api/v1/admin/webhooks/${webhookId}`)
+          .set('Authorization', `Bearer ${token}`);
+        expect(deleteRes.status).toBe(200);
+        expect(deleteRes.body).toHaveProperty('is_active', false);
+      } finally {
         await cleanupTestData(tenant.id);
-        return;
       }
-
-      // Create webhook
-      const createRes = await request(app)
-        .post('/api/v1/admin/webhooks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ url: 'https://example.com/webhook', events: ['wallet.credited'] });
-      expect(createRes.status).toBe(201);
-      expect(createRes.body).toHaveProperty('id');
-      expect(createRes.body).toHaveProperty('secret');
-      const webhookId = createRes.body.id;
-
-      // List webhooks
-      const listRes = await request(app)
-        .get('/api/v1/admin/webhooks')
-        .set('Authorization', `Bearer ${token}`);
-      expect(listRes.status).toBe(200);
-      expect(Array.isArray(listRes.body)).toBe(true);
-      expect(listRes.body.some((w: any) => w.id === webhookId)).toBe(true);
-
-      // Delete webhook
-      const deleteRes = await request(app)
-        .delete(`/api/v1/admin/webhooks/${webhookId}`)
-        .set('Authorization', `Bearer ${token}`);
-      expect(deleteRes.status).toBe(200);
-      expect(deleteRes.body).toHaveProperty('is_active', false);
-
-      await cleanupTestData(tenant.id);
     });
   });
 

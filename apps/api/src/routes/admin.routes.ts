@@ -780,7 +780,11 @@ router.get(
         } else if (searchStr.startsWith('c') && searchStr.length === 25) {
           where.id = searchStr;
         } else {
-          where.label = { contains: searchStr, mode: 'insensitive' };
+          where.OR = [
+            { externalUserId: { contains: searchStr, mode: 'insensitive' } },
+            { label: { contains: searchStr, mode: 'insensitive' } },
+            { publicId: { contains: searchStr, mode: 'insensitive' } },
+          ];
         }
       }
     }

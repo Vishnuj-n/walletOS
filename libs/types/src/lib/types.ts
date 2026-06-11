@@ -145,12 +145,6 @@ export const roleRank: Record<AdminRole, number> = {
   superadmin: 3,
 };
 
-/**
- * Check if user role meets minimum required role
- */
-export function hasRequiredRole(userRole: AdminRole, minRole: AdminRole): boolean {
-  return roleRank[userRole] >= roleRank[minRole];
-}
 
 /**
  * Current admin user record used by admin UI
@@ -249,15 +243,6 @@ export interface TenantUsageResponse {
   }>;
 }
 
-export interface RevokeKeyRequest {
-  scope: 'live' | 'test';
-}
-
-export interface RevokeKeyResponse {
-  tenant_id: string;
-  scope: string;
-  keys_deactivated: number;
-}
 
 export interface CreateTenantRequest {
   name: string;
