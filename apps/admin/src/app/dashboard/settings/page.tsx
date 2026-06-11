@@ -604,10 +604,43 @@ export default function SettingsPage() {
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                Active
-                              </span>
+                              {(() => {
+                                const isActive = webhook.is_active;
+                                const failureCount = webhook.failure_count ?? 0;
+                                const deliveryCount = webhook.delivery_count ?? 0;
+                                const status = webhook.status ?? 'active';
+
+                                if (!isActive) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                                      Disabled
+                                    </span>
+                                  );
+                                }
+
+                                if (failureCount > 0 || status === 'unhealthy' || status === 'failed') {
+                                  return (
+                                    <span 
+                                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold bg-rose-50 text-rose-700 border border-rose-100"
+                                      title={`Deliveries: ${deliveryCount}, Failures: ${failureCount}`}
+                                    >
+                                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
+                                      Unhealthy ({failureCount})
+                                    </span>
+                                  );
+                                }
+
+                                return (
+                                  <span 
+                                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                    title={`Deliveries: ${deliveryCount}`}
+                                  >
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    Active
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td className="px-6 py-4 text-xs text-slate-500">
                               {new Date(webhook.created_at).toLocaleDateString()}

@@ -303,9 +303,10 @@ export async function closeWallet(
   walletId: string,
   tenantId: string,
   isSandbox: boolean,
-  reason: string
+  reason: string,
+  txClient?: Prisma.TransactionClient
 ) {
-  return await prisma.$transaction(async (tx) => {
+  const execute = async (tx: Prisma.TransactionClient) => {
     // Lock the wallet row
     await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${walletId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
 
@@ -352,7 +353,12 @@ export async function closeWallet(
     });
 
     return updatedWallet;
-  }, { timeout: 20000 });
+  };
+
+  if (txClient) {
+    return execute(txClient);
+  }
+  return await prisma.$transaction(execute, { timeout: 20000 });
 }
 
 /**

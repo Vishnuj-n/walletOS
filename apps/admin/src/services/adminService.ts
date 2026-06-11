@@ -348,13 +348,18 @@ export async function exportAuditLogsCsv(params?: {
       throw new Error('Session expired. Please sign in again.');
     }
     const fallbackMessage = 'Failed to export audit logs';
+    let errorObj: any = null;
     try {
-      const error = await res.json() as { error?: { code?: string; message?: string }; message?: string };
-      const mappedMessage = mapErrorCodeToMessage(error.error?.code, fallbackMessage);
-      throw new Error(mappedMessage || error.message || fallbackMessage);
+      errorObj = await res.json();
     } catch {
-      throw new Error(fallbackMessage);
+      // Ignore JSON parse errors
     }
+
+    if (errorObj) {
+      const mappedMessage = mapErrorCodeToMessage(errorObj.error?.code, fallbackMessage);
+      throw new Error(mappedMessage || errorObj.message || fallbackMessage);
+    }
+    throw new Error(fallbackMessage);
   }
 
   if (!res.body) {

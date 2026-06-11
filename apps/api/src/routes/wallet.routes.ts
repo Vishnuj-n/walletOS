@@ -280,7 +280,11 @@ router.post(
     if (!to_wallet_id) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'to_wallet_id is required');
     }
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+    if (amount === undefined || amount === null) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'amount is required');
+    }
+    const numAmount = Number(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'amount must be a positive number');
     }
     if (!description) {
@@ -291,7 +295,7 @@ router.post(
       tenantId: req.tenantId!,
       fromWalletId: walletId,
       toWalletId: to_wallet_id,
-      amount: new Decimal(amount as string),
+      amount: new Decimal(String(amount)),
       description,
       referenceId: reference_id,
       idempotencyKey: req.idempotencyKey,
@@ -328,7 +332,8 @@ router.delete(
         walletId,
         req.tenantId!,
         req.isSandbox || false,
-        reason || 'Closed via API DELETE request'
+        reason || 'Closed via API DELETE request',
+        tx
       );
 
       // Create a dummy / closing transaction entry to satisfy idempotency cached response mapping

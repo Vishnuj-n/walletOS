@@ -11,6 +11,7 @@ import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet }
 import { sendInviteEmail } from '../services/mail.service';
 import { dispatchWebhookDelivery } from '../services/webhook.service';
 import { z } from 'zod';
+import dns from 'dns';
 
 const router = Router();
 
@@ -161,6 +162,13 @@ async function resolveEntityIdFromFilter(filter: string): Promise<string> {
   if (trimmed.startsWith('txn_')) {
     const txn = await prisma.transaction.findUnique({
       where: { publicId: trimmed },
+      select: { id: true },
+    });
+    return txn?.id ?? 'non-existent-transaction-id';
+  }
+  if (trimmed.startsWith('req_')) {
+    const txn = await prisma.transaction.findFirst({
+      where: { referenceId: trimmed },
       select: { id: true },
     });
     return txn?.id ?? 'non-existent-transaction-id';
@@ -331,6 +339,7 @@ async function rotateAdminApiKeyForTenant(params: {
         tenantId,
         isSandbox,
         isActive: true,
+        scope: keyScope,
       },
       data: {
         isActive: false,
@@ -3454,10 +3463,39 @@ router.get(
   })
 );
 
-// ─── Webhook CRUD ─────────────────────────────────────────────────────────────
+// Helper to check if IP is private/internal
+function isInternalIp(ip: string): boolean {
+  if (
+    ip.startsWith('10.') ||
+    ip.startsWith('192.168.') ||
+    ip.startsWith('127.') ||
+    ip.startsWith('169.254.')
+  ) {
+    return true;
+  }
+  if (ip.startsWith('172.')) {
+    const parts = ip.split('.');
+    if (parts.length >= 2) {
+      const secondPart = parseInt(parts[1], 10);
+      if (secondPart >= 16 && secondPart <= 31) {
+        return true;
+      }
+    }
+  }
+  if (ip === '::1' || ip.toLowerCase().startsWith('fe80:')) {
+    return true;
+  }
+  return false;
+}
 
 const webhookCreateSchema = z.object({
-  url: z.string().url('url must be a valid URL'),
+  url: z.string().url('url must be a valid URL').refine((val) => {
+    try {
+      return new URL(val).protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }, 'url must use HTTPS protocol'),
   events: z.array(z.string().min(1)).min(1, 'At least one event type is required'),
 });
 
@@ -3480,30 +3518,53 @@ router.post(
     }
     const { url, events } = parsed.data;
 
-    // Check for existing webhook created with the same idempotency key in the last 30 days
-    const existingWebhook = await prisma.webhook.findFirst({
-      where: {
-        tenantId: req.adminUser!.tenantId,
-        idempotencyKey,
-        createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-      },
-    });
+    // Validate URL destination (SSRF protection)
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname.toLowerCase();
 
-    if (existingWebhook) {
-      return res.status(200).json({
-        id: existingWebhook.id,
-        url: existingWebhook.url,
-        events: existingWebhook.events,
-        secret: existingWebhook.secret,
-        status: existingWebhook.status,
-        is_active: existingWebhook.isActive,
-        created_at: existingWebhook.createdAt.toISOString(),
-      });
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname.startsWith('169.254.') ||
+      hostname === '169.254.169.254'
+    ) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Internal or private destinations are not allowed');
     }
 
-    const secret = randomBytes(32).toString('hex');
+    try {
+      const ips = await dns.promises.lookup(hostname, { all: true });
+      const hasInternal = ips.some((ipObj) => isInternalIp(ipObj.address));
+      if (hasInternal) {
+        throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Internal or private destinations are not allowed');
+      }
+    } catch (err) {
+      if (err instanceof AppError) {
+        throw err;
+      }
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Invalid hostname or resolution failed');
+    }
 
-    const webhook = await prisma.$transaction(async (tx) => {
+    // Atomic lookup/create with advisory lock to prevent races under concurrent retries
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${req.adminUser!.tenantId}:${idempotencyKey}:webhook.created`}));`;
+
+      const existing = await tx.webhook.findFirst({
+        where: {
+          tenantId: req.adminUser!.tenantId,
+          idempotencyKey,
+          createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        },
+      });
+
+      if (existing) {
+        return {
+          webhook: existing,
+          isNew: false,
+        };
+      }
+
+      const secret = randomBytes(32).toString('hex');
       const created = await tx.webhook.create({
         data: {
           tenantId: req.adminUser!.tenantId,
@@ -3520,25 +3581,29 @@ router.post(
           entityType: 'Webhook',
           entityId: created.id,
           action: 'webhook.created',
-          changes: { url, events },
-          actorId: req.adminUser!.id,
+          changes: { url, events, idempotency_key: idempotencyKey },
+          actorId: req.adminUser!.email,
           actorType: 'admin',
           actorRole: req.adminUser!.role,
           isSandbox: false,
         },
       });
 
-      return created;
+      return {
+        webhook: created,
+        isNew: true,
+      };
     });
 
-    res.status(201).json({
-      id: webhook.id,
-      url: webhook.url,
-      events: webhook.events,
-      secret,
-      status: webhook.status,
-      is_active: webhook.isActive,
-      created_at: webhook.createdAt.toISOString(),
+    const statusCode = result.isNew ? 201 : 200;
+    res.status(statusCode).json({
+      id: result.webhook.id,
+      url: result.webhook.url,
+      events: result.webhook.events,
+      secret: result.webhook.secret,
+      status: result.webhook.status,
+      is_active: result.webhook.isActive,
+      created_at: result.webhook.createdAt.toISOString(),
     });
   })
 );
@@ -3603,7 +3668,7 @@ router.delete(
         entityId: webhookId,
         action: 'webhook.deleted',
         changes: { webhookId },
-        actorId: req.adminUser!.id,
+        actorId: req.adminUser!.email,
         actorType: 'admin',
         actorRole: req.adminUser!.role,
         isSandbox: false,
@@ -3623,10 +3688,28 @@ router.post(
   requireAdminRole(['tenant_admin', 'superadmin'] as const),
   asyncHandler(async (req, res) => {
     const { webhookId } = req.params;
+    const idempotencyKey = req.get('Idempotency-Key') || req.body.idempotencyKey;
 
     const webhook = await prisma.webhook.findUnique({ where: { id: webhookId } });
     if (!webhook || webhook.tenantId !== req.adminUser!.tenantId) {
       throw new AppError(404, ErrorCode.NOT_FOUND, 'Webhook not found');
+    }
+
+    if (idempotencyKey) {
+      const existingDelivery = await prisma.webhookDelivery.findFirst({
+        where: {
+          webhook: {
+            tenantId: req.adminUser!.tenantId,
+          },
+          webhookId: webhook.id,
+          idempotencyKey,
+          createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        },
+      });
+
+      if (existingDelivery) {
+        return res.json({ delivery_id: existingDelivery.id, message: 'Test webhook dispatched' });
+      }
     }
 
     const testPayload = {
@@ -3642,6 +3725,7 @@ router.post(
         eventType: 'webhook.test',
         payload: testPayload as any,
         attemptNum: 1,
+        idempotencyKey: idempotencyKey || null,
       },
     });
 
@@ -3712,7 +3796,7 @@ router.put(
         entityId: config.id,
         action: 'tenant_config.updated',
         changes: updateData,
-        actorId: req.adminUser!.id,
+        actorId: req.adminUser!.email,
         actorType: 'admin',
         actorRole: req.adminUser!.role,
         isSandbox: false,

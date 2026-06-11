@@ -33,6 +33,10 @@ function getAdminClaimRedirectBaseUrl(): string {
   return configuredBaseUrl;
 }
 
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function sendInviteEmail(tenantId: string, email: string, rawToken: string): Promise<void> {
   let activationUrl: string;
   try {
@@ -68,9 +72,23 @@ export async function sendInviteEmail(tenantId: string, email: string, rawToken:
         </div>
       `,
     });
-  } catch (error) {
-    console.error('sendInviteEmail failed', error);
-    console.error('INVITE_ACTIVATION_URL redacted');
+  } catch (error: any) {
+    const sanitize = (str: string) => {
+      if (!str) return str;
+      let sanitized = str;
+      if (activationUrl) {
+        sanitized = sanitized.replace(new RegExp(escapeRegExp(activationUrl), 'g'), '[REDACTED_INVITE_ACTIVATION_URL]');
+      }
+      if (rawToken) {
+        sanitized = sanitized.replace(new RegExp(escapeRegExp(rawToken), 'g'), '[REDACTED_TOKEN]');
+      }
+      return sanitized;
+    };
+
+    const safeMessage = error instanceof Error ? sanitize(error.message) : 'Unknown error';
+    const safeStack = error instanceof Error && error.stack ? sanitize(error.stack) : undefined;
+    
+    console.error('sendInviteEmail failed:', safeMessage, safeStack ? `\n${safeStack}` : '');
     throw error;
   }
 }

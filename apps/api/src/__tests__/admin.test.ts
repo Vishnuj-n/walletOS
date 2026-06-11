@@ -855,20 +855,38 @@ describe('Admin API Endpoints', () => {
 
   describe('Superadmin Tenant API Key Management', () => {
     it('should retrieve active API keys for superadmin', async () => {
-      const response = await request(app)
-        .get(`/api/v1/admin/tenants/${testTenantId}/api-keys`)
-        .set('Authorization', adminAuthToken);
+      // Create a test key first
+      const seedKey = `wlt_live_active_${Date.now()}`;
+      const seedHash = createHash('sha256').update(seedKey).digest('hex');
+      const testApiKey = await prisma.apiKey.create({
+        data: {
+          tenantId: testTenantId,
+          keyHash: seedHash,
+          prefix: seedKey.substring(0, 15),
+          scope: 'admin',
+          isSandbox: false,
+          name: 'Active Key Test Target',
+        },
+      });
 
-      expect(response.status).toBe(200);
-      expect(response.body.tenant_id).toBe(testTenantId);
-      expect(response.body.keys).toBeDefined();
-      expect(Array.isArray(response.body.keys)).toBe(true);
-      expect(response.body.keys.length).toBeGreaterThan(0);
-      expect(response.body.keys[0]).toHaveProperty('key_id');
-      expect(response.body.keys[0]).toHaveProperty('name');
-      expect(response.body.keys[0]).toHaveProperty('scope');
-      expect(response.body.keys[0]).toHaveProperty('keyScope');
-      expect(response.body.keys[0]).toHaveProperty('prefix');
+      try {
+        const response = await request(app)
+          .get(`/api/v1/admin/tenants/${testTenantId}/api-keys`)
+          .set('Authorization', adminAuthToken);
+
+        expect(response.status).toBe(200);
+        expect(response.body.tenant_id).toBe(testTenantId);
+        expect(response.body.keys).toBeDefined();
+        expect(Array.isArray(response.body.keys)).toBe(true);
+        expect(response.body.keys.length).toBeGreaterThan(0);
+        expect(response.body.keys[0]).toHaveProperty('key_id');
+        expect(response.body.keys[0]).toHaveProperty('name');
+        expect(response.body.keys[0]).toHaveProperty('scope');
+        expect(response.body.keys[0]).toHaveProperty('keyScope');
+        expect(response.body.keys[0]).toHaveProperty('prefix');
+      } finally {
+        await prisma.apiKey.delete({ where: { id: testApiKey.id } });
+      }
     });
 
     it('should reject retrieve active API keys for non-superadmin', async () => {
@@ -927,6 +945,33 @@ describe('Admin API Endpoints', () => {
       expect(auditLog?.actorId).toBe('admin@test.com');
       expect(auditLog?.actorType).toBe('admin');
       expect(auditLog?.actorRole).toBe('superadmin');
+
+      // Replay check
+      const replayResponse = await request(app)
+        .post(`/api/v1/admin/tenants/${testTenantId}/api-keys/${testApiKey.id}/revoke`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', idempotencyKey)
+        .send();
+
+      expect(replayResponse.status).toBe(200);
+      expect(replayResponse.body).toEqual(response.body);
+
+      const dbKeyAfterReplay = await prisma.apiKey.findUnique({
+        where: { id: testApiKey.id },
+      });
+      expect(dbKeyAfterReplay?.isActive).toBe(false);
+
+      const auditLogsCount = await prisma.auditLog.count({
+        where: {
+          tenantId: testTenantId,
+          action: 'tenant.key_revoked_by_superadmin',
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+      });
+      expect(auditLogsCount).toBe(1);
     });
 
     it('should emergency revoke all keys for a tenant and write audit entry', async () => {
@@ -974,6 +1019,33 @@ describe('Admin API Endpoints', () => {
       expect(auditLog).toBeDefined();
       expect(auditLog?.actorId).toBe('admin@test.com');
       expect(auditLog?.actorType).toBe('admin');
+
+      // Replay check
+      const replayResponse = await request(app)
+        .post(`/api/v1/admin/tenants/${testTenantId}/emergency-revoke`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', idempotencyKey)
+        .send();
+
+      expect(replayResponse.status).toBe(200);
+      expect(replayResponse.body).toEqual(response.body);
+
+      const activeKeysCountAfterReplay = await prisma.apiKey.count({
+        where: { tenantId: testTenantId, isActive: true },
+      });
+      expect(activeKeysCountAfterReplay).toBe(0);
+
+      const auditLogsCount = await prisma.auditLog.count({
+        where: {
+          tenantId: testTenantId,
+          action: 'tenant.emergency_revoked',
+          changes: {
+            path: ['idempotency_key'],
+            equals: idempotencyKey,
+          },
+        },
+      });
+      expect(auditLogsCount).toBe(1);
     });
   });
 

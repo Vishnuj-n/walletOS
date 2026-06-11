@@ -156,8 +156,9 @@ model WebhookDelivery {
   response    String?
   attemptNum  Int
   nextAttempt DateTime?
-  deliveredAt DateTime?
-  createdAt   DateTime  @default(now())
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+  idempotencyKey String?
 
   @@index([webhookId])
   @@index([nextAttempt])

@@ -319,3 +319,13 @@ export function startWebhookRetryWorker(intervalMs = 30000): void {
     }
   }, intervalMs);
 }
+
+export function stopWebhookRetryWorker(): void {
+  if (workerIntervalId) {
+    clearInterval(workerIntervalId);
+    workerIntervalId = null;
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('[Webhook Worker] Stopped background retry worker');
+    }
+  }
+}

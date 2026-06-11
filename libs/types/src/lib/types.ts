@@ -190,9 +190,11 @@ export interface TenantListResponse {
   data: Tenant[];
 }
 
+export type KeyScope = 'read_only' | 'read_write' | 'admin';
+
 export interface RotateKeyRequest {
   scope: 'live' | 'test';
-  keyScope?: 'read_only' | 'read_write' | 'admin';
+  keyScope?: KeyScope;
 }
 
 export interface RotateKeyResponse {
@@ -205,13 +207,13 @@ export interface RotateKeyResponse {
 export interface CreateApiKeyRequest {
   name: string;
   isSandbox: boolean;
-  keyScope: 'read_only' | 'read_write' | 'admin';
+  keyScope: KeyScope;
 }
 
 export interface CreateApiKeyResponse {
   api_key: string;
   scope: 'live' | 'test';
-  keyScope: 'read_only' | 'read_write' | 'admin';
+  keyScope: KeyScope;
   tenant_id: string;
   created_at: string;
   name: string;
@@ -220,7 +222,7 @@ export interface CreateApiKeyResponse {
 export interface TenantApiKeyMetadata {
   key_id: string;
   scope: 'live' | 'test';
-  keyScope?: 'read_only' | 'read_write' | 'admin';
+  keyScope?: KeyScope;
   prefix: string;
   created_at: string;
   last_used_at: string | null;
