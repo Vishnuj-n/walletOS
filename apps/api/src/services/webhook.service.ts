@@ -346,8 +346,12 @@ export function startWebhookRetryWorker(intervalMs = 30000): void {
   workerIntervalId = setInterval(async () => {
     try {
       const now = new Date();
+      interface PendingDelivery {
+        id: string;
+      }
+
       // Query deliveries that need retrying
-      const pendingDeliveries = await prisma.webhookDelivery.findMany({
+      const pendingDeliveries = (await prisma.webhookDelivery.findMany({
         where: {
           deliveredAt: null,
           nextAttempt: { lte: now },
@@ -356,7 +360,7 @@ export function startWebhookRetryWorker(intervalMs = 30000): void {
         select: { id: true },
         take: 100,
         orderBy: { nextAttempt: 'asc' },
-      });
+      })) as PendingDelivery[];
 
       if (pendingDeliveries.length > 0) {
         if (process.env.NODE_ENV !== 'test') {
