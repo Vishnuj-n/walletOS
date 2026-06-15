@@ -1,5 +1,78 @@
 import { prisma } from '../lib/prisma';
-import { createHmac } from 'crypto';
+import { createHmac, randomUUID } from 'crypto';
+import dns from 'dns';
+
+function isPrivateIpv4(ip: string): boolean {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(isNaN)) return true;
+  const [o1, o2, o3, o4] = parts;
+  if (o1 < 0 || o1 > 255 || o2 < 0 || o2 > 255 || o3 < 0 || o3 > 255 || o4 < 0 || o4 > 255) return true;
+
+  if (o1 === 127) return true;
+  if (o1 === 10) return true;
+  if (o1 === 169 && o2 === 254) return true;
+  if (o1 === 192 && o2 === 168) return true;
+  if (o1 === 172 && (o2 >= 16 && o2 <= 31)) return true;
+  if (o1 === 0) return true;
+
+  return false;
+}
+
+function isPrivateIpv6(ip: string): boolean {
+  const normalized = ip.toLowerCase().trim();
+  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
+  if (normalized.startsWith('fe8') || normalized.startsWith('fe9') || normalized.startsWith('fea') || normalized.startsWith('feb')) return true;
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
+  if (normalized === '::' || normalized === '0:0:0:0:0:0:0:0') return true;
+
+  if (normalized.startsWith('::ffff:')) {
+    const ipv4Part = ip.substring(7);
+    if (ipv4Part.includes('.')) {
+      return isPrivateIpv4(ipv4Part);
+    }
+  }
+
+  return false;
+}
+
+export async function validateWebhookUrl(urlStr: string): Promise<boolean> {
+  try {
+    const url = new URL(urlStr);
+    
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return false;
+    }
+
+    const hostname = url.hostname;
+    const isIpv4 = /^[0-9.]+$/.test(hostname);
+    const isIpv6 = hostname.includes(':');
+
+    if (isIpv4) {
+      return !isPrivateIpv4(hostname);
+    }
+    if (isIpv6) {
+      const cleanIp = hostname.replace(/^\[|\]$/g, '');
+      return !isPrivateIpv6(cleanIp);
+    }
+
+    const dnsLookup = new Promise<string>((resolve, reject) => {
+      dns.lookup(hostname, { all: false }, (err, address) => {
+        if (err) reject(err);
+        else resolve(address);
+      });
+    });
+
+    const ipAddress = await dnsLookup;
+    
+    if (ipAddress.includes(':')) {
+      return !isPrivateIpv6(ipAddress);
+    } else {
+      return !isPrivateIpv4(ipAddress);
+    }
+  } catch (error) {
+    return false;
+  }
+}
 
 /**
  * Webhook Service
@@ -59,6 +132,7 @@ export async function publishWebhookEvent(
           eventType,
           payload: eventPayload as any,
           attemptNum: 1,
+          idempotencyKey: randomUUID(),
         },
       });
 
@@ -127,15 +201,29 @@ export async function dispatchWebhookDelivery(deliveryId: string): Promise<void>
     hmac.update(serialized);
     const signature = `sha256=${hmac.digest('hex')}`;
 
+    // Validate the URL before sending (SSRF protection)
+    const isUrlSafe = await validateWebhookUrl(delivery.webhook.url);
+    if (!isUrlSafe) {
+      statusCode = 400;
+      responseText = 'URL blocked: SSRF protection';
+      throw new Error(responseText);
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-WalletOS-Signature': signature,
+      'X-Tenant-ID': delivery.webhook.tenantId,
+      'User-Agent': 'WalletOS-Webhook-Dispatcher/1.0',
+    };
+
+    if (delivery.idempotencyKey) {
+      headers['Idempotency-Key'] = delivery.idempotencyKey;
+    }
+
     // Call external HTTP endpoint using Node.js native fetch
     const response = await fetch(delivery.webhook.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-WalletOS-Signature': signature,
-        'X-Tenant-ID': delivery.webhook.tenantId,
-        'User-Agent': 'WalletOS-Webhook-Dispatcher/1.0',
-      },
+      headers,
       body: JSON.stringify(delivery.payload),
       // Set a strict timeout to prevent hung requests
       signal: AbortSignal.timeout(10000),
@@ -266,6 +354,8 @@ export function startWebhookRetryWorker(intervalMs = 30000): void {
           attemptNum: { lte: 5 },
         },
         select: { id: true },
+        take: 100,
+        orderBy: { nextAttempt: 'asc' },
       });
 
       if (pendingDeliveries.length > 0) {
@@ -278,23 +368,19 @@ export function startWebhookRetryWorker(intervalMs = 30000): void {
           // Atomic claim: lease the delivery to push nextAttempt forward to prevent concurrent processing
           const leaseTime = new Date(Date.now() + 120 * 1000);
           try {
-            const isClaimed = await prisma.$transaction(async (tx) => {
-              const current = await tx.webhookDelivery.findUnique({
-                where: { id: delivery.id },
-                select: { id: true, deliveredAt: true, nextAttempt: true },
-              });
-
-              if (!current || current.deliveredAt !== null || !current.nextAttempt || current.nextAttempt > now) {
-                return false;
-              }
-
-              await tx.webhookDelivery.update({
-                where: { id: delivery.id },
-                data: { nextAttempt: leaseTime },
-              });
-
-              return true;
+            const updateResult = await prisma.webhookDelivery.updateMany({
+              where: {
+                id: delivery.id,
+                deliveredAt: null,
+                nextAttempt: { lte: now },
+                attemptNum: { lte: 5 },
+              },
+              data: {
+                nextAttempt: leaseTime,
+              },
             });
+
+            const isClaimed = updateResult.count === 1;
 
             if (!isClaimed) {
               return;

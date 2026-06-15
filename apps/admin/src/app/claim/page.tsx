@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle2, Lock, ShieldCheck, TriangleAlert } from 'lucide-react';
@@ -15,7 +15,7 @@ function isHexToken(token: string): boolean {
   return /^[a-f0-9]{64}$/i.test(token);
 }
 
-export default function ClaimAccountPage() {
+function ClaimAccountContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = useMemo(() => getClaimToken(searchParams), [searchParams]);
@@ -276,5 +276,19 @@ export default function ClaimAccountPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ClaimAccountPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-8 text-center">
+          <p className="text-sm text-slate-500">Loading claim page...</p>
+        </div>
+      </div>
+    }>
+      <ClaimAccountContent />
+    </Suspense>
   );
 }

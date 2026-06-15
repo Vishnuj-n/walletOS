@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { Decimal } from '@prisma/client/runtime/library';
 import { AdminRole, Prisma } from '@prisma/client';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { adminAuthMiddleware, requireAdminRole } from '../middleware/adminAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
@@ -3725,7 +3725,7 @@ router.post(
         eventType: 'webhook.test',
         payload: testPayload as any,
         attemptNum: 1,
-        idempotencyKey: idempotencyKey || null,
+        idempotencyKey: idempotencyKey || randomUUID(),
       },
     });
 

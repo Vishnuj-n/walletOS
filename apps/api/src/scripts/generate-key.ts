@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, KeyScope } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 
 const prisma = new PrismaClient();
@@ -31,12 +31,12 @@ async function main() {
   const tenantName = sanitizeTenantName(tenantNameArg || 'Postman Tenant');
   
   // Parse scope: --scope=read_only | read_write | admin (default)
-  let scope: any = 'admin';
+  let scope: KeyScope = 'admin';
   const scopeArg = args.find(a => a.startsWith('--scope='));
   if (scopeArg) {
     const val = scopeArg.split('=')[1];
     if (['read_only', 'read_write', 'admin'].includes(val)) {
-      scope = val;
+      scope = val as KeyScope;
     } else {
       console.warn(`⚠️ Invalid scope "${val}", defaulting to "admin"`);
     }
@@ -74,10 +74,16 @@ async function main() {
     }
   });
 
-  console.log(`🔑 API KEY: ${plainKey}`);
+  const maskedKey = `${plainKey.substring(0, 12)}...${plainKey.substring(plainKey.length - 4)}`;
+  console.log(`🔑 API KEY (masked): ${maskedKey}`);
   console.log(`📄 Scope:   ${scope}`);
   console.log(`🌐 Mode:    ${isSandbox ? 'Sandbox' : 'Live'}`);
   console.log(`📛 Name:    ${apiKey.name}\n`);
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect());
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());

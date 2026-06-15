@@ -69,6 +69,11 @@
       "key": "readWriteApiKey",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "adminJwt",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [

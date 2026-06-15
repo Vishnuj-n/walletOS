@@ -1,7 +1,7 @@
 /**
  * Transaction metadata types
  */
-interface TransactionMetadata {
+export interface TransactionMetadata {
   description?: string;
   createdBy?: string;
   transferType?: 'source' | 'destination';
@@ -104,7 +104,7 @@ export interface AuditLogListResponse {
 /**
  * Base transaction request fields
  */
-interface TransactionRequest {
+export interface TransactionRequest {
   wallet_id: string;
   amount: string;
   description: string;
@@ -156,7 +156,7 @@ export interface AdminUserInfo {
   role: AdminRole;
 }
 
-type DashboardCapabilityScope = 'tenant' | 'platform' | 'account';
+export type DashboardCapabilityScope = 'tenant' | 'platform' | 'account';
 
 export interface DashboardCapability {
   id: string;

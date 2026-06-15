@@ -84,7 +84,9 @@ describe('AuditLogPage', () => {
   it('should call fetchAuditLogs on mount with no filters', async () => {
     (fetchAuditLogs as jest.Mock).mockResolvedValue([]);
     render(<AuditLogPage />);
-    expect(fetchAuditLogs).toHaveBeenCalledWith(expect.objectContaining({}));
+    await waitFor(() => {
+      expect(fetchAuditLogs).toHaveBeenCalledWith(expect.objectContaining({}));
+    });
     await screen.findByRole('heading', { name: 'Audit Logs' });
   });
 

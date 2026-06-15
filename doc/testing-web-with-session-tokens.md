@@ -20,7 +20,7 @@ npx dotenv-cli -e .env -- npx ts-node apps/api/src/scripts/generate-key.ts
 
 Output looks like:
 
-```
+```text
 Created tenant "Default Tenant" (tnt_live_abc123...)
 API Key: wlt_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
@@ -33,7 +33,7 @@ You need a wallet ID before you can create a session token.
 
 **In Postman**, send:
 
-```
+```http
 POST {{baseUrl}}/api/v1/wallets
 x-api-key: {{apiKey}}
 Content-Type: application/json
@@ -45,7 +45,7 @@ Content-Type: application/json
 }
 ```
 
-Save the returned `id` from the response — that's your `walletId`.
+Save the returned `wallet_id` from the response — that's your `walletId`.
 
 *(If you already have a wallet, skip this step.)*
 
@@ -62,7 +62,7 @@ In the WalletOS API Postman collection (`apps/api/postman/WalletOS_API_Tests.pos
 
 **Raw request equivalent:**
 
-```
+```http
 POST {{baseUrl}}/api/v1/auth/session
 x-api-key: {{apiKey}}
 Content-Type: application/json
@@ -97,7 +97,7 @@ The session token expires in **1 hour**.
 
 Open in your browser:
 
-```
+```text
 http://localhost:3000?token=sess_<64-hex-chars>
 ```
 
@@ -105,7 +105,7 @@ The web app reads the `token` query param (also accepts `session_token` or `sess
 
 Full URL example:
 
-```
+```text
 http://localhost:3000?token=sess_4f8a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a
 ```
 
@@ -124,7 +124,7 @@ $wallet = Invoke-RestMethod -Uri "$baseUrl/wallets" -Method Post `
   -Headers @{"x-api-key" = $apiKey} `
   -Body (@{external_user_id="test-user-1"; label="Test Wallet"; currency="USD"} | ConvertTo-Json) `
   -ContentType "application/json"
-$walletId = $wallet.id
+$walletId = $wallet.wallet_id
 Write-Host "Wallet: $walletId"
 
 # 3. Create session token
