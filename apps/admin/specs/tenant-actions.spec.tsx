@@ -75,20 +75,18 @@ describe('Tenant actions overflow menu', () => {
 
     expect(await screen.findByText('Tenant One')).toBeInTheDocument();
     expect(screen.getByText('View Usage')).toBeInTheDocument();
-    expect(screen.queryByText('Rotate Live Key')).not.toBeInTheDocument();
-    expect(screen.queryByText('Revoke Live Key')).not.toBeInTheDocument();
+    expect(screen.queryByText('View Active API Keys')).not.toBeInTheDocument();
+    expect(screen.queryByText('Emergency Revoke All Keys')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText('Open tenant actions'));
 
-    expect(await screen.findByText('Rotate Live Key')).toBeInTheDocument();
-    expect(screen.getByText('Rotate Test Key')).toBeInTheDocument();
-    expect(screen.getByText('Revoke Live Key')).toBeInTheDocument();
-    expect(screen.getByText('Revoke Test Key')).toBeInTheDocument();
+    expect(await screen.findByText('View Active API Keys')).toBeInTheDocument();
+    expect(screen.getByText('Emergency Revoke All Keys')).toBeInTheDocument();
 
     fireEvent.mouseDown(document.body);
 
     await waitFor(() => {
-      expect(screen.queryByText('Rotate Live Key')).not.toBeInTheDocument();
+      expect(screen.queryByText('View Active API Keys')).not.toBeInTheDocument();
     });
   });
 });

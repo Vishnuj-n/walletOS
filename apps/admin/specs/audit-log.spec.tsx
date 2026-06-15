@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import AuditLogPage from '../src/app/dashboard/audit/page';
 import { fetchAuditLogs } from '../src/services/adminService';
@@ -54,14 +54,18 @@ describe('AuditLogPage', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
     jest.useRealTimers();
   });
 
-  it('should render successfully', () => {
+  it('should render successfully', async () => {
     (fetchAuditLogs as jest.Mock).mockResolvedValue([]);
     const { baseElement } = render(<AuditLogPage />);
     expect(baseElement).toBeTruthy();
+    await screen.findByRole('heading', { name: 'Audit Logs' });
   });
 
   it('should display Audit Log heading', async () => {
@@ -77,10 +81,11 @@ describe('AuditLogPage', () => {
     expect(await screen.findByLabelText('Filter by action...')).toBeInTheDocument();
   });
 
-  it('should call fetchAuditLogs on mount with no filters', () => {
+  it('should call fetchAuditLogs on mount with no filters', async () => {
     (fetchAuditLogs as jest.Mock).mockResolvedValue([]);
     render(<AuditLogPage />);
     expect(fetchAuditLogs).toHaveBeenCalledWith(expect.objectContaining({}));
+    await screen.findByRole('heading', { name: 'Audit Logs' });
   });
 
   it('should display audit logs in a table', async () => {
@@ -159,6 +164,7 @@ describe('AuditLogPage', () => {
   it('should debounce wallet filter input', async () => {
     (fetchAuditLogs as jest.Mock).mockResolvedValue([]);
     render(<AuditLogPage />);
+    await screen.findByRole('heading', { name: 'Audit Logs' });
 
     const walletFilter = await screen.findByPlaceholderText('Filter by entity ID...');
     fireEvent.change(walletFilter, { target: { value: 'wallet-123' } });
@@ -167,7 +173,9 @@ describe('AuditLogPage', () => {
     expect(fetchAuditLogs).toHaveBeenCalledTimes(1);
 
     // Fast-forward timer
-    jest.advanceTimersByTime(300);
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
 
     await waitFor(() => {
       expect(fetchAuditLogs).toHaveBeenLastCalledWith(
@@ -179,6 +187,7 @@ describe('AuditLogPage', () => {
   it('should debounce action filter input', async () => {
     (fetchAuditLogs as jest.Mock).mockResolvedValue([]);
     render(<AuditLogPage />);
+    await screen.findByRole('heading', { name: 'Audit Logs' });
 
     const actionFilter = await screen.findByLabelText('Filter by action...');
     fireEvent.change(actionFilter, { target: { value: 'credit' } });
@@ -187,7 +196,9 @@ describe('AuditLogPage', () => {
     expect(fetchAuditLogs).toHaveBeenCalledTimes(1);
 
     // Fast-forward timer
-    jest.advanceTimersByTime(300);
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
 
     await waitFor(() => {
       expect(fetchAuditLogs).toHaveBeenLastCalledWith(
@@ -199,6 +210,7 @@ describe('AuditLogPage', () => {
   it('should apply both filters when both are provided', async () => {
     (fetchAuditLogs as jest.Mock).mockResolvedValue([]);
     render(<AuditLogPage />);
+    await screen.findByRole('heading', { name: 'Audit Logs' });
 
     const walletFilter = await screen.findByPlaceholderText('Filter by entity ID...');
     const actionFilter = await screen.findByLabelText('Filter by action...');
@@ -206,7 +218,9 @@ describe('AuditLogPage', () => {
     fireEvent.change(walletFilter, { target: { value: 'wallet-123' } });
     fireEvent.change(actionFilter, { target: { value: 'debit' } });
 
-    jest.advanceTimersByTime(300);
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
 
     await waitFor(() => {
       expect(fetchAuditLogs).toHaveBeenLastCalledWith(
@@ -308,12 +322,15 @@ describe('AuditLogPage', () => {
 
     (fetchAuditLogs as jest.Mock).mockResolvedValue([]);
     render(<AuditLogPage />);
+    await screen.findByRole('heading', { name: 'Audit Logs' });
 
     const walletFilter = await screen.findByPlaceholderText('Filter by entity ID...');
     fireEvent.change(walletFilter, { target: { value: 'first' } });
     fireEvent.change(walletFilter, { target: { value: 'second' } });
 
-    jest.advanceTimersByTime(300);
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
 
     await waitFor(() => {
       expect(mockAbortController.abort).toHaveBeenCalled();
