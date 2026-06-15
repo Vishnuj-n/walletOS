@@ -220,7 +220,7 @@ Implement the missing Phase 1 features from the PRD and deploy the critical Webh
   - **CSV Export Panel:** Search filters (date range, action type) → one-click CSV download.
   - **Transaction Report Chart:** Line chart showing transaction volume over time, bar chart for top wallets.
 
-## Sprint 7 Summary (by Component)
+## Sprint 7 Summary (by Component) [DONE]
 - **API Changes:** Add 3 webhook + 3 feature endpoints (total 6), update middleware, add validation.
 - **Database:** Add `WebhookDelivery` table, `scope` field to ApiKey, new TenantConfig table. Add `isSandbox` flag to Wallet if not already present.
 - **Background Jobs:** Deploy Bull/BullMQ webhook delivery dispatcher.

@@ -14,16 +14,32 @@ import transactionRoutes from './routes/transaction.routes';
 import adminRoutes from './routes/admin.routes';
 import authRoutes from './routes/auth.routes';
 import { verifyGlobalSmtpHealth } from './services/mail.service';
+import { startWebhookRetryWorker } from './services/webhook.service';
+
 
 const app = express();
 
-// Middleware
-const corsOrigins = process.env.CORS_ORIGINS 
-  ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
-  : ['http://localhost:3000', 'http://localhost:3001'];
+// Middleware — CORS with preview-deployment regex support
+const corsOrigins: (string | RegExp)[] = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(o => {
+      o = o.trim();
+      return o.startsWith('/') && o.endsWith('/') ? new RegExp(o.slice(1, -1)) : o;
+    })
+  : [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      /^https:\/\/walletos-admin-.*\.vercel\.app$/,
+      /^https:\/\/walletos-web-.*\.netlify\.app$/,
+    ];
 
 app.use(cors({
-  origin: corsOrigins,
+  origin: (origin, cb) => {
+    if (!origin || corsOrigins.some(o => (typeof o === 'string' ? o === origin : o.test(origin)))) {
+      cb(null, true);
+    } else {
+      cb(null, false);
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Sandbox', 'Idempotency-Key'],
@@ -40,9 +56,9 @@ app.use('/api/v1', transactionRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/admin', adminRoutes);
 
-// Health check
-app.get('/api', (req, res) => {
-  res.send({ message: 'Welcome to WalletOS API' });
+// Health check — root path for cloud host LB probes
+app.get('/', (req, res) => {
+  res.send({ status: 'healthy', service: 'WalletOS Engine' });
 });
 
 // Error handler (must be last)
@@ -53,8 +69,9 @@ const port = process.env.PORT || 3333;
 // Only start the server if not in test environment (supertest handles its own server)
 if (process.env.NODE_ENV !== 'test') {
   const server = app.listen(port, () => {
-    console.log(`Listening at http://localhost:${port}/api`);
+    console.log(`Listening at http://localhost:${port}`);
     void verifyGlobalSmtpHealth();
+    startWebhookRetryWorker();
   });
   server.on('error', console.error);
 }

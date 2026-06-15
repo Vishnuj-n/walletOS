@@ -40,7 +40,7 @@
     "@types/express": "^4.17.21",
     "@types/jest": "^30.0.0",
     "@types/node": "20.19.9",
-    "@types/nodemailer": "^6.4.17",
+    "@types/nodemailer": "^8.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/supertest": "^7.2.0",
@@ -83,12 +83,14 @@
     "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "express": "^4.21.2",
     "lucide-react": "^1.14.0",
     "next": "~16.1.6",
     "nodemailer": "^6.10.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "zod": "^4.4.3"
   }
 }

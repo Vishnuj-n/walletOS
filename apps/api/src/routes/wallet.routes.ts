@@ -8,13 +8,15 @@ import {
   unfreezeWallet,
   closeWallet,
 } from '../services/wallet.service';
+import { transferBetweenWallets } from '../services/transaction.service';
 import { apiKeyAuthMiddleware } from '../middleware/auth';
 import { userSessionAuthMiddleware } from '../middleware/userSessionAuth';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
-import { generateWalletPublicId } from '../lib/publicId';
+import { generateWalletPublicId, generateTransactionPublicId } from '../lib/publicId';
+import { Decimal } from '@prisma/client/runtime/library';
 
 const router = Router();
 
@@ -263,4 +265,108 @@ router.post(
   })
 );
 
+/**
+ * POST /wallets/:walletId/transfer
+ * Transfer funds to another wallet (same tenant, same currency)
+ */
+router.post(
+  '/wallets/:walletId/transfer',
+  apiKeyAuthMiddleware,
+  idempotencyMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { walletId } = req.params;
+    const { to_wallet_id, amount, description, reference_id, metadata } = req.body;
+
+    if (!to_wallet_id) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'to_wallet_id is required');
+    }
+    if (amount === undefined || amount === null) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'amount is required');
+    }
+    const numAmount = Number(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'amount must be a positive number');
+    }
+    if (!description) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'description is required');
+    }
+
+    const result = await transferBetweenWallets({
+      tenantId: req.tenantId!,
+      fromWalletId: walletId,
+      toWalletId: to_wallet_id,
+      amount: new Decimal(String(amount)),
+      description,
+      referenceId: reference_id,
+      idempotencyKey: req.idempotencyKey,
+      metadata,
+      isSandbox: req.isSandbox || false,
+      createdBy: req.apiKeyId,
+    });
+
+    res.status(200).json({
+      debit_transaction_id: result.debitTransaction.publicId,
+      credit_transaction_id: result.creditTransaction.publicId,
+      from_wallet_id: walletId,
+      to_wallet_id,
+      amount: result.debitTransaction.amount.toFixed(4),
+      currency: result.debitTransaction.currency,
+    });
+  })
+);
+
+/**
+ * DELETE /wallets/:walletId
+ * Close a wallet (balance must be zero). Permanently marks it as closed.
+ */
+router.delete(
+  '/wallets/:walletId',
+  apiKeyAuthMiddleware,
+  idempotencyMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { walletId } = req.params;
+    const { reason } = req.body;
+
+    const wallet = await prisma.$transaction(async (tx) => {
+      const closedWallet = await closeWallet(
+        walletId,
+        req.tenantId!,
+        req.isSandbox || false,
+        reason || 'Closed via API DELETE request',
+        tx
+      );
+
+      // Create a dummy / closing transaction entry to satisfy idempotency cached response mapping
+      if (req.idempotencyKey) {
+        await tx.transaction.create({
+          data: {
+            publicId: generateTransactionPublicId(),
+            tenantId: req.tenantId!,
+            walletId: closedWallet.id,
+            type: 'debit',
+            amount: 0,
+            currency: closedWallet.currency,
+            balanceBefore: 0,
+            balanceAfter: 0,
+            idempotencyKey: req.idempotencyKey,
+            metadata: {
+              description: 'Wallet closed idempotency record',
+              requestFingerprint: req.requestFingerprint,
+            },
+          },
+        });
+      }
+
+      return closedWallet;
+    });
+
+    res.json({
+      wallet_id: walletId,
+      status: wallet.status,
+      message: 'Wallet closed successfully',
+    });
+  })
+);
+
 export default router;
+

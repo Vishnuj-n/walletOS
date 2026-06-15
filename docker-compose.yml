@@ -1,0 +1,15 @@
+services:
+  test-db:
+    image: postgres:15-alpine
+    container_name: walletos_test_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: walletos_test
+    ports:
+      - "6543:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

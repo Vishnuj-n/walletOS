@@ -1,0 +1,16 @@
+{
+  "project": ["apps/**/*.{ts,tsx}", "libs/**/*.{ts,tsx}"],
+  "ignore": [
+    "**/*.d.ts",
+    "apps/**/*-e2e/**",
+    "apps/api/src/__tests__/**"
+  ],
+  "next": {
+    "entry": [
+      "apps/admin/src/app/**/page.tsx",
+      "apps/admin/src/app/**/layout.tsx",
+      "apps/web/src/app/**/page.tsx",
+      "apps/web/src/app/**/layout.tsx"
+    ]
+  }
+}

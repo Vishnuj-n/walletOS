@@ -1,5 +1,4 @@
-import type { AdminRole, AdminUserInfo } from '@walletos/types';
-import { hasRequiredRole } from '@walletos/types';
+import type { AdminUserInfo } from '@walletos/types';
 
 const ADMIN_SESSION_STORAGE_KEY = 'walletos.admin.session';
 const ADMIN_TOKEN_STORAGE_KEY = 'walletos.admin.token';
@@ -107,7 +106,7 @@ export function getAdminToken(): string | null {
   return readStoredAdminToken();
 }
 
-export function getActiveTenantId(): string | null {
+function getActiveTenantId(): string | null {
   return getAdminSession()?.tenantId ?? null;
 }
 
@@ -119,16 +118,6 @@ export function requireActiveTenantId(errorMessage = 'Active tenant is required'
   }
 
   return tenantId;
-}
-
-export function hasAdminRole(minRole: AdminRole): boolean {
-  const adminUser = getAdminSession();
-
-  if (!adminUser) {
-    return false;
-  }
-
-  return hasRequiredRole(adminUser.role, minRole);
 }
 
 export function withActiveTenantScope(

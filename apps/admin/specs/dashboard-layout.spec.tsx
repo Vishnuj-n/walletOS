@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { AdminLayout, AdminPage } from '../src/components/AdminLayout';
 import { useAuth } from '../src/contexts/AuthContext';
@@ -113,6 +113,9 @@ describe('AdminLayout', () => {
         <div>Test Content</div>
       </AdminLayout>
     );
+
+    const profileButton = screen.getByText('admin@example.com');
+    fireEvent.click(profileButton);
 
     const signOutButton = screen.getByText('Sign out');
     signOutButton.click();

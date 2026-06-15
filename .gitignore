@@ -58,3 +58,5 @@ graphify-out/
 .graphify*
 .codex
 .gemini
+.patch
+staged_changes.patch

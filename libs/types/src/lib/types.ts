@@ -30,20 +30,7 @@ export interface TransactionResponse {
   created_at: string;
 }
 
-/**
- * Query parameters for listing transactions
- */
-export interface ListTransactionsQuery {
-  wallet_id?: string;
-  type?: string;
-  from?: string;
-  to?: string;
-  min_amount?: string;
-  max_amount?: string;
-  reference_id?: string;
-  limit?: string;
-  after?: string;
-}
+
 
 /**
  * Wallet entity
@@ -158,12 +145,6 @@ export const roleRank: Record<AdminRole, number> = {
   superadmin: 3,
 };
 
-/**
- * Check if user role meets minimum required role
- */
-export function hasRequiredRole(userRole: AdminRole, minRole: AdminRole): boolean {
-  return roleRank[userRole] >= roleRank[minRole];
-}
 
 /**
  * Current admin user record used by admin UI
@@ -209,8 +190,11 @@ export interface TenantListResponse {
   data: Tenant[];
 }
 
+export type KeyScope = 'read_only' | 'read_write' | 'admin';
+
 export interface RotateKeyRequest {
   scope: 'live' | 'test';
+  keyScope?: KeyScope;
 }
 
 export interface RotateKeyResponse {
@@ -220,13 +204,30 @@ export interface RotateKeyResponse {
   created_at: string;
 }
 
+export interface CreateApiKeyRequest {
+  name: string;
+  isSandbox: boolean;
+  keyScope: KeyScope;
+}
+
+export interface CreateApiKeyResponse {
+  api_key: string;
+  scope: 'live' | 'test';
+  keyScope: KeyScope;
+  tenant_id: string;
+  created_at: string;
+  name: string;
+}
+
 export interface TenantApiKeyMetadata {
   key_id: string;
   scope: 'live' | 'test';
+  keyScope?: KeyScope;
   prefix: string;
   created_at: string;
   last_used_at: string | null;
   is_active: boolean;
+  name?: string;
 }
 
 export interface TenantApiKeySettingsResponse {
@@ -244,15 +245,6 @@ export interface TenantUsageResponse {
   }>;
 }
 
-export interface RevokeKeyRequest {
-  scope: 'live' | 'test';
-}
-
-export interface RevokeKeyResponse {
-  tenant_id: string;
-  scope: string;
-  keys_deactivated: number;
-}
 
 export interface CreateTenantRequest {
   name: string;
@@ -300,64 +292,6 @@ export interface TenantEmployeeListResponse {
   data: TenantEmployee[];
 }
 
-export interface WalletSearchResult {
-  wallet_id: string;
-  external_user_id: string;
-  label: string;
-  balance: string;
-  currency: string;
-  status: string;
-  is_sandbox: boolean;
-  tenant: {
-    tenant_id: string;
-    name: string;
-  };
-  created_at: string;
-}
-
-export interface WalletSearchResponse {
-  query: string;
-  results: WalletSearchResult[];
-}
-
-export interface TransactionSearchResult {
-  transaction_id: string;
-  type: string;
-  amount: string;
-  currency: string;
-  balance_before: string;
-  balance_after: string;
-  reference_id: string | null;
-  idempotency_key: string | null;
-  metadata: Record<string, unknown>;
-  created_at: string;
-  wallet: {
-    wallet_id: string;
-    external_user_id: string;
-    tenant: {
-      tenant_id: string;
-      name: string;
-    };
-  };
-  audit_trail: Array<{
-    id: string;
-    action: string;
-    actor: string;
-    changes: Record<string, unknown>;
-    timestamp: string;
-  }>;
-}
-
-export interface TransactionSearchQuery {
-  transactionId?: string;
-  requestId?: string;
-  idempotencyKey?: string;
-}
-
-export interface TransactionSearchResponse {
-  query: TransactionSearchQuery;
-  results: TransactionSearchResult[];
-}
 
 export interface UnifiedSearchWalletResult {
   id: string;

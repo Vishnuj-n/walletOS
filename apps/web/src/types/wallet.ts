@@ -11,7 +11,7 @@ export interface WalletDto {
   metadata: Record<string, unknown> | null;
 }
 
-export type LedgerActivityType = 'credit' | 'debit' | 'reversal';
+type LedgerActivityType = 'credit' | 'debit' | 'reversal';
 export type LedgerActivityTypeFilter = 'all' | LedgerActivityType;
 
 export interface LedgerActivityDto {

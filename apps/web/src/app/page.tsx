@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, Suspense } from 'react';
 import { ApiError } from '../lib/api-client';
 import { BalanceCard } from '../components/wallet/BalanceCard';
 import { LedgerActivityTable } from '../components/wallet/LedgerActivityTable';
@@ -42,7 +42,7 @@ function renderTopLevelError(error: unknown) {
   );
 }
 
-export default function Index() {
+function WalletDashboardContent() {
   const session = useWalletSession();
   const { walletId, isLoading: isLoadingWalletId } = useWalletIdFromSession(session.token);
   const [filters, setFilters] = useState<LedgerActivityFilters>(initialFilters);
@@ -214,5 +214,19 @@ export default function Index() {
         onClose={() => setSelectedTransactionId(null)}
       />
     </main>
+  );
+}
+
+export default function Index() {
+  return (
+    <Suspense fallback={
+      <main className="page-shell">
+        <section className="card state-panel state-panel--warning">
+          <p className="font-semibold">Loading wallet session...</p>
+        </section>
+      </main>
+    }>
+      <WalletDashboardContent />
+    </Suspense>
   );
 }

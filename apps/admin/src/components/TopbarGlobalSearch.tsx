@@ -126,7 +126,7 @@ export function TopbarGlobalSearch({ compact = false, autoOpen = false, initialQ
         >
           {!query.trim() && (
             <div className="px-4 py-3 text-sm text-slate-500">
-              Type a wallet ID, transaction ID, request ID, idempotency key, or external user ID.
+              Search by ID (e.g., wal_, txn_), email, label, reference, or external user ID.
             </div>
           )}
 

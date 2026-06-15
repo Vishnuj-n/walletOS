@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, KeyScope } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 
 const prisma = new PrismaClient();
@@ -26,29 +26,64 @@ function sanitizeTenantName(input: string): string {
 }
 
 async function main() {
-  const tenantName = sanitizeTenantName(process.argv[2] || 'Postman Tenant');
+  const args = process.argv.slice(2);
+  const tenantNameArg = args.find(a => !a.startsWith('--'));
+  const tenantName = sanitizeTenantName(tenantNameArg || 'Postman Tenant');
   
-  const emailDomain = tenantName.toLowerCase().replace(/\s+/g, '-');
-  const tenant = await prisma.tenant.create({
-    data: { name: tenantName, contactEmail: `admin@${emailDomain}.com` }
-  });
+  // Parse scope: --scope=read_only | read_write | admin (default)
+  let scope: KeyScope = 'admin';
+  const scopeArg = args.find(a => a.startsWith('--scope='));
+  if (scopeArg) {
+    const val = scopeArg.split('=')[1];
+    if (['read_only', 'read_write', 'admin'].includes(val)) {
+      scope = val as KeyScope;
+    } else {
+      console.warn(`⚠️ Invalid scope "${val}", defaulting to "admin"`);
+    }
+  }
 
-  const plainKey = `wlt_test_${Date.now()}_${randomBytes(24).toString('base64url')}`;
+  // Parse environment: --live flag makes it a live key, otherwise sandbox
+  const isSandbox = !args.includes('--live');
+
+  const emailDomain = tenantName.toLowerCase().replace(/\s+/g, '-');
+  
+  // Find or create tenant
+  let tenant = await prisma.tenant.findFirst({ where: { name: tenantName } });
+  if (!tenant) {
+    tenant = await prisma.tenant.create({
+      data: { name: tenantName, contactEmail: `admin@${emailDomain}.com` }
+    });
+    console.log(`\n🚀 Created Tenant: ${tenant.name}`);
+  } else {
+    console.log(`\n🏢 Using existing Tenant: ${tenant.name}`);
+  }
+
+  const prefixStr = isSandbox ? 'wlt_test' : 'wlt_live';
+  const plainKey = `${prefixStr}_${Date.now()}_${randomBytes(24).toString('base64url')}`;
   const keyHash = createHash('sha256').update(plainKey).digest('hex');
 
-  await prisma.apiKey.create({
+  const apiKey = await prisma.apiKey.create({
     data: {
       tenantId: tenant.id,
       keyHash,
       prefix: plainKey.substring(0, 12),
-      scope: 'read_write',
-      isSandbox: true,
+      scope,
+      isSandbox,
       isActive: true,
+      name: `${scope.replace('_', ' ')} ${isSandbox ? 'Sandbox' : 'Live'} Key`,
     }
   });
 
-  console.log(`\n🚀 Created Tenant: ${tenant.name}`);
-  console.log(`🔑 API KEY: ${plainKey}\n`);
+  const maskedKey = `${plainKey.substring(0, 12)}...${plainKey.substring(plainKey.length - 4)}`;
+  console.log(`🔑 API KEY (masked): ${maskedKey}`);
+  console.log(`📄 Scope:   ${scope}`);
+  console.log(`🌐 Mode:    ${isSandbox ? 'Sandbox' : 'Live'}`);
+  console.log(`📛 Name:    ${apiKey.name}\n`);
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect());
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());

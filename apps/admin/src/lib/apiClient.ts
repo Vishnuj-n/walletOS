@@ -3,7 +3,7 @@ import { getAdminToken, setAdminSession } from './adminSession';
 import { mapErrorCodeToMessage } from './errorMap';
 
 interface ApiRequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT';
   body?: unknown;
   query?: object;
   signal?: AbortSignal;

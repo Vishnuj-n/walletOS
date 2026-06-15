@@ -2,6 +2,9 @@ import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { lockWallet, validateWalletForTransaction } from './wallet.service';
 import { generateTransactionPublicId } from '../lib/publicId';
+import { publishWebhookEvent } from './webhook.service';
+import { Decimal } from '@prisma/client/runtime/library';
+
 
 /**
  * Transaction Service
@@ -13,7 +16,7 @@ import { generateTransactionPublicId } from '../lib/publicId';
 export interface CreditParams {
   tenantId: string;
   walletId: string;
-  amount: number;
+  amount: number | Decimal;
   description: string;
   referenceId?: string;
   idempotencyKey?: string;
@@ -25,7 +28,7 @@ export interface CreditParams {
 export interface DebitParams {
   tenantId: string;
   walletId: string;
-  amount: number;
+  amount: number | Decimal;
   description: string;
   referenceId?: string;
   idempotencyKey?: string;
@@ -38,7 +41,7 @@ export interface TransferParams {
   tenantId: string;
   fromWalletId: string;
   toWalletId: string;
-  amount: number;
+  amount: number | Decimal;
   description: string;
   referenceId?: string;
   idempotencyKey?: string;
@@ -61,7 +64,7 @@ export interface ReverseParams {
  * Uses SELECT FOR UPDATE to lock the wallet row before balance change
  */
 export async function creditWallet(params: CreditParams) {
-  return await prisma.$transaction(async (tx) => {
+  const transaction = await prisma.$transaction(async (tx) => {
     // Lock the wallet row
     const wallet = await lockWallet(tx, params.walletId, params.tenantId, params.isSandbox);
 
@@ -73,7 +76,7 @@ export async function creditWallet(params: CreditParams) {
     const balanceAfter = balanceBefore.add(params.amount);
 
     // Create transaction
-    const transaction = await tx.transaction.create({
+    const txRecord = await tx.transaction.create({
       data: {
         publicId: generateTransactionPublicId(),
         tenantId: params.tenantId,
@@ -104,7 +107,7 @@ export async function creditWallet(params: CreditParams) {
       data: {
         tenantId: params.tenantId,
         entityType: 'Transaction',
-        entityId: transaction.id,
+        entityId: txRecord.id,
         action: 'transaction.credited',
         changes: {
           walletId: params.walletId,
@@ -118,8 +121,33 @@ export async function creditWallet(params: CreditParams) {
       },
     });
 
-    return transaction;
+    return txRecord;
   }, { timeout: 20000, maxWait: 20000 });
+
+  // Publish webhook event asynchronously after commit
+  publishWebhookEvent(
+    params.tenantId,
+    'wallet.credited',
+    {
+      wallet_id: params.walletId,
+      transaction_id: transaction.id,
+      amount: transaction.amount.toString(),
+      balance_before: transaction.balanceBefore.toString(),
+      balance_after: transaction.balanceAfter.toString(),
+      type: transaction.type,
+      reference_id: transaction.referenceId,
+      idempotency_key: transaction.idempotencyKey,
+      metadata: transaction.metadata as Record<string, any>,
+      created_at: transaction.createdAt.toISOString(),
+    },
+    params.isSandbox
+  ).catch((err) => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Failed to publish wallet.credited webhook:', err);
+    }
+  });
+
+  return transaction;
 }
 
 /**
@@ -127,7 +155,7 @@ export async function creditWallet(params: CreditParams) {
  * Uses SELECT FOR UPDATE to lock the wallet row before balance check and change
  */
 export async function debitWallet(params: DebitParams) {
-  return await prisma.$transaction(async (tx) => {
+  const transaction = await prisma.$transaction(async (tx) => {
     // Lock the wallet row
     const wallet = await lockWallet(tx, params.walletId, params.tenantId, params.isSandbox);
 
@@ -144,7 +172,7 @@ export async function debitWallet(params: DebitParams) {
     const balanceAfter = balanceBefore.sub(params.amount);
 
     // Create transaction
-    const transaction = await tx.transaction.create({
+    const txRecord = await tx.transaction.create({
       data: {
         publicId: generateTransactionPublicId(),
         tenantId: params.tenantId,
@@ -175,7 +203,7 @@ export async function debitWallet(params: DebitParams) {
       data: {
         tenantId: params.tenantId,
         entityType: 'Transaction',
-        entityId: transaction.id,
+        entityId: txRecord.id,
         action: 'transaction.debited',
         changes: {
           walletId: params.walletId,
@@ -189,8 +217,33 @@ export async function debitWallet(params: DebitParams) {
       },
     });
 
-    return transaction;
+    return txRecord;
   }, { timeout: 20000, maxWait: 20000 });
+
+  // Publish webhook event asynchronously after commit
+  publishWebhookEvent(
+    params.tenantId,
+    'wallet.debited',
+    {
+      wallet_id: params.walletId,
+      transaction_id: transaction.id,
+      amount: transaction.amount.toString(),
+      balance_before: transaction.balanceBefore.toString(),
+      balance_after: transaction.balanceAfter.toString(),
+      type: transaction.type,
+      reference_id: transaction.referenceId,
+      idempotency_key: transaction.idempotencyKey,
+      metadata: transaction.metadata as Record<string, any>,
+      created_at: transaction.createdAt.toISOString(),
+    },
+    params.isSandbox
+  ).catch((err) => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Failed to publish wallet.debited webhook:', err);
+    }
+  });
+
+  return transaction;
 }
 
 /**
@@ -203,7 +256,7 @@ export async function transferBetweenWallets(params: TransferParams) {
     throw new AppError(422, ErrorCode.INVALID_OPERATION, 'Cannot transfer to the same wallet');
   }
 
-  return await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // Sort wallet IDs lexicographically to prevent deadlocks
     const sortedWalletIds = [params.fromWalletId, params.toWalletId].sort();
     const [firstWalletId, secondWalletId] = sortedWalletIds;
@@ -316,6 +369,54 @@ export async function transferBetweenWallets(params: TransferParams) {
       creditTransaction,
     };
   }, { timeout: 20000, maxWait: 20000 });
+
+  // Publish source wallet debit event
+  publishWebhookEvent(
+    params.tenantId,
+    'wallet.debited',
+    {
+      wallet_id: params.fromWalletId,
+      transaction_id: result.debitTransaction.id,
+      amount: result.debitTransaction.amount.toString(),
+      balance_before: result.debitTransaction.balanceBefore.toString(),
+      balance_after: result.debitTransaction.balanceAfter.toString(),
+      type: result.debitTransaction.type,
+      reference_id: result.debitTransaction.referenceId,
+      idempotency_key: result.debitTransaction.idempotencyKey,
+      metadata: result.debitTransaction.metadata as Record<string, any>,
+      created_at: result.debitTransaction.createdAt.toISOString(),
+    },
+    params.isSandbox
+  ).catch((err) => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Failed to publish transfer source webhook:', err);
+    }
+  });
+
+  // Publish target wallet credit event
+  publishWebhookEvent(
+    params.tenantId,
+    'wallet.credited',
+    {
+      wallet_id: params.toWalletId,
+      transaction_id: result.creditTransaction.id,
+      amount: result.creditTransaction.amount.toString(),
+      balance_before: result.creditTransaction.balanceBefore.toString(),
+      balance_after: result.creditTransaction.balanceAfter.toString(),
+      type: result.creditTransaction.type,
+      reference_id: result.creditTransaction.referenceId,
+      idempotency_key: result.creditTransaction.idempotencyKey,
+      metadata: result.creditTransaction.metadata as Record<string, any>,
+      created_at: result.creditTransaction.createdAt.toISOString(),
+    },
+    params.isSandbox
+  ).catch((err) => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Failed to publish transfer target webhook:', err);
+    }
+  });
+
+  return result;
 }
 
 /**
@@ -323,7 +424,7 @@ export async function transferBetweenWallets(params: TransferParams) {
  * Creates opposite-type transaction with mandatory balance check
  */
 export async function reverseTransaction(params: ReverseParams) {
-  return await prisma.$transaction(async (tx) => {
+  const reversalTransaction = await prisma.$transaction(async (tx) => {
     // Fetch the original transaction
     const originalTransaction = await tx.transaction.findFirst({
       where: {
@@ -387,7 +488,7 @@ export async function reverseTransaction(params: ReverseParams) {
       : balanceBefore.add(originalTransaction.amount);
 
     // Create reversal transaction
-    const reversalTransaction = await tx.transaction.create({
+    const reversalTx = await tx.transaction.create({
       data: {
         publicId: generateTransactionPublicId(),
         tenantId: params.tenantId,
@@ -418,7 +519,7 @@ export async function reverseTransaction(params: ReverseParams) {
       data: {
         tenantId: params.tenantId,
         entityType: 'Transaction',
-        entityId: reversalTransaction.id,
+        entityId: reversalTx.id,
         action: 'transaction.reversed',
         changes: {
           originalTxId: originalTransaction.id,
@@ -433,9 +534,35 @@ export async function reverseTransaction(params: ReverseParams) {
       },
     });
 
-    return reversalTransaction;
+    return reversalTx;
   }, { timeout: 20000, maxWait: 20000 });
+
+  // Publish webhook event asynchronously after commit
+  publishWebhookEvent(
+    params.tenantId,
+    'wallet.reversed',
+    {
+      wallet_id: reversalTransaction.walletId,
+      transaction_id: reversalTransaction.id,
+      amount: reversalTransaction.amount.toString(),
+      balance_before: reversalTransaction.balanceBefore.toString(),
+      balance_after: reversalTransaction.balanceAfter.toString(),
+      type: reversalTransaction.type,
+      reference_id: reversalTransaction.referenceId,
+      idempotency_key: reversalTransaction.idempotencyKey,
+      metadata: reversalTransaction.metadata as Record<string, any>,
+      created_at: reversalTransaction.createdAt.toISOString(),
+    },
+    params.isSandbox
+  ).catch((err) => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Failed to publish wallet.reversed webhook:', err);
+    }
+  });
+
+  return reversalTransaction;
 }
+
 
 /**
  * Get transaction by ID

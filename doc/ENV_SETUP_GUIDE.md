@@ -59,6 +59,33 @@ SUPABASE_URL="https://[YOUR-PROJECT-REF].supabase.co"
 SUPABASE_SERVICE_ROLE_KEY="[YOUR-SERVICE-ROLE-KEY]"
 
 NODE_ENV="test"
+
+## Test Postgres Container
+
+A local PostgreSQL container is used for fast integration tests. The container runs on port **6543** and is defined in `docker-compose.yml` at the repo root.
+
+### Starting and Migrating the Database
+
+```bash
+# 1. Start the container from repo root
+docker compose up -d
+# wait for healthcheck to pass
+
+# 2. Run migrations on the test database
+cd apps/api
+npx dotenv-cli -e ../../.env.test -- npx prisma migrate dev
+```
+
+The connection string in `.env.test` already points to this container:
+
+```env
+DATABASE_URL="postgresql://postgres:password@localhost:6543/walletos_test"
+```
+
+To stop the container after testing (from the repo root):
+
+```bash
+docker compose down
 ```
 
 **Note:** For production deployment, use CI/CD environment variables instead of committing `.env` files.

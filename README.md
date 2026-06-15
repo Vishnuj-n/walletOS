@@ -82,7 +82,7 @@ Open three terminals from the repo root:
 
 ```bash
 # Terminal 1 — API (loads .env)
-npx dotenv-cli -e .env -- npx nx run @walletOS/api:serve
+npx nx serve api
 
 # Terminal 2 — User UI (loads .env.local)
 npx nx run web:serve
@@ -105,7 +105,7 @@ Check the API is up: `GET http://localhost:3333/api/health`
 
 ## Creating a tenant and first API key
 
-The admin dashboard is the UI for this. Alternatively, hit the API directly as a superadmin:
+The admin dashboard is the primary UI for managing tenants and API keys. Alternatively, hit the API directly as a superadmin:
 
 ```bash
 curl -X POST http://localhost:3333/api/tenants \
@@ -114,7 +114,7 @@ curl -X POST http://localhost:3333/api/tenants \
   -d '{ "name": "My Project" }'
 ```
 
-Response includes `live_key` and `test_key`. Copy them immediately — they are not shown again.
+Response includes the initial `admin` scoped API keys. You can later generate additional keys with restricted scopes (`read_only`, `read_write`) via the Admin Dashboard or the `/admin/account/api-keys` endpoint. Copy keys immediately — they are hashed and never shown again.
 
 ---
 
@@ -150,7 +150,12 @@ Use `wlt_test_xxx` to work in the sandbox. Sandbox data never mixes with live da
 
 **Sandbox** — every tenant gets a test key (`wlt_test_xxx`) that operates in a completely separate data namespace. Use it for development and staging. Switch to `wlt_live_xxx` for production.
 
-**Idempotency** — all write endpoints require an `Idempotency-Key` header. If your request fails mid-flight, retry with the same key — the operation won't execute twice. Keys are unique for 24 hours.
+**API Scopes** — keys have granular permissions:
+- `read_only`: Restricted to `GET`, `HEAD`, and `OPTIONS` requests.
+- `read_write`: Allows data modification but restricts destructive actions (e.g., `DELETE`).
+- `admin`: Full access to all endpoints, including tenant-level administrative actions.
+
+**Idempotency** — all write endpoints require an `Idempotency-Key` header. If your request fails mid-flight, retry with the same key — the operation won't execute twice. Keys are unique for 30 days.
 
 **Immutable transactions** — transaction records are never modified or deleted. Corrections go through reversals: a new transaction of the opposite type linked to the original.
 
@@ -195,7 +200,7 @@ cd apps/api && npx prisma migrate dev --name <migration-name>
 
 **Development mode** (loads `.env`):
 ```bash
-npx dotenv-cli -e .env -- nx serve api
+npx nx serve api
 ```
 
 **Production mode** (uses CI/CD environment variables):
@@ -216,9 +221,18 @@ The API will be available at `http://localhost:3333`
 npx nx test admin
 ```
 
-**Run all API tests:**
+**Run all API tests (requires local Postgres container):**
 ```bash
-npx dotenv-cli -e .env.test -- npx nx test api --silent
+# 1. Start test database container from root
+docker compose up -d
+
+# 2. Run migrations on the test database
+cd apps/api
+npx dotenv-cli -e ../../.env.test -- npx prisma migrate dev
+
+# 3. Run the tests (from repo root)
+cd ../..
+npx nx test api
 ```
 
 **Run tests in band (sequential execution):**
@@ -246,18 +260,19 @@ DATABASE_URL="postgresql://user:password@localhost:6543/postgres?pgbouncer=true&
 To generate API keys for use with Postman or manual testing:
 
 ```bash
-# Generate with default tenant name
+# Generate with default tenant name (Sandbox, Admin scope)
 npx dotenv-cli -e .env.test -- npx ts-node apps/api/src/scripts/generate-key.ts
 
-# Generate with custom tenant name
-npx dotenv-cli -e .env.test -- npx ts-node apps/api/src/scripts/generate-key.ts "My Tenant"
+# Generate with custom tenant name, specific scope, and live mode
+npx dotenv-cli -e .env.test -- npx ts-node apps/api/src/scripts/generate-key.ts "My Tenant" --scope=read_only --live
 ```
 
 The script will output:
 - Tenant name
 - Plain API key (use this in Postman or API requests)
+- Scope and Environment mode
 
-The generated key has `read_write` scope and is in sandbox mode.
+Supported scopes: `read_only`, `read_write`, `admin`. Use the `--live` flag to create a live key; otherwise, it defaults to sandbox.
 
 ---
 

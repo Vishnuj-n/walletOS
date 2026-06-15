@@ -4,10 +4,27 @@ on:
     branches:
       - main
   pull_request:
+# Enable manual execution via the GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Choose execution scope (all or affected)'
+        required: true
+        default: 'affected'
+        type: choice
+        options:
+          - affected
+          - all
+
+#  Cancel out-of-date runs if a developer pushes new commits to the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   actions: read
   contents: read
+  pull-requests: read # Required by nrwl/nx-set-shas on PR events
 
 jobs:
   main:
@@ -15,7 +32,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:password@localhost:5432/walletos_test
       DIRECT_URL: postgresql://postgres:password@localhost:5432/walletos_test
-    
+
     services:
       postgres:
         image: postgres:16
@@ -34,7 +51,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          filter: tree:0
+          # fetch-depth: 0 is required for Nx to accurately track git diffs for 'affected' execution.
+          # Do not combine with filter: tree:0 — they are mutually exclusive; tree:0 is ignored
+          # during a full clone and causes a warning.
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -45,7 +64,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 🛠️ FIX 1: Explicitly wait for PostgreSQL to be completely ready before touching it
       - name: Verify Database Port Connection
         run: |
           until nc -z localhost 5432; do
@@ -56,16 +74,37 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate --schema=apps/api/prisma/schema.prisma
 
-      # 🛠️ FIX 2: Use force-reset so the test database is dynamically wiped and built clean every run
       - name: Sync Test Database
         run: npx prisma db push --schema=apps/api/prisma/schema.prisma --force-reset
 
-      # 🛠️ FIX 3: Force Nx/ESLint to treat warnings as warnings, NOT errors
-      - name: Run lint
-        run: npx nx run-many -t lint --max-warnings=200
+      # Establish SHAs for target execution tracking
+      - name: Derive Base and Head SHAs for Nx
+        uses: nrwl/nx-set-shas@v5
+      # Use smart-gating to process code updates efficiently.
+      # On push/pull_request events, github.event.inputs.scope is empty, so
+      # the else branch runs automatically — defaulting to 'affected' mode.
+      - name: Run Lint Checks
+        run: |
+          if [ "${{ github.event.inputs.scope }}" = "all" ]; then
+            npx nx run-many -t lint --max-warnings=200
+          else
+            npx nx affected -t lint --max-warnings=200
+          fi
 
-      - name: Run build
-        run: npx nx run-many -t build
+      - name: Run Build Architecture Verification
+        run: |
+          if [ "${{ github.event.inputs.scope }}" = "all" ]; then
+            npx nx run-many -t build
+          else
+            npx nx affected -t build
+          fi
 
-      - name: Run tests
-        run: npx nx run-many -t test --runInBand
+      - name: Run Test Suite Execution
+        run: |
+          if [ "${{ github.event.inputs.scope }}" = "all" ]; then
+            # --parallel=1 prevents Nx from launching multiple projects concurrently,
+            # which would cause race conditions on the shared test database.
+            npx nx run-many -t test --parallel=1 --runInBand --silent
+          else
+            npx nx affected -t test --parallel=1 --runInBand --silent
+          fi

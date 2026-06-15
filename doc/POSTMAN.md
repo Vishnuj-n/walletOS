@@ -104,6 +104,28 @@ The collection already sends an `Idempotency-Key` for most transaction requests.
 
 - `Idempotency-Key: <unique value>`
 
+### 5) Granular API Key Scope Testing
+
+The collection includes a folder under **Test Scenarios → API Key Scope Tests** to verify that granular API key scopes (`read_only` and `read_write`) are properly enforced:
+
+1. Generate scoped keys using the `--scope` CLI flag:
+   ```bash
+   # Read-Only Key (can only perform GET operations)
+   npx dotenv-cli -e .env.test -- npx ts-node apps/api/src/scripts/generate-key.ts --scope=read_only
+   
+   # Read-Write Key (can perform GET/POST but blocks DELETE)
+   npx dotenv-cli -e .env.test -- npx ts-node apps/api/src/scripts/generate-key.ts --scope=read_write
+   ```
+2. Copy the plain API keys from the script output.
+3. In Postman, set the following collection variables or environment variables:
+   - `readOnlyApiKey` = `<paste your read-only key>`
+   - `readWriteApiKey` = `<paste your read-write key>`
+4. Run the requests inside the **API Key Scope Tests** folder:
+   - **Read-Only: Get Wallet (Succeed)** - Should return `200 OK`.
+   - **Read-Only: Try Create Wallet (Fail 403)** - Should fail with `403 Forbidden` and `FORBIDDEN` error code.
+   - **Read-Write: Create Wallet (Succeed)** - Should return `201 Created`.
+   - **Read-Write: Try Delete Wallet (Fail 403)** - Should fail with `403 Forbidden` and `FORBIDDEN` error code.
+
 ---
 
 ## “Basic user session” flow: use a session token (Bearer `sess_…`)
@@ -226,6 +248,22 @@ If you want sandbox-mode admin operations:
 - Add header: `X-Sandbox: true`
 
 If you omit it, it defaults to live-mode behavior.
+
+### 4) Webhook Operations
+
+Webhook management routes are admin-only and must be requested with `Authorization: Bearer {{adminJwt}}` and a `tenant_admin` or `superadmin` role. 
+
+The collection has the following requests:
+- **Create Webhook**: `POST {{baseUrl}}/api/v1/admin/webhooks`
+  - Body: JSON specifying webhook `url` and `events` array (e.g. `["wallet.created", "wallet.credited"]`).
+  - Headers: Requires `Idempotency-Key` and `Authorization`.
+  - Test Script: Automatically captures the `id` from the response and sets the `webhookId` variable.
+- **List Webhooks**: `GET {{baseUrl}}/api/v1/admin/webhooks`
+  - Returns list of registered webhooks for the tenant.
+- **Test Webhook**: `POST {{baseUrl}}/api/v1/admin/webhooks/{{webhookId}}/test`
+  - Sends a test event payload to check destination endpoint.
+- **Delete Webhook**: `DELETE {{baseUrl}}/api/v1/admin/webhooks/{{webhookId}}`
+  - Deactivates/soft-deletes the webhook.
 
 ---
 

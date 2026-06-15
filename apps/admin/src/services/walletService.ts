@@ -1,38 +1,6 @@
 import { apiRequest } from '../lib/apiClient';
 import { getAdminSession, requireActiveTenantId, withActiveTenantScope } from '../lib/adminSession';
-
-export interface Wallet {
-  wallet_id: string;
-  external_user_id: string;
-  label: string | null;
-  balance: string;
-  currency: string;
-  status: string;
-  is_sandbox: boolean;
-  metadata?: Record<string, unknown>;
-}
-
-export interface WalletListResponse {
-  data: Wallet[];
-  next_cursor?: string;
-}
-
-export interface CreateWalletRequest {
-  external_user_id: string;
-  tenant_id?: string;
-  currency: string;
-  label?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface UpdateWalletRequest {
-  label?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface FreezeWalletRequest {
-  reason: string;
-}
+import type { Wallet, WalletListResponse, CreateWalletRequest, UpdateWalletRequest, FreezeWalletRequest } from '@walletos/types';
 
 export async function fetchWallets(params: {
   search?: string;

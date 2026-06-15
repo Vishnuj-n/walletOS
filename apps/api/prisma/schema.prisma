@@ -23,6 +23,7 @@ model Tenant {
   wallets              Wallet[]
   transactions         Transaction[]
   webhooks             Webhook[]
+  tenantConfig         TenantConfig?
 }
 
 model ApiKey {
@@ -34,6 +35,7 @@ model ApiKey {
   isSandbox Boolean  @default(false)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+  name      String?
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
@@ -126,19 +128,20 @@ model AuditLog {
 }
 
 model Webhook {
-  id           String          @id @default(cuid())
-  tenantId     String
-  url          String
-  events       String[]
-  secret       String
-  isActive     Boolean         @default(true)
-  lastAttempt  DateTime?
-  failureCount Int             @default(0)
-  status       String          @default("active")
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  tenant       Tenant          @relation(fields: [tenantId], references: [id])
-  deliveries   WebhookDelivery[]
+  id             String          @id @default(cuid())
+  tenantId       String
+  url            String
+  events         String[]
+  secret         String
+  isActive       Boolean         @default(true)
+  lastAttempt    DateTime?
+  failureCount   Int             @default(0)
+  status         String          @default("active")
+  idempotencyKey String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  deliveries     WebhookDelivery[]
 
   @@index([tenantId])
 }
@@ -153,8 +156,9 @@ model WebhookDelivery {
   response    String?
   attemptNum  Int
   nextAttempt DateTime?
-  deliveredAt DateTime?
-  createdAt   DateTime  @default(now())
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+  idempotencyKey String?
 
   @@index([webhookId])
   @@index([nextAttempt])
@@ -212,3 +216,14 @@ model PendingVerification {
   // CRITICAL FIX: This maps to your explicit FOREIGN KEY (email) REFERENCES public."AdminUser"(email) ON DELETE CASCADE
   adminUser AdminUser @relation(fields: [email], references: [email], onDelete: Cascade)
 }
+
+model TenantConfig {
+  id               String   @id @default(cuid())
+  tenantId         String   @unique
+  defaultCurrency  String   @default("USD")
+  autoCreateWallet Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+

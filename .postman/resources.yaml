@@ -1,0 +1,7 @@
+# Use this workspace to collaborate
+workspace:
+  id: f2b4db44-f1d2-4be8-b408-211e6cf4e51d
+
+localResources:
+  collections:
+    - ..\apps\api\postman\WalletOS_API_Tests.postman_collection.json

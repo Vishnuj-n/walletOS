@@ -33,11 +33,16 @@ function getAdminClaimRedirectBaseUrl(): string {
   return configuredBaseUrl;
 }
 
-export function buildClaimActivationUrl(rawToken: string): string {
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export async function sendInviteEmail(tenantId: string, email: string, rawToken: string): Promise<void> {
+  let activationUrl: string;
   try {
-    const activationUrl = new URL('/claim', getAdminClaimRedirectBaseUrl());
-    activationUrl.searchParams.set('token', rawToken);
-    return activationUrl.toString();
+    const activationUrlObj = new URL('/claim', getAdminClaimRedirectBaseUrl());
+    activationUrlObj.searchParams.set('token', rawToken);
+    activationUrl = activationUrlObj.toString();
   } catch (error) {
     console.error(
       `[INVITE] Failed to parse ADMIN_CLAIM_REDIRECT_URL. Falling back to ${DEFAULT_ADMIN_CLAIM_REDIRECT_URL}.`,
@@ -45,12 +50,8 @@ export function buildClaimActivationUrl(rawToken: string): string {
     );
     const fallbackUrl = new URL('/claim', DEFAULT_ADMIN_CLAIM_REDIRECT_URL);
     fallbackUrl.searchParams.set('token', rawToken);
-    return fallbackUrl.toString();
+    activationUrl = fallbackUrl.toString();
   }
-}
-
-export async function sendInviteEmail(tenantId: string, email: string, rawToken: string): Promise<void> {
-  const activationUrl = buildClaimActivationUrl(rawToken);
   const escapedTenantId = escapeHtml(tenantId);
   const escapedActivationUrl = escapeHtml(activationUrl);
 
@@ -71,9 +72,23 @@ export async function sendInviteEmail(tenantId: string, email: string, rawToken:
         </div>
       `,
     });
-  } catch (error) {
-    console.error('sendInviteEmail failed', error);
-    console.error('INVITE_ACTIVATION_URL redacted');
+  } catch (error: any) {
+    const sanitize = (str: string) => {
+      if (!str) return str;
+      let sanitized = str;
+      if (activationUrl) {
+        sanitized = sanitized.replace(new RegExp(escapeRegExp(activationUrl), 'g'), '[REDACTED_INVITE_ACTIVATION_URL]');
+      }
+      if (rawToken) {
+        sanitized = sanitized.replace(new RegExp(escapeRegExp(rawToken), 'g'), '[REDACTED_TOKEN]');
+      }
+      return sanitized;
+    };
+
+    const safeMessage = error instanceof Error ? sanitize(error.message) : 'Unknown error';
+    const safeStack = error instanceof Error && error.stack ? sanitize(error.stack) : undefined;
+    
+    console.error('sendInviteEmail failed:', safeMessage, safeStack ? `\n${safeStack}` : '');
     throw error;
   }
 }

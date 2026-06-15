@@ -54,6 +54,26 @@
       "key": "sessionToken",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "webhookId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "readOnlyApiKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "readWriteApiKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminJwt",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -709,6 +729,115 @@
               "response": []
             }
           ]
+        },
+        {
+          "name": "API Key Scope Tests",
+          "item": [
+            {
+              "name": "Read-Only: Get Wallet (Succeed)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{readOnlyApiKey}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wallets/{{walletId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wallets", "{{walletId}}"]
+                },
+                "description": "Read-only key should be allowed to view wallet"
+              },
+              "response": []
+            },
+            {
+              "name": "Read-Only: Try Create Wallet (Fail 403)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{readOnlyApiKey}}"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "ro_create_{{$timestamp}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"external_user_id\": \"ro_failed_{{$timestamp}}\",\n  \"currency\": \"INR\",\n  \"label\": \"Should Fail\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wallets",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wallets"]
+                },
+                "description": "Read-only key should be blocked from write operations (POST)"
+              },
+              "response": []
+            },
+            {
+              "name": "Read-Write: Create Wallet (Succeed)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{readWriteApiKey}}"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "rw_create_{{$timestamp}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"external_user_id\": \"rw_success_{{$timestamp}}\",\n  \"currency\": \"INR\",\n  \"label\": \"RW Created Wallet\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wallets",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wallets"]
+                },
+                "description": "Read-write key should be allowed to create wallets (POST)"
+              },
+              "response": []
+            },
+            {
+              "name": "Read-Write: Try Delete Wallet (Fail 403)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{readWriteApiKey}}"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "rw_delete_{{$timestamp}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wallets/{{walletId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wallets", "{{walletId}}"]
+                },
+                "description": "Read-write key should be blocked from delete operations (DELETE)"
+              },
+              "response": []
+            }
+          ]
         }
       ]
     },
@@ -1038,6 +1167,117 @@
               "path": ["api", "v1", "admin", "wallets", "{{walletId}}", "unfreeze"]
             },
             "description": "Unfreeze wallet as admin with mandatory reason"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminJwt}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "webhook_create_{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://httpbin.org/post\",\n  \"events\": [\"wallet.created\", \"wallet.credited\", \"wallet.debited\", \"wallet.reversed\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/webhooks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "webhooks"]
+            },
+            "description": "Register a new webhook endpoint. Requires tenant_admin or superadmin role. Automatically saves webhookId.",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (pm.response.code === 201 || pm.response.code === 200) {",
+                    "    const response = pm.response.json();",
+                    "    pm.collectionVariables.set('webhookId', response.id);",
+                    "    console.log('Set webhookId:', response.id);",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          "response": []
+        },
+        {
+          "name": "List Webhooks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminJwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/webhooks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "webhooks"]
+            },
+            "description": "List all active webhooks for the current tenant"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminJwt}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "webhook_test_{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/webhooks/{{webhookId}}/test",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "webhooks", "{{webhookId}}", "test"]
+            },
+            "description": "Trigger a test event delivery to the webhook endpoint. Requires tenant_admin or superadmin role."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Webhook",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminJwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/webhooks/{{webhookId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "webhooks", "{{webhookId}}"]
+            },
+            "description": "Deactivate (soft-delete) the webhook endpoint. Requires tenant_admin or superadmin role."
           },
           "response": []
         }

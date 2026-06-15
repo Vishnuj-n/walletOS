@@ -11,10 +11,10 @@ import type {
   CreditTransactionRequest,
   DebitTransactionRequest,
   ReversalTransactionRequest,
-  RevokeKeyRequest,
-  RevokeKeyResponse,
   RotateKeyRequest,
   RotateKeyResponse,
+  CreateApiKeyRequest,
+  CreateApiKeyResponse,
   SystemBalanceResponse,
   SystemErrorsResponse,
   Tenant,
@@ -24,11 +24,11 @@ import type {
   TenantUsageResponse,
   UnifiedSearchResponse,
   TransactionResponse,
-  TransactionSearchQuery,
-  TransactionSearchResponse,
-  WalletSearchResponse,
 } from '@walletos/types';
 import { apiRequest } from '../lib/apiClient';
+import { getAdminToken, setAdminSession } from '../lib/adminSession';
+import { mapErrorCodeToMessage } from '../lib/errorMap';
+
 
 
 export async function fetchAuditLogs(
@@ -57,6 +57,23 @@ export async function rotateCurrentTenantKey(request: RotateKeyRequest): Promise
     body: request,
     requireIdempotencyKey: true,
     fallbackMessage: 'Failed to rotate API key',
+  });
+}
+
+export async function createCurrentTenantApiKey(request: CreateApiKeyRequest): Promise<CreateApiKeyResponse> {
+  return apiRequest<CreateApiKeyResponse>('/admin/account/api-keys', {
+    method: 'POST',
+    body: request,
+    requireIdempotencyKey: true,
+    fallbackMessage: 'Failed to generate API key',
+  });
+}
+
+export async function revokeCurrentTenantApiKey(keyId: string): Promise<{ success: boolean; key_id: string }> {
+  return apiRequest<{ success: boolean; key_id: string }>(`/admin/account/api-keys/${keyId}/revoke`, {
+    method: 'POST',
+    requireIdempotencyKey: true,
+    fallbackMessage: 'Failed to revoke API key',
   });
 }
 
@@ -135,18 +152,6 @@ export async function fetchCurrentTenantEmployees(search?: string): Promise<Tena
   });
 }
 
-export async function rotateTenantKey(
-  tenantId: string,
-  request: RotateKeyRequest
-): Promise<RotateKeyResponse> {
-  return apiRequest<RotateKeyResponse>(`/admin/tenants/${tenantId}/rotate-key`, {
-    method: 'POST',
-    body: request,
-    requireIdempotencyKey: true,
-    fallbackMessage: 'Failed to rotate API key',
-  });
-}
-
 export async function fetchTenantUsage(tenantId: string, hours = 24): Promise<TenantUsageResponse> {
   return apiRequest<TenantUsageResponse>(`/admin/tenants/${tenantId}/usage`, {
     query: { hours },
@@ -154,33 +159,40 @@ export async function fetchTenantUsage(tenantId: string, hours = 24): Promise<Te
   });
 }
 
-export async function revokeTenantKey(
+export async function fetchTenantApiKeys(tenantId: string): Promise<TenantApiKeySettingsResponse> {
+  return apiRequest<TenantApiKeySettingsResponse>(`/admin/tenants/${tenantId}/api-keys`, {
+    fallbackMessage: 'Failed to fetch tenant API keys',
+  });
+}
+
+export async function revokeTenantApiKey(
   tenantId: string,
-  request: RevokeKeyRequest
-): Promise<RevokeKeyResponse> {
-  return apiRequest<RevokeKeyResponse>(`/admin/tenants/${tenantId}/revoke-key`, {
-    method: 'POST',
-    body: request,
-    requireIdempotencyKey: true,
-    fallbackMessage: 'Failed to revoke API key',
-  });
+  keyId: string
+): Promise<{ success: boolean; key_id: string }> {
+  return apiRequest<{ success: boolean; key_id: string }>(
+    `/admin/tenants/${tenantId}/api-keys/${keyId}/revoke`,
+    {
+      method: 'POST',
+      requireIdempotencyKey: true,
+      fallbackMessage: 'Failed to revoke API key',
+    }
+  );
 }
 
-export async function searchWallets(query: string): Promise<WalletSearchResponse> {
-  return apiRequest<WalletSearchResponse>('/admin/search/wallets', {
-    query: { q: query },
-    fallbackMessage: 'Failed to search wallets',
-  });
+export async function emergencyRevokeTenantKeys(
+  tenantId: string
+): Promise<{ tenant_id: string; keys_deactivated: number }> {
+  return apiRequest<{ tenant_id: string; keys_deactivated: number }>(
+    `/admin/tenants/${tenantId}/emergency-revoke`,
+    {
+      method: 'POST',
+      requireIdempotencyKey: true,
+      fallbackMessage: 'Failed to perform emergency key revocation',
+    }
+  );
 }
 
-export async function searchTransactions(
-  params: TransactionSearchQuery
-): Promise<TransactionSearchResponse> {
-  return apiRequest<TransactionSearchResponse>('/admin/search/transactions', {
-    query: params,
-    fallbackMessage: 'Failed to search transactions',
-  });
-}
+
 
 export async function searchUnified(query: string): Promise<UnifiedSearchResponse> {
   return apiRequest<UnifiedSearchResponse>('/admin/search', {
@@ -207,4 +219,152 @@ export async function fetchSystemErrors(limit = 50): Promise<SystemErrorsRespons
     query: { limit },
     fallbackMessage: 'Failed to fetch system errors',
   });
+}
+
+// ─── Webhook CRUD ─────────────────────────────────────────────────────────────
+
+export interface WebhookRecord {
+  id: string;
+  url: string;
+  events: string[];
+  status: string;
+  is_active: boolean;
+  failure_count: number;
+  last_attempt: string | null;
+  delivery_count: number;
+  created_at: string;
+}
+
+export interface CreateWebhookResponse {
+  id: string;
+  url: string;
+  events: string[];
+  secret: string;
+  status: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export async function fetchWebhooks(): Promise<WebhookRecord[]> {
+  return apiRequest<WebhookRecord[]>('/admin/webhooks', {
+    fallbackMessage: 'Failed to fetch webhooks',
+  });
+}
+
+export async function createWebhook(payload: {
+  url: string;
+  events: string[];
+}): Promise<CreateWebhookResponse> {
+  return apiRequest<CreateWebhookResponse>('/admin/webhooks', {
+    method: 'POST',
+    body: payload,
+    requireIdempotencyKey: true,
+    fallbackMessage: 'Failed to create webhook',
+  });
+}
+
+export async function deleteWebhook(webhookId: string): Promise<{ id: string; is_active: boolean; status: string }> {
+  return apiRequest<{ id: string; is_active: boolean; status: string }>(`/admin/webhooks/${webhookId}`, {
+    method: 'DELETE',
+    requireIdempotencyKey: true,
+    fallbackMessage: 'Failed to delete webhook',
+  });
+}
+
+export async function testWebhook(webhookId: string): Promise<{ delivery_id: string; message: string }> {
+  return apiRequest<{ delivery_id: string; message: string }>(`/admin/webhooks/${webhookId}/test`, {
+    method: 'POST',
+    requireIdempotencyKey: true,
+    fallbackMessage: 'Failed to send test webhook',
+  });
+}
+
+// ─── Tenant Config ─────────────────────────────────────────────────────────────
+
+
+
+// ─── Reporting & Exports ──────────────────────────────────────────────────────
+
+export interface TransactionMetricsDay {
+  date: string;
+  credits: string;
+  debits: string;
+  reversals: string;
+  net: string;
+  count: number;
+}
+
+export interface TransactionMetricsResponse {
+  from: string;
+  to: string;
+  is_sandbox: boolean;
+  summary: {
+    total_credits: string;
+    total_debits: string;
+    total_reversals: string;
+    net_change: string;
+    transaction_count: number;
+  };
+  daily: TransactionMetricsDay[];
+}
+
+export async function fetchTransactionMetrics(params?: {
+  from?: string;
+  to?: string;
+  is_sandbox?: boolean;
+}): Promise<TransactionMetricsResponse> {
+  return apiRequest<TransactionMetricsResponse>('/admin/reporting/transactions', {
+    query: params,
+    fallbackMessage: 'Failed to fetch transaction metrics',
+  });
+}
+
+export async function exportAuditLogsCsv(params?: {
+  from?: string;
+  to?: string;
+  entity_type?: string;
+}): Promise<ReadableStream<Uint8Array>> {
+  const token = getAdminToken();
+  if (!token) throw new Error('No active session');
+
+  const query = new URLSearchParams();
+  if (params?.from) query.set('from', params.from);
+  if (params?.to) query.set('to', params.to);
+  if (params?.entity_type) query.set('entity_type', params.entity_type);
+
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? '/api';
+  const url = `${baseUrl}/admin/audit-logs/export${query.toString() ? `?${query.toString()}` : ''}`;
+
+  const res = await fetch(url, {
+    headers: {
+      Accept: 'text/csv',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      setAdminSession(null);
+      throw new Error('Session expired. Please sign in again.');
+    }
+    const fallbackMessage = 'Failed to export audit logs';
+    let errorObj: any = null;
+    try {
+      errorObj = await res.json();
+    } catch {
+      // Ignore JSON parse errors
+    }
+
+    if (errorObj) {
+      const mappedMessage = mapErrorCodeToMessage(errorObj.error?.code, fallbackMessage);
+      throw new Error(mappedMessage || errorObj.message || fallbackMessage);
+    }
+    throw new Error(fallbackMessage);
+  }
+
+  if (!res.body) {
+    throw new Error('Response body is empty');
+  }
+
+  return res.body;
 }

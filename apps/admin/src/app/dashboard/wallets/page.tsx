@@ -9,9 +9,8 @@ import {
   closeWallet,
   freezeWallet,
   unfreezeWallet,
-  type Wallet,
-  type CreateWalletRequest,
 } from '../../../services/walletService';
+import type { Wallet, CreateWalletRequest } from '@walletos/types';
 import { Plus, Search, Wallet as WalletIcon } from 'lucide-react';
 
 export default function WalletsPage() {
@@ -26,6 +25,7 @@ export default function WalletsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [closeReason, setCloseReason] = useState('');
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -100,20 +100,20 @@ export default function WalletsPage() {
     }
   };
 
-  const handleDeleteWallet = async (reason: string) => {
+  const handleDeleteWallet = async () => {
     if (!selectedWallet) return;
 
     try {
-      await closeWallet(selectedWallet.wallet_id, reason);
+      await closeWallet(selectedWallet.wallet_id, closeReason);
       setShowDeleteModal(false);
       setSelectedWallet(null);
+      setDeleteConfirmation('');
+      setCloseReason('');
       loadWallets();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to close wallet');
     }
   };
-
-  if (loading) return <div className="min-h-screen bg-slate-50 p-6 text-sm text-slate-500">Loading...</div>;
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -129,7 +129,11 @@ export default function WalletsPage() {
         <div className="flex justify-between items-center mb-4">
           <div className="flex gap-4 flex-1">
             <div className="relative flex-1">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              {loading ? (
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
+              ) : (
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              )}
               <input
                 type="text"
                 placeholder="Search by user ID or label..."
@@ -182,88 +186,100 @@ export default function WalletsPage() {
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-slate-100">
-            {wallets.map((wallet) => (
-              <tr key={wallet.wallet_id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-900">
-                  <Link
-                    href={`/dashboard/wallets/${wallet.wallet_id}`}
-                    className="text-blue-600 hover:text-blue-700 font-mono text-[11px]"
-                  >
-                    {wallet.wallet_id.substring(0, 8)}...
-                  </Link>
+          <tbody className={`bg-white divide-y divide-slate-100 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
+            {loading && wallets.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-8 text-sm text-slate-500">
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-500 border-t-transparent"></div>
+                    Loading wallets...
+                  </div>
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">
-                  {wallet.external_user_id}
+              </tr>
+            ) : wallets.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-8 text-sm text-slate-500">
+                  No wallets found
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">
-                  {wallet.label || '-'}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-900">
-                  {wallet.currency} {wallet.balance}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                    wallet.status === 'active' ? 'bg-green-100 text-green-800' :
-                    wallet.status === 'frozen' ? 'bg-red-100 text-red-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {wallet.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium space-x-2">
-                  <Link
-                    href={`/dashboard/wallets/${wallet.wallet_id}`}
-                    className="text-indigo-600 hover:text-indigo-900"
-                  >
-                    View
-                  </Link>
-                  <button
-                    onClick={() => {
-                      setSelectedWallet(wallet);
-                      setShowEditModal(true);
-                    }}
-                    className="text-blue-600 hover:text-blue-900"
-                  >
-                    Edit
-                  </button>
-                  {wallet.status === 'active' && (
-                    <button
-                      onClick={() => handleFreeze(wallet.wallet_id)}
-                      className="text-red-600 hover:text-red-900"
+              </tr>
+            ) : (
+              wallets.map((wallet) => (
+                <tr key={wallet.wallet_id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-900">
+                    <Link
+                      href={`/dashboard/wallets/${wallet.wallet_id}`}
+                      className="text-blue-600 hover:text-blue-700 font-mono text-[11px]"
                     >
-                      Freeze
-                    </button>
-                  )}
-                  {wallet.status === 'frozen' && (
-                    <button
-                      onClick={() => handleUnfreeze(wallet.wallet_id)}
-                      className="text-green-600 hover:text-green-900"
+                      {wallet.wallet_id.substring(0, 8)}...
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">
+                    {wallet.external_user_id}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">
+                    {wallet.label || '-'}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-900">
+                    {wallet.currency} {wallet.balance}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      wallet.status === 'active' ? 'bg-green-100 text-green-800' :
+                      wallet.status === 'frozen' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {wallet.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium space-x-2">
+                    <Link
+                      href={`/dashboard/wallets/${wallet.wallet_id}`}
+                      className="text-indigo-600 hover:text-indigo-900"
                     >
-                      Unfreeze
-                    </button>
-                  )}
-                  {(wallet.status === 'active' || wallet.status === 'frozen') && wallet.balance === '0.0000' && (
+                      View
+                    </Link>
                     <button
                       onClick={() => {
                         setSelectedWallet(wallet);
-                        setShowDeleteModal(true);
+                        setShowEditModal(true);
                       }}
-                      className="text-red-600 hover:text-red-900"
+                      className="text-blue-600 hover:text-blue-900"
                     >
-                      Close
+                      Edit
                     </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+                    {wallet.status === 'active' && (
+                      <button
+                        onClick={() => handleFreeze(wallet.wallet_id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Freeze
+                      </button>
+                    )}
+                    {wallet.status === 'frozen' && (
+                      <button
+                        onClick={() => handleUnfreeze(wallet.wallet_id)}
+                        className="text-green-600 hover:text-green-900"
+                      >
+                        Unfreeze
+                      </button>
+                    )}
+                    {(wallet.status === 'active' || wallet.status === 'frozen') && wallet.balance === '0.0000' && (
+                      <button
+                        onClick={() => {
+                          setSelectedWallet(wallet);
+                          setShowDeleteModal(true);
+                        }}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Close
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
-        {wallets.length === 0 && (
-          <div className="text-center py-8 text-sm text-slate-500">
-            No wallets found
-          </div>
-        )}
       </div>
 
       {/* Create Wallet Modal */}
@@ -422,6 +438,8 @@ export default function WalletsPage() {
                   name="reason"
                   required
                   rows={3}
+                  value={closeReason}
+                  onChange={(e) => setCloseReason(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter reason for closing this wallet..."
                 />
@@ -448,6 +466,7 @@ export default function WalletsPage() {
                     setShowDeleteModal(false);
                     setSelectedWallet(null);
                     setDeleteConfirmation('');
+                    setCloseReason('');
                   }}
                   className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm"
                 >
@@ -457,15 +476,13 @@ export default function WalletsPage() {
                   type="button"
                   onClick={(e) => {
                     e.preventDefault();
-                    const form = e.currentTarget.closest('form') as HTMLFormElement;
-                    const formData = new FormData(form);
-                    if (deleteConfirmation === selectedWallet.wallet_id) {
-                      handleDeleteWallet(formData.get('reason') as string);
+                    if (deleteConfirmation === selectedWallet.wallet_id && closeReason.trim()) {
+                      handleDeleteWallet();
                     }
                   }}
-                  disabled={deleteConfirmation !== selectedWallet.wallet_id}
+                  disabled={deleteConfirmation !== selectedWallet.wallet_id || !closeReason.trim()}
                   className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-                    deleteConfirmation === selectedWallet.wallet_id
+                    deleteConfirmation === selectedWallet.wallet_id && closeReason.trim()
                       ? 'bg-red-600 text-white hover:bg-red-700'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}

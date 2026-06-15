@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "skipLibCheck": true,
     "paths": {
       "@walletos/types": ["./libs/types/src/index.ts"]
     }
