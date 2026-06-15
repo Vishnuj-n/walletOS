@@ -96,6 +96,19 @@
           "envFile": "{workspaceRoot}/.env.test"
         }
       }
+    },
+    "prisma-generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx prisma generate",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "build": {
+      "dependsOn": [
+        "prisma-generate",
+        "^build"
+      ]
     }
   }
 }
