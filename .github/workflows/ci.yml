@@ -79,8 +79,7 @@ jobs:
 
       # Establish SHAs for target execution tracking
       - name: Derive Base and Head SHAs for Nx
-        uses: nrwl/nx-set-shas@310288c148286f91689366df04c7c59015c7117c
-
+        uses: nrwl/nx-set-shas@v5
       # Use smart-gating to process code updates efficiently.
       # On push/pull_request events, github.event.inputs.scope is empty, so
       # the else branch runs automatically — defaulting to 'affected' mode.
