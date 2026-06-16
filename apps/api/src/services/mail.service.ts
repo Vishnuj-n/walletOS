@@ -1,13 +1,20 @@
 import nodemailer from 'nodemailer';
 
+const smtpHost = process.env.GLOBAL_SMTP_HOST || 'smtp.gmail.com';
+const smtpPort = process.env.GLOBAL_SMTP_PORT ? parseInt(process.env.GLOBAL_SMTP_PORT, 10) : 465;
+const smtpSecure = process.env.GLOBAL_SMTP_SECURE ? process.env.GLOBAL_SMTP_SECURE === 'true' : smtpPort === 465;
+
 const globalSmtpTransporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
+  host: smtpHost,
+  port: smtpPort,
+  secure: smtpSecure,
   auth: {
     user: process.env.GLOBAL_SMTP_USER,
     pass: process.env.GLOBAL_SMTP_PASS,
   },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
 });
 
 const DEFAULT_ADMIN_CLAIM_REDIRECT_URL = 'http://localhost:3000';
@@ -99,6 +106,9 @@ export async function verifyGlobalSmtpHealth(): Promise<void> {
   const claimRedirectUrl = process.env.ADMIN_CLAIM_REDIRECT_URL?.trim();
   const hasClaimRedirectUrl = Boolean(claimRedirectUrl);
 
+  console.log(`[SMTP] GLOBAL_SMTP_HOST: ${smtpHost}`);
+  console.log(`[SMTP] GLOBAL_SMTP_PORT: ${smtpPort}`);
+  console.log(`[SMTP] GLOBAL_SMTP_SECURE: ${smtpSecure}`);
   console.log(`[SMTP] GLOBAL_SMTP_USER loaded: ${hasUser ? 'yes' : 'no'}`);
   console.log(`[SMTP] GLOBAL_SMTP_PASS loaded: ${hasPass ? 'yes' : 'no'}`);
   console.log(`[INVITE] ADMIN_CLAIM_REDIRECT_URL loaded: ${hasClaimRedirectUrl ? 'yes' : 'no'}`);
