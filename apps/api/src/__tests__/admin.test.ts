@@ -1,3 +1,8 @@
+// Mock mail service BEFORE any module that imports it
+jest.mock('../services/mail.service', () => ({
+  sendInviteEmail: jest.fn().mockResolvedValue(undefined),
+}));
+
 import request from 'supertest';
 import { createHash, randomBytes } from 'crypto';
 import { AdminRole } from '@prisma/client';
