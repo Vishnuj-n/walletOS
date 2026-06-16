@@ -1,5 +1,6 @@
 {
   "framework": "nextjs",
   "buildCommand": "npx nx build admin",
-  "outputDirectory": "dist/apps/admin/.next"
+  "outputDirectory": "apps/admin/.next"
 }
+
