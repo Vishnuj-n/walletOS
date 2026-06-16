@@ -41,7 +41,7 @@ export function errorHandlerMiddleware(
   err: Error,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void {
   const requestId = req.id || 'unknown';
 

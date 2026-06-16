@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createHash } from 'crypto';
 import { prisma } from '../lib/prisma';
-import { AdminUser, AdminRole } from '@prisma/client';
+import { AdminRole } from '@prisma/client';
 import { AppError, ErrorCode } from './errorHandler';
 
 /**

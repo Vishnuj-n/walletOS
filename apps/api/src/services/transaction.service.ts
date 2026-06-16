@@ -137,10 +137,9 @@ export async function creditWallet(params: CreditParams) {
       type: transaction.type,
       reference_id: transaction.referenceId,
       idempotency_key: transaction.idempotencyKey,
-      metadata: transaction.metadata as Record<string, any>,
+      metadata: transaction.metadata as Record<string, unknown>,
       created_at: transaction.createdAt.toISOString(),
-    },
-    params.isSandbox
+    }
   ).catch((err) => {
     if (process.env.NODE_ENV !== 'test') {
       console.error('Failed to publish wallet.credited webhook:', err);
@@ -233,10 +232,9 @@ export async function debitWallet(params: DebitParams) {
       type: transaction.type,
       reference_id: transaction.referenceId,
       idempotency_key: transaction.idempotencyKey,
-      metadata: transaction.metadata as Record<string, any>,
+      metadata: transaction.metadata as Record<string, unknown>,
       created_at: transaction.createdAt.toISOString(),
-    },
-    params.isSandbox
+    }
   ).catch((err) => {
     if (process.env.NODE_ENV !== 'test') {
       console.error('Failed to publish wallet.debited webhook:', err);
@@ -383,10 +381,9 @@ export async function transferBetweenWallets(params: TransferParams) {
       type: result.debitTransaction.type,
       reference_id: result.debitTransaction.referenceId,
       idempotency_key: result.debitTransaction.idempotencyKey,
-      metadata: result.debitTransaction.metadata as Record<string, any>,
+      metadata: result.debitTransaction.metadata as Record<string, unknown>,
       created_at: result.debitTransaction.createdAt.toISOString(),
-    },
-    params.isSandbox
+    }
   ).catch((err) => {
     if (process.env.NODE_ENV !== 'test') {
       console.error('Failed to publish transfer source webhook:', err);
@@ -406,10 +403,9 @@ export async function transferBetweenWallets(params: TransferParams) {
       type: result.creditTransaction.type,
       reference_id: result.creditTransaction.referenceId,
       idempotency_key: result.creditTransaction.idempotencyKey,
-      metadata: result.creditTransaction.metadata as Record<string, any>,
+      metadata: result.creditTransaction.metadata as Record<string, unknown>,
       created_at: result.creditTransaction.createdAt.toISOString(),
-    },
-    params.isSandbox
+    }
   ).catch((err) => {
     if (process.env.NODE_ENV !== 'test') {
       console.error('Failed to publish transfer target webhook:', err);
@@ -550,10 +546,9 @@ export async function reverseTransaction(params: ReverseParams) {
       type: reversalTransaction.type,
       reference_id: reversalTransaction.referenceId,
       idempotency_key: reversalTransaction.idempotencyKey,
-      metadata: reversalTransaction.metadata as Record<string, any>,
+      metadata: reversalTransaction.metadata as Record<string, unknown>,
       created_at: reversalTransaction.createdAt.toISOString(),
-    },
-    params.isSandbox
+    }
   ).catch((err) => {
     if (process.env.NODE_ENV !== 'test') {
       console.error('Failed to publish wallet.reversed webhook:', err);

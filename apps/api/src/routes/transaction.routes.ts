@@ -12,7 +12,7 @@ import { userSessionAuthMiddleware } from '../middleware/userSessionAuth';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { TransactionMetadata, TransactionResponse, ListTransactionsQuery } from '../types/transaction';
+import { TransactionMetadata, ListTransactionsQuery } from '../types/transaction';
 
 const router = Router();
 
@@ -280,7 +280,7 @@ router.post(
 router.get(
   '/transactions/:txId',
   transactionReadAuth,
-  asyncHandler(async (req: Request, res: Response, next: any): Promise<void> => {
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { txId } = req.params;
 
     if (!req.tenantId) {
@@ -316,7 +316,7 @@ router.get(
 router.get(
   '/transactions',
   transactionReadAuth,
-  asyncHandler(async (req: Request, res: Response, next: any): Promise<void> => {
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const query = req.query as ListTransactionsQuery;
     const {
       wallet_id,

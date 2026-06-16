@@ -1,21 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { KeyRound, RefreshCcw, ShieldCheck, Webhook, Plus, Trash2, CheckCircle2, Activity, Play, AlertTriangle, Code, Key } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { PermissionGate } from '../../../components/PermissionGate';
 import {
   fetchCurrentTenantApiKeys,
-  rotateCurrentTenantKey,
   createCurrentTenantApiKey,
   revokeCurrentTenantApiKey,
   fetchWebhooks,
   createWebhook,
   deleteWebhook,
   testWebhook,
-  type WebhookRecord,
 } from '../../../services/adminService';
-import type { TenantApiKeyMetadata, TenantApiKeySettingsResponse } from '@walletos/types';
+import type { TenantApiKeySettingsResponse } from '@walletos/types';
 
 interface WebhookEndpoint {
   id: string;
@@ -29,18 +27,7 @@ interface WebhookEndpoint {
   created_at: string;
 }
 
-function isWebhookEndpoint(item: unknown): item is WebhookEndpoint {
-  if (!item || typeof item !== 'object') return false;
-  const w = item as Record<string, unknown>;
-  return (
-    typeof w.id === 'string' &&
-    typeof w.url === 'string' &&
-    Array.isArray(w.events) &&
-    w.events.every((e) => typeof e === 'string') &&
-    typeof w.is_active === 'boolean' &&
-    typeof w.created_at === 'string'
-  );
-}
+
 
 interface WebhookDeliveryLog {
   id: string;
@@ -51,9 +38,7 @@ interface WebhookDeliveryLog {
   timestamp: string;
 }
 
-function scopeLabel(scope: TenantApiKeyMetadata['scope']): string {
-  return scope === 'live' ? 'Live Key' : 'Test Key';
-}
+
 
 export default function SettingsPage() {
   const { adminUser, hasRole } = useAuth();
@@ -64,12 +49,9 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rotationError, setRotationError] = useState<string | null>(null);
-  const [rotationLoading, setRotationLoading] = useState<'live' | 'test' | null>(null);
+
   const [revealedKey, setRevealedKey] = useState<{ scope: 'live' | 'test'; value: string } | null>(null);
-  const [selectedScopes, setSelectedScopes] = useState<Record<'live' | 'test', 'read_only' | 'read_write' | 'admin'>>({
-    live: 'admin',
-    test: 'admin',
-  });
+
 
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
@@ -135,13 +117,7 @@ export default function SettingsPage() {
   const [testLogs, setTestLogs] = useState<WebhookDeliveryLog[]>([]);
   const [showTestLogModal, setShowTestLogModal] = useState(false);
 
-  const keysByScope = useMemo(() => {
-    const lookup = new Map<'live' | 'test', TenantApiKeyMetadata>();
-    for (const key of settings?.keys ?? []) {
-      lookup.set(key.scope, key);
-    }
-    return lookup;
-  }, [settings]);
+
 
   const loadSettings = useCallback(async () => {
     if (!canManageSettings) {
@@ -193,23 +169,7 @@ export default function SettingsPage() {
     loadWebhooks();
   }, [loadWebhooks]);
 
-  const handleRotate = async (scope: 'live' | 'test') => {
-    setRotationLoading(scope);
-    setRotationError(null);
 
-    try {
-      const response = await rotateCurrentTenantKey({
-        scope,
-        keyScope: selectedScopes[scope],
-      });
-      setRevealedKey({ scope, value: response.api_key });
-      await loadSettings();
-    } catch (err) {
-      setRotationError(err instanceof Error ? err.message : 'Failed to rotate API key');
-    } finally {
-      setRotationLoading(null);
-    }
-  };
 
   // API Key auto-clear timer
   useEffect(() => {
@@ -397,7 +357,7 @@ export default function SettingsPage() {
             }}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm bg-white"
           >
-            <RefreshCcw size={14} className={`${rotationLoading ? 'animate-spin' : ''}`} />
+            <RefreshCcw size={14} className={`${loading ? 'animate-spin' : ''}`} />
             Sync Configuration
           </button>
         </div>

@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { generateWalletPublicId } from '../lib/publicId';
 
 /**

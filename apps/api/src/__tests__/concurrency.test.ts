@@ -16,13 +16,6 @@ interface Transaction {
   amount: string;
 }
 
-interface WalletResponse {
-  balance: string;
-}
-
-interface TransactionsResponse {
-  data: Transaction[];
-}
 
 describe('Concurrency Tests', () => {
   const app = createTestApp();

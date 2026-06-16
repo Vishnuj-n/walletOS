@@ -348,7 +348,7 @@ export async function exportAuditLogsCsv(params?: {
       throw new Error('Session expired. Please sign in again.');
     }
     const fallbackMessage = 'Failed to export audit logs';
-    let errorObj: any = null;
+    let errorObj: { error?: { code?: string }; message?: string } | null = null;
     try {
       errorObj = await res.json();
     } catch {

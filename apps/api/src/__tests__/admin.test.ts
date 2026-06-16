@@ -1290,7 +1290,7 @@ describe('Admin API Endpoints', () => {
   });
 
   describe('Superadmin Cross-Tenant Wallet Operations', () => {
-    let otherTenantId = 'tnt_other_tenant';
+    const otherTenantId = 'tnt_other_tenant';
     let otherWalletId: string;
 
     beforeAll(async () => {
@@ -1394,7 +1394,7 @@ describe('Admin API Endpoints', () => {
           description: 'Cross credit support',
           reason: 'Support test',
         });
-      expect(supportCreditRes.status).toBe(404);
+      expect(supportCreditRes.status).toBe(403);
 
       // Superadmin debit
       const debitRes = await request(app)

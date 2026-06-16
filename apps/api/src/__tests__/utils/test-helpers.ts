@@ -4,7 +4,7 @@
  * Utility functions for setting up test data and making API requests.
  */
 
-import { PrismaClient, KeyScope } from '@prisma/client';
+import { KeyScope } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { prisma } from '../../lib/prisma';
 import { generateWalletPublicId } from '../../lib/publicId';

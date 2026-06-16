@@ -7,7 +7,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
 import { generateAdminUserPublicId, generateTransactionPublicId } from '../lib/publicId';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
-import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet, getWalletById } from '../services/wallet.service';
+import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet } from '../services/wallet.service';
 import { sendInviteEmail } from '../services/mail.service';
 import { dispatchWebhookDelivery } from '../services/webhook.service';
 import { z } from 'zod';
@@ -268,17 +268,6 @@ async function resolveWalletAndTenantScope(
 }
 
 
-async function getAdminEmailsByRole(
-  role: 'support' | 'finance' | 'tenant_admin' | 'superadmin'
-): Promise<string[]> {
-  const admins = await prisma.adminUser.findMany({
-    where: { role },
-    select: { email: true },
-  });
-
-  return admins.map((admin) => admin.email);
-}
-
 async function rotateAdminApiKeyForTenant(params: {
   tenantId: string;
   scope: 'live' | 'test';
@@ -530,7 +519,7 @@ router.post(
       });
 
       // Update audit log with complete information
-      const auditUpdate = await tx.auditLog.update({
+      await tx.auditLog.update({
         where: { id: auditReservation.id },
         data: {
           entityId: wallet.id,
