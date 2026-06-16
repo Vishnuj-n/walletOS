@@ -7,7 +7,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { prisma } from '../lib/prisma';
 import { generateAdminUserPublicId, generateTransactionPublicId } from '../lib/publicId';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
-import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet } from '../services/wallet.service';
+import { freezeWallet, unfreezeWallet, createWallet, updateWallet, closeWallet, getWalletById } from '../services/wallet.service';
 import { sendInviteEmail } from '../services/mail.service';
 import { dispatchWebhookDelivery } from '../services/webhook.service';
 import { z } from 'zod';
@@ -237,6 +237,36 @@ async function resolveAdminTenantScope(
 
   return tenant.id;
 }
+
+async function resolveWalletAndTenantScope(
+  req: any,
+  walletId: string,
+  isSandbox: boolean
+) {
+  const sessionTenantId = req.adminUser!.tenantId;
+  const isSuperadmin = req.adminUser!.role === 'superadmin';
+
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      OR: [
+        { id: walletId },
+        { publicId: walletId },
+      ],
+      isSandbox,
+      ...(isSuperadmin ? {} : { tenantId: sessionTenantId }),
+    },
+  });
+
+  if (!wallet) {
+    throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
+  }
+
+  return {
+    wallet,
+    resolvedTenantId: wallet.tenantId,
+  };
+}
+
 
 async function getAdminEmailsByRole(
   role: 'support' | 'finance' | 'tenant_admin' | 'superadmin'
@@ -547,10 +577,12 @@ router.patch(
   asyncHandler(async (req, res) => {
     const { walletId } = req.params;
     const { label, metadata } = req.body;
-    const tenantId = req.adminUser!.tenantId;
+    const isSandbox = req.isSandbox || false;
+
+    const { wallet: prevWallet, resolvedTenantId: tenantId } = await resolveWalletAndTenantScope(req, walletId, isSandbox);
+
     const adminEmail = req.adminUser!.email;
     const idempotencyKey = req.headers['idempotency-key'] as string;
-    const isSandbox = req.isSandbox || false;
 
     if (label === undefined && metadata === undefined) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'label or metadata must be provided');
@@ -590,17 +622,9 @@ router.patch(
       }
     }
 
-    // Capture pre-update state for audit log
-    const prevWallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-    });
-
-    if (!prevWallet) {
-      throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
-    }
 
     const wallet = await updateWallet(
-      walletId,
+      prevWallet.id,
       tenantId,
       isSandbox,
       { label, metadata }
@@ -611,7 +635,7 @@ router.patch(
       data: {
         tenantId: tenantId as string,
         entityType: 'wallet',
-        entityId: walletId,
+        entityId: prevWallet.id,
         action: 'wallet.updated',
         actorId: adminEmail,
         actorType: 'admin',
@@ -653,10 +677,12 @@ router.delete(
   asyncHandler(async (req, res) => {
     const { walletId } = req.params;
     const { reason } = req.body;
-    const tenantId = req.adminUser!.tenantId;
+    const isSandbox = req.isSandbox || false;
+
+    const { wallet: resolvedWallet, resolvedTenantId: tenantId } = await resolveWalletAndTenantScope(req, walletId, isSandbox);
+
     const adminEmail = req.adminUser!.email;
     const idempotencyKey = req.headers['idempotency-key'] as string;
-    const isSandbox = req.isSandbox || false;
 
     if (!reason) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Missing required field: reason');
@@ -696,13 +722,14 @@ router.delete(
       }
     }
 
-    const wallet = await closeWallet(walletId, tenantId, isSandbox, reason);
+
+    const wallet = await closeWallet(resolvedWallet.id, tenantId, isSandbox, reason);
 
     // Update audit log with admin metadata while preserving service-generated data
     const existingAudit = await prisma.auditLog.findFirst({
       where: {
         tenantId,
-        entityId: walletId,
+        entityId: resolvedWallet.id,
         action: 'wallet.closed',
       },
     });
@@ -711,7 +738,7 @@ router.delete(
       await prisma.auditLog.updateMany({
         where: {
           tenantId,
-          entityId: walletId,
+          entityId: resolvedWallet.id,
           action: 'wallet.closed',
         },
         data: {
@@ -813,6 +840,7 @@ router.get(
     res.json({
       data: wallets.map(w => ({
         wallet_id: w.id,
+        public_id: w.publicId,
         external_user_id: w.externalUserId,
         label: w.label,
         balance: w.balance.toFixed(4),
@@ -835,19 +863,14 @@ router.get(
   requireAdminRole('support'),
   asyncHandler(async (req, res) => {
     const { walletId } = req.params;
-    const tenantId = req.adminUser!.tenantId;
     const isSandbox = req.isSandbox || false;
 
-    const wallet = await prisma.wallet.findFirst({
-      where: { id: walletId, tenantId, isSandbox },
-    });
+    const { wallet } = await resolveWalletAndTenantScope(req, walletId, isSandbox);
 
-    if (!wallet) {
-      throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
-    }
 
     res.json({
       wallet_id: wallet.id,
+      public_id: wallet.publicId,
       external_user_id: wallet.externalUserId,
       label: wallet.label,
       balance: wallet.balance.toFixed(4),
@@ -868,10 +891,13 @@ router.post(
   requireAdminRole('finance'),
   asyncHandler(async (req, res) => {
     const { wallet_id, amount, description, reference_id, metadata, reason } = req.body;
-    const tenantId = req.adminUser!.tenantId;
+    const isSandbox = req.isSandbox || false;
+
+
+    const { wallet, resolvedTenantId: tenantId } = await resolveWalletAndTenantScope(req, wallet_id, isSandbox);
+
     const adminEmail = req.adminUser!.email;
     const idempotencyKey = req.headers['idempotency-key'] as string;
-    const isSandbox = req.isSandbox || false;
 
     if (!wallet_id || !amount || !description || !reason) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Missing required fields: wallet_id, amount, description, reason');
@@ -883,13 +909,6 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Amount must be a positive number');
     }
 
-    const wallet = await prisma.wallet.findFirst({
-      where: { id: wallet_id, tenantId, isSandbox },
-    });
-
-    if (!wallet) {
-      throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
-    }
 
     if (wallet.status !== 'active') {
       throw new AppError(409, ErrorCode.WALLET_FROZEN, 'Wallet is not active');
@@ -1019,10 +1038,12 @@ router.post(
   requireAdminRole('finance'),
   asyncHandler(async (req, res) => {
     const { wallet_id, amount, description, reference_id, reason } = req.body;
-    const tenantId = req.adminUser!.tenantId;
+    const isSandbox = req.isSandbox || false;
+
+    const { wallet, resolvedTenantId: tenantId } = await resolveWalletAndTenantScope(req, wallet_id, isSandbox);
+
     const adminEmail = req.adminUser!.email;
     const idempotencyKey = req.headers['idempotency-key'] as string;
-    const isSandbox = req.isSandbox || false;
 
     if (!wallet_id || !amount || !description || !reason) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Missing required fields: wallet_id, amount, description, reason');
@@ -1034,13 +1055,6 @@ router.post(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Amount must be a positive number');
     }
 
-    const wallet = await prisma.wallet.findFirst({
-      where: { id: wallet_id, tenantId, isSandbox },
-    });
-
-    if (!wallet) {
-      throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
-    }
 
     if (wallet.status !== 'active') {
       throw new AppError(409, ErrorCode.WALLET_FROZEN, 'Wallet is not active');
@@ -1355,22 +1369,17 @@ router.post(
   asyncHandler(async (req, res) => {
     const { walletId } = req.params;
     const { reason } = req.body;
-    const tenantId = req.adminUser!.tenantId;
+    const isSandbox = req.isSandbox || false;
+
+    const { wallet, resolvedTenantId: tenantId } = await resolveWalletAndTenantScope(req, walletId, isSandbox);
+
     const adminEmail = req.adminUser!.email;
     const idempotencyKey = req.headers['idempotency-key'] as string;
-    const isSandbox = req.isSandbox || false;
 
     if (!reason) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Missing required field: reason');
     }
 
-    const wallet = await prisma.wallet.findFirst({
-      where: { id: walletId, tenantId, isSandbox },
-    });
-
-    if (!wallet) {
-      throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
-    }
 
     if (wallet.status === 'frozen') {
       throw new AppError(409, ErrorCode.WALLET_ALREADY_FROZEN, 'Wallet is already frozen');
@@ -1396,7 +1405,7 @@ router.post(
 
       if (existingAudit) {
         return res.status(200).json({
-          wallet_id: walletId,
+          wallet_id: wallet.id,
           external_user_id: wallet.externalUserId,
           label: wallet.label,
           balance: wallet.balance.toFixed(4),
@@ -1408,7 +1417,7 @@ router.post(
       }
     }
 
-    const updatedWallet = await freezeWallet(walletId, tenantId, isSandbox, reason, idempotencyKey, adminEmail, 'admin', req.adminUser!.role);
+    const updatedWallet = await freezeWallet(wallet.id, tenantId, isSandbox, reason, idempotencyKey, adminEmail, 'admin', req.adminUser!.role);
 
     res.json({
       wallet_id: updatedWallet.id,
@@ -1433,22 +1442,17 @@ router.post(
   asyncHandler(async (req, res) => {
     const { walletId } = req.params;
     const { reason } = req.body;
-    const tenantId = req.adminUser!.tenantId;
+    const isSandbox = req.isSandbox || false;
+
+    const { wallet, resolvedTenantId: tenantId } = await resolveWalletAndTenantScope(req, walletId, isSandbox);
+
     const adminEmail = req.adminUser!.email;
     const idempotencyKey = req.headers['idempotency-key'] as string;
-    const isSandbox = req.isSandbox || false;
 
     if (!reason) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Missing required field: reason');
     }
 
-    const wallet = await prisma.wallet.findFirst({
-      where: { id: walletId, tenantId, isSandbox },
-    });
-
-    if (!wallet) {
-      throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
-    }
 
     if (wallet.status !== 'frozen') {
       throw new AppError(409, ErrorCode.INVALID_OPERATION, 'Wallet is not frozen');
@@ -1470,7 +1474,7 @@ router.post(
 
       if (existingAudit) {
         return res.status(200).json({
-          wallet_id: walletId,
+          wallet_id: wallet.id,
           external_user_id: wallet.externalUserId,
           label: wallet.label,
           balance: wallet.balance.toFixed(4),
@@ -1482,7 +1486,7 @@ router.post(
       }
     }
 
-    const updatedWallet = await unfreezeWallet(walletId, tenantId, wallet.isSandbox, reason, idempotencyKey, adminEmail, 'admin', req.adminUser!.role);
+    const updatedWallet = await unfreezeWallet(wallet.id, tenantId, wallet.isSandbox, reason, idempotencyKey, adminEmail, 'admin', req.adminUser!.role);
 
     res.json({
       wallet_id: updatedWallet.id,
@@ -1736,11 +1740,22 @@ router.get(
 
     const nextCursor = auditLogs.length === cappedLimit ? auditLogs[auditLogs.length - 1].id : null;
 
+    // Resolve wallet public IDs for the log list
+    const walletIds = Array.from(new Set(
+      auditLogs.filter(log => log.entityType === 'Wallet').map(log => log.entityId)
+    ));
+    const wallets = await prisma.wallet.findMany({
+      where: { id: { in: walletIds } },
+      select: { id: true, publicId: true },
+    });
+    const walletPublicIdMap = new Map(wallets.map(w => [w.id, w.publicId]));
+
     res.json({
       data: auditLogs.map(log => ({
         id: log.id,
         tenant_id: log.tenantId,
         wallet_id: log.entityId,
+        wallet_public_id: log.entityType === 'Wallet' ? walletPublicIdMap.get(log.entityId) || null : null,
         action: log.action,
         actor: log.actorType ? `${log.actorType}:${log.actorId}` : log.actorId,
         changes: log.changes,
@@ -3016,7 +3031,8 @@ router.get(
       status: string;
       balance: Decimal;
       currency: string;
-      tenant: { name: string };
+      label: string | null;
+      tenant: { name: string } | null;
     }> = [];
     let transactions: Array<{
       publicId: string;
@@ -3026,19 +3042,19 @@ router.get(
       idempotencyKey: string | null;
       referenceId: string | null;
       createdAt: Date;
-      wallet: { publicId: string; tenant: { name: string } };
+      wallet: { publicId: string; tenant: { name: string } | null } | null;
     }> = [];
     let requests: Array<{
       publicId: string;
       referenceId: string | null;
       createdAt: Date;
-      wallet: { publicId: string; tenant: { name: string } };
+      wallet: { publicId: string; tenant: { name: string } | null } | null;
     }> = [];
     let users: Array<{
       publicId: string;
       email: string;
       role: string;
-      tenant: { name: string };
+      tenant: { name: string } | null;
     }> = [];
 
     if (prefix === 'wal_') {
@@ -3053,6 +3069,7 @@ router.get(
           status: true,
           balance: true,
           currency: true,
+          label: true,
           tenant: { select: { name: true } },
         },
         take: 5,
@@ -3129,6 +3146,7 @@ router.get(
             status: true,
             balance: true,
             currency: true,
+            label: true,
             tenant: { select: { name: true } },
           },
           take: 5,
@@ -3204,7 +3222,8 @@ router.get(
         status: wallet.status,
         balance: wallet.balance.toFixed(4),
         currency: wallet.currency,
-        tenant_name: wallet.tenant.name,
+        label: wallet.label,
+        tenant_name: wallet.tenant?.name ?? 'Unknown',
       })),
       transactions: transactions.map((transaction) => ({
         id: transaction.publicId,
@@ -3213,8 +3232,8 @@ router.get(
         currency: transaction.currency,
         idempotency_key: transaction.idempotencyKey,
         request_id: transaction.referenceId,
-        wallet_id: transaction.wallet.publicId,
-        tenant_name: transaction.wallet.tenant.name,
+        wallet_id: transaction.wallet?.publicId ?? 'Unknown',
+        tenant_name: transaction.wallet?.tenant?.name ?? 'Unknown',
         created_at: transaction.createdAt.toISOString(),
       })),
       requests: requests
@@ -3222,15 +3241,15 @@ router.get(
         .map((transaction) => ({
           id: transaction.referenceId as string,
           transaction_id: transaction.publicId,
-          wallet_id: transaction.wallet.publicId,
-          tenant_name: transaction.wallet.tenant.name,
+          wallet_id: transaction.wallet?.publicId ?? 'Unknown',
+          tenant_name: transaction.wallet?.tenant?.name ?? 'Unknown',
           created_at: transaction.createdAt.toISOString(),
         })),
       users: users.map((user) => ({
         id: user.publicId,
         email: user.email,
         role: user.role,
-        tenant_name: user.tenant.name,
+        tenant_name: user.tenant?.name ?? 'Unknown',
       })),
     });
   })

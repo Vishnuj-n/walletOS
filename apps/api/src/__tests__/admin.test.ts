@@ -1288,4 +1288,169 @@ describe('Admin API Endpoints', () => {
       expect(auditLog?.isSandbox).toBe(false);
     });
   });
+
+  describe('Superadmin Cross-Tenant Wallet Operations', () => {
+    let otherTenantId = 'tnt_other_tenant';
+    let otherWalletId: string;
+
+    beforeAll(async () => {
+      // Create other tenant
+      await prisma.tenant.upsert({
+        where: { id: otherTenantId },
+        update: {},
+        create: {
+          id: otherTenantId,
+          name: 'Other Tenant',
+          contactEmail: 'other@tenant.com',
+        },
+      });
+
+      // Delete existing to isolate
+      await prisma.wallet.deleteMany({
+        where: {
+          tenantId: otherTenantId,
+          externalUserId: 'other-user',
+        },
+      });
+
+      // Create wallet in other tenant
+      const wallet = await prisma.wallet.create({
+        data: {
+          publicId: generateWalletPublicId(),
+          tenantId: otherTenantId,
+          externalUserId: 'other-user',
+          currency: 'USD',
+          balance: "100.00",
+          status: 'active',
+          isSandbox: false,
+        },
+      });
+      otherWalletId = wallet.id;
+    });
+
+    afterAll(async () => {
+      // Clean up other tenant's transactions, audit logs, wallets
+      await prisma.transaction.deleteMany({ where: { walletId: otherWalletId } });
+      await prisma.auditLog.deleteMany({ where: { entityId: otherWalletId } });
+      await prisma.wallet.deleteMany({ where: { id: otherWalletId } });
+      await prisma.tenant.deleteMany({ where: { id: otherTenantId } });
+    });
+
+    it('should allow superadmin to fetch wallet cross-tenant but restrict support', async () => {
+      // Superadmin should succeed
+      const adminRes = await request(app)
+        .get(`/api/v1/admin/wallets/${otherWalletId}`)
+        .set('Authorization', adminAuthToken);
+      expect(adminRes.status).toBe(200);
+      expect(adminRes.body.wallet_id).toBe(otherWalletId);
+
+      // Support should fail
+      const supportRes = await request(app)
+        .get(`/api/v1/admin/wallets/${otherWalletId}`)
+        .set('Authorization', supportAuthToken);
+      expect(supportRes.status).toBe(404);
+    });
+
+    it('should allow superadmin to update wallet cross-tenant but restrict support', async () => {
+      const timestamp = Date.now();
+      const adminRes = await request(app)
+        .patch(`/api/v1/admin/wallets/${otherWalletId}`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', `cross-update-${timestamp}`)
+        .send({ label: 'Cross-Tenant Label' });
+      expect(adminRes.status).toBe(200);
+
+      const supportRes = await request(app)
+        .patch(`/api/v1/admin/wallets/${otherWalletId}`)
+        .set('Authorization', supportAuthToken)
+        .set('Idempotency-Key', `cross-update-support-${timestamp}`)
+        .send({ label: 'Cross-Tenant Support' });
+      expect(supportRes.status).toBe(404);
+    });
+
+    it('should allow superadmin to credit/debit wallet cross-tenant but restrict support', async () => {
+      const timestamp = Date.now();
+      // Superadmin credit
+      const creditRes = await request(app)
+        .post('/api/v1/admin/transactions/credit')
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', `cross-credit-${timestamp}`)
+        .send({
+          wallet_id: otherWalletId,
+          amount: '10.00',
+          description: 'Cross credit',
+          reason: 'Superadmin test',
+        });
+      expect(creditRes.status).toBe(201);
+
+      // Support credit fails
+      const supportCreditRes = await request(app)
+        .post('/api/v1/admin/transactions/credit')
+        .set('Authorization', supportAuthToken)
+        .set('Idempotency-Key', `cross-credit-support-${timestamp}`)
+        .send({
+          wallet_id: otherWalletId,
+          amount: '10.00',
+          description: 'Cross credit support',
+          reason: 'Support test',
+        });
+      expect(supportCreditRes.status).toBe(404);
+
+      // Superadmin debit
+      const debitRes = await request(app)
+        .post('/api/v1/admin/transactions/debit')
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', `cross-debit-${timestamp}`)
+        .send({
+          wallet_id: otherWalletId,
+          amount: '10.00',
+          description: 'Cross debit',
+          reason: 'Superadmin test',
+        });
+      expect(debitRes.status).toBe(201);
+    });
+
+    it('should allow superadmin to freeze/unfreeze cross-tenant but restrict support', async () => {
+      const timestamp = Date.now();
+      // Freeze
+      const freezeRes = await request(app)
+        .post(`/api/v1/admin/wallets/${otherWalletId}/freeze`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', `cross-freeze-${timestamp}`)
+        .send({ reason: 'Freeze test' });
+      expect(freezeRes.status).toBe(200);
+
+      // Unfreeze
+      const unfreezeRes = await request(app)
+        .post(`/api/v1/admin/wallets/${otherWalletId}/unfreeze`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', `cross-unfreeze-${timestamp}`)
+        .send({ reason: 'Unfreeze test' });
+      expect(unfreezeRes.status).toBe(200);
+    });
+
+    it('should allow superadmin to delete/close cross-tenant but restrict support', async () => {
+      // Reset balance to 0 for closure
+      await prisma.wallet.update({
+        where: { id: otherWalletId },
+        data: { balance: "0.00", status: 'active' },
+      });
+
+      const timestamp = Date.now();
+      const supportRes = await request(app)
+        .delete(`/api/v1/admin/wallets/${otherWalletId}`)
+        .set('Authorization', supportAuthToken)
+        .set('Idempotency-Key', `cross-close-support-${timestamp}`)
+        .send({ reason: 'Support close' });
+      expect(supportRes.status).toBe(404);
+
+      const adminRes = await request(app)
+        .delete(`/api/v1/admin/wallets/${otherWalletId}`)
+        .set('Authorization', adminAuthToken)
+        .set('Idempotency-Key', `cross-close-${timestamp}`)
+        .send({ reason: 'Superadmin close' });
+      expect(adminRes.status).toBe(200);
+    });
+  });
 });
+

@@ -37,6 +37,7 @@ export interface TransactionResponse {
  */
 export interface Wallet {
   wallet_id: string;
+  public_id: string;
   external_user_id: string;
   label: string | null;
   balance: string;
@@ -87,6 +88,7 @@ export interface AuditLog {
   id: string;
   tenant_id: string;
   wallet_id: string | null;
+  wallet_public_id?: string | null;
   action: string;
   actor: string;
   changes: Record<string, unknown>;
@@ -300,6 +302,7 @@ export interface UnifiedSearchWalletResult {
   balance: string;
   currency: string;
   tenant_name: string;
+  label: string | null;
 }
 
 export interface UnifiedSearchTransactionResult {

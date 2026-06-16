@@ -206,12 +206,19 @@ export default function WalletsPage() {
               wallets.map((wallet) => (
                 <tr key={wallet.wallet_id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-900">
-                    <Link
-                      href={`/dashboard/wallets/${wallet.wallet_id}`}
-                      className="text-blue-600 hover:text-blue-700 font-mono text-[11px]"
-                    >
-                      {wallet.wallet_id.substring(0, 8)}...
-                    </Link>
+                    <div className="flex flex-col">
+                      <Link
+                        href={`/dashboard/wallets/${wallet.wallet_id}`}
+                        className="text-blue-600 hover:text-blue-700 font-mono text-[11px] font-semibold"
+                      >
+                        {wallet.public_id || wallet.wallet_id}
+                      </Link>
+                      {wallet.public_id && (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {wallet.wallet_id.substring(0, 8)}...
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">
                     {wallet.external_user_id}
