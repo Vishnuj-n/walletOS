@@ -23,6 +23,7 @@ export enum ErrorCode {
   FORBIDDEN = 'FORBIDDEN',
   VALIDATION_ERROR = 'VALIDATION_ERROR',
   INTERNAL_ERROR = 'INTERNAL_ERROR',
+  CONFLICT = 'CONFLICT',
 }
 
 export class AppError extends Error {

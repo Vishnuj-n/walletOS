@@ -1588,8 +1588,26 @@ router.post(
       });
 
       if (inviteTargetEmail && inviteTokenHash && inviteExpiresAt) {
-        await tx.adminUser.create({
-          data: {
+        // Check if an existing AdminUser with this email is already active (belongs to
+        // another tenant). Reject early rather than silently clobbering their account.
+        const existingUser = await tx.adminUser.findUnique({
+          where: { email: inviteTargetEmail },
+          select: { isActive: true, tenantId: true },
+        });
+
+        if (existingUser && existingUser.isActive) {
+          throw new AppError(
+            409,
+            ErrorCode.CONFLICT,
+            `An active admin account already exists for ${inviteTargetEmail}`,
+          );
+        }
+
+        // Upsert: safe on client-timeout retries — refreshes invite instead of
+        // failing with P2002 if the row was already created in a prior attempt.
+        await tx.adminUser.upsert({
+          where: { email: inviteTargetEmail },
+          create: {
             publicId: generateAdminUserPublicId(),
             tenantId: tenant.id,
             email: inviteTargetEmail,
@@ -1598,6 +1616,17 @@ router.post(
             passwordHash: null,
             invitedAt: new Date(),
           },
+          update: {
+            // Tenant may differ on a true retry; keep it aligned with this request.
+            tenantId: tenant.id,
+            invitedAt: new Date(),
+            isActive: false,
+          },
+        });
+
+        // Delete any stale pending tokens for this email before issuing a fresh one.
+        await tx.pendingVerification.deleteMany({
+          where: { email: inviteTargetEmail },
         });
 
         await tx.pendingVerification.create({
