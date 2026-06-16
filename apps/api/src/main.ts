@@ -1,9 +1,4 @@
-/**
- * WalletOS API - Core Ledger & Concurrency
- * 
- * Multi-tenant financial ledger with pessimistic locking and idempotency.
- */
-
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import * as path from 'path';
