@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma';
+import { Prisma } from '@prisma/client';
 import { createHmac, randomUUID } from 'crypto';
 import dns from 'dns';
 
@@ -69,7 +70,7 @@ export async function validateWebhookUrl(urlStr: string): Promise<boolean> {
     } else {
       return !isPrivateIpv4(ipAddress);
     }
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -85,7 +86,7 @@ interface WebhookEventPayload {
   event: string;
   tenant_id: string;
   timestamp: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
 }
 
 
@@ -97,8 +98,7 @@ interface WebhookEventPayload {
 export async function publishWebhookEvent(
   tenantId: string,
   eventType: string,
-  data: Record<string, any>,
-  isSandbox = false
+  data: Record<string, unknown>
 ): Promise<void> {
   try {
     // Webhook model does not currently support isSandbox flag, so we scope all webhooks within the tenant
@@ -130,7 +130,7 @@ export async function publishWebhookEvent(
         data: {
           webhookId: webhook.id,
           eventType,
-          payload: eventPayload as any,
+          payload: eventPayload as unknown as Prisma.InputJsonValue,
           attemptNum: 1,
           idempotencyKey: randomUUID(),
         },
@@ -188,7 +188,6 @@ export async function dispatchWebhookDelivery(deliveryId: string): Promise<void>
     return;
   }
 
-  const startTime = Date.now();
   let statusCode: number | null = null;
   let responseText = '';
   let delivered = false;
@@ -232,14 +231,17 @@ export async function dispatchWebhookDelivery(deliveryId: string): Promise<void>
     statusCode = response.status;
     responseText = await response.text();
     delivered = response.ok; // true for 200-299 status codes
-  } catch (error: any) {
-    responseText = error instanceof Error ? error.message : String(error);
-    if (error.name === 'TimeoutError') {
-      statusCode = 408;
+  } catch (error) {
+    if (error instanceof Error) {
+      responseText = error.message;
+      if (error.name === 'TimeoutError') {
+        statusCode = 408;
+      }
+    } else {
+      responseText = String(error);
     }
   }
 
-  const latency = Date.now() - startTime;
 
   // Wrap related updates in a single transaction
   await prisma.$transaction(async (tx) => {

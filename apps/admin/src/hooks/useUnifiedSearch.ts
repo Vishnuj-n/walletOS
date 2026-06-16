@@ -72,8 +72,10 @@ export function useUnifiedSearch(query: string): UnifiedSearchState {
             label: 'Wallets',
             items: response.wallets.map((wallet) => ({
               id: wallet.id,
-              title: wallet.id,
-              subtitle: `${wallet.external_user_id} - ${wallet.tenant_name}`,
+              title: wallet.label ? wallet.label : wallet.id,
+              subtitle: wallet.label 
+                ? `${wallet.external_user_id} (${wallet.id}) - ${wallet.tenant_name}`
+                : `${wallet.external_user_id} - ${wallet.tenant_name}`,
               href: `/dashboard/wallets/${wallet.id}`,
               group: 'wallets' as SearchGroupKey,
               hint: `${wallet.currency} ${wallet.balance} - ${wallet.status}`,

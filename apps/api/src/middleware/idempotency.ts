@@ -268,7 +268,7 @@ export async function idempotencyMiddleware(
             // to prevent background Prisma operations after Jest teardown
             try {
               await updateMetadata();
-            } catch (error) {
+            } catch {
               // Silently ignore errors in test environment to prevent test failures
               // The metadata update is non-critical for test correctness
             }

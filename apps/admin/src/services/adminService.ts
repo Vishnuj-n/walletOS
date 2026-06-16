@@ -11,6 +11,7 @@ import type {
   CreditTransactionRequest,
   DebitTransactionRequest,
   ReversalTransactionRequest,
+  ResendTenantInviteResponse,
   RotateKeyRequest,
   RotateKeyResponse,
   CreateApiKeyRequest,
@@ -134,6 +135,14 @@ export async function createTenant(request: CreateTenantRequest): Promise<Create
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+export async function resendTenantInvite(tenantId: string): Promise<ResendTenantInviteResponse> {
+  return apiRequest<ResendTenantInviteResponse>(`/admin/tenants/${tenantId}/resend-invite`, {
+    method: 'POST',
+    requireIdempotencyKey: true,
+    fallbackMessage: 'Failed to resend tenant invite',
+  });
 }
 
 export async function inviteTenantUser(request: InviteAdminUserRequest): Promise<InviteAdminUserResponse> {
@@ -348,7 +357,7 @@ export async function exportAuditLogsCsv(params?: {
       throw new Error('Session expired. Please sign in again.');
     }
     const fallbackMessage = 'Failed to export audit logs';
-    let errorObj: any = null;
+    let errorObj: { error?: { code?: string }; message?: string } | null = null;
     try {
       errorObj = await res.json();
     } catch {

@@ -87,8 +87,12 @@ export default function WalletDetailPage() {
       <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-6">
         <div className="grid grid-cols-2 gap-6">
           <div>
-            <p className="text-xs text-slate-500">Wallet ID</p>
+            <p className="text-xs text-slate-500">Wallet ID (CUID)</p>
             <p className="text-sm font-semibold text-slate-900 font-mono">{wallet.wallet_id}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Public ID</p>
+            <p className="text-sm font-semibold text-slate-900 font-mono">{wallet.public_id || '-'}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">External User ID</p>

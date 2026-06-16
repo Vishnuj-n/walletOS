@@ -500,7 +500,12 @@ function AuditLogPageContent() {
                       {log.actor}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono text-xs">
-                      {typeof log.wallet_id === 'string' ? log.wallet_id.substring(0, 8) + '...' : '—'}
+                      <div className="flex flex-col">
+                        <span>{log.wallet_public_id || (typeof log.wallet_id === 'string' ? log.wallet_id.substring(0, 8) + '...' : '—')}</span>
+                        {log.wallet_public_id && typeof log.wallet_id === 'string' && (
+                          <span className="text-[10px] text-gray-400">({log.wallet_id.substring(0, 8)}...)</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       <pre className="text-xs bg-slate-50 p-2 rounded overflow-auto max-w-xs">

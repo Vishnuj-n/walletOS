@@ -1,6 +1,6 @@
 import { apiRequest } from '../lib/apiClient';
 import { getAdminSession, requireActiveTenantId, withActiveTenantScope } from '../lib/adminSession';
-import type { Wallet, WalletListResponse, CreateWalletRequest, UpdateWalletRequest, FreezeWalletRequest } from '@walletos/types';
+import type { Wallet, WalletListResponse, CreateWalletRequest, UpdateWalletRequest } from '@walletos/types';
 
 export async function fetchWallets(params: {
   search?: string;

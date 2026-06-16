@@ -47,7 +47,7 @@ export async function apiKeyAuthMiddleware(
     }
 
     next();
-  } catch (error) {
+  } catch {
     return next(new AppError(500, ErrorCode.INTERNAL_ERROR, 'Authentication error'));
   }
 }

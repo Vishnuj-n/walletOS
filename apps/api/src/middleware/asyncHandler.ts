@@ -8,7 +8,7 @@ import { Request, Response, NextFunction } from 'express';
  * are properly converted into HTTP responses.
  */
 export function asyncHandler<Req extends Request = Request>(
-  fn: (req: Req, res: Response, next: NextFunction) => Promise<any>
+  fn: (req: Req, res: Response, next: NextFunction) => Promise<unknown>
 ) {
   return (req: Req, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);

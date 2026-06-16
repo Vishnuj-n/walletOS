@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { generateWalletPublicId } from '../lib/publicId';
 
 /**
@@ -29,10 +29,36 @@ export interface UpdateWalletParams {
  * 
  * Enforces unique constraint on (tenantId, externalUserId, isSandbox)
  */
+async function resolveWalletId(
+  identifier: string,
+  tenantId: string,
+  isSandbox: boolean,
+  txClient?: Prisma.TransactionClient
+): Promise<string> {
+  const client = txClient || prisma;
+  const wallet = await client.wallet.findFirst({
+    where: {
+      OR: [
+        { id: identifier },
+        { publicId: identifier },
+      ],
+      tenantId,
+      isSandbox,
+    },
+    select: { id: true },
+  });
+
+  if (!wallet) {
+    throw new AppError(404, ErrorCode.NOT_FOUND, 'Wallet not found');
+  }
+
+  return wallet.id;
+}
+
 export async function createWallet(params: CreateWalletParams) {
   try {
     return await prisma.$transaction(async (tx) => {
-      // Check if wallet already exists
+      // Check if wallet already exists for this external user ID
       const existingWallet = await tx.wallet.findFirst({
         where: {
           tenantId: params.tenantId,
@@ -45,10 +71,38 @@ export async function createWallet(params: CreateWalletParams) {
         throw new AppError(409, ErrorCode.WALLET_ALREADY_EXISTS, 'Wallet already exists for this user in this tenant and environment');
       }
 
+      // Get tenant to construct tenant-prefixed public ID
+      const tenant = await tx.tenant.findUnique({
+        where: { id: params.tenantId },
+        select: { name: true },
+      });
+      const tenantName = tenant?.name || 'tst';
+
+      // Generate a unique public ID with collision check loop
+      let publicId = '';
+      let isUnique = false;
+      let retries = 0;
+      while (!isUnique && retries < 10) {
+        publicId = generateWalletPublicId(tenantName);
+        const existing = await tx.wallet.findUnique({
+          where: { publicId },
+          select: { id: true },
+        });
+        if (!existing) {
+          isUnique = true;
+        } else {
+          retries++;
+        }
+      }
+
+      if (!isUnique) {
+        throw new AppError(500, ErrorCode.INTERNAL_ERROR, 'Failed to generate a unique public wallet ID');
+      }
+
       // Create wallet
       const wallet = await tx.wallet.create({
         data: {
-          publicId: generateWalletPublicId(),
+          publicId,
           tenantId: params.tenantId,
           externalUserId: params.externalUserId,
           currency: params.currency,
@@ -58,9 +112,6 @@ export async function createWallet(params: CreateWalletParams) {
           balance: 0,
         },
       });
-
-      // Note: Audit log creation is the responsibility of the caller (e.g., admin route)
-      // to ensure actor information is properly captured. Do NOT add audit logging here.
 
       return wallet;
     }, { timeout: 20000 });
@@ -72,13 +123,13 @@ export async function createWallet(params: CreateWalletParams) {
   }
 }
 
-/**
- * Get wallet by ID
- */
 export async function getWalletById(walletId: string, tenantId: string, isSandbox: boolean) {
   const wallet = await prisma.wallet.findFirst({
     where: {
-      id: walletId,
+      OR: [
+        { id: walletId },
+        { publicId: walletId },
+      ],
       tenantId,
       isSandbox,
     },
@@ -91,9 +142,6 @@ export async function getWalletById(walletId: string, tenantId: string, isSandbo
   return wallet;
 }
 
-/**
- * Get wallet by external user ID
- */
 export async function getWalletByExternalUserId(
   externalUserId: string,
   tenantId: string,
@@ -124,14 +172,14 @@ export async function updateWallet(
   params: UpdateWalletParams
 ) {
   return await prisma.$transaction(async (tx) => {
-    // Lock the wallet row
-    await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${walletId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
+    const resolvedId = await resolveWalletId(walletId, tenantId, isSandbox, tx);
 
-    const wallet = await tx.wallet.findFirst({
+    // Lock the wallet row
+    await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${resolvedId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
+
+    const wallet = await tx.wallet.findUnique({
       where: {
-        id: walletId,
-        tenantId,
-        isSandbox,
+        id: resolvedId,
       },
     });
 
@@ -140,7 +188,7 @@ export async function updateWallet(
     }
 
     const updatedWallet = await tx.wallet.update({
-      where: { id: walletId },
+      where: { id: resolvedId },
       data: {
         label: params.label,
         metadata: params.metadata,
@@ -152,7 +200,7 @@ export async function updateWallet(
       data: {
         tenantId,
         entityType: 'Wallet',
-        entityId: walletId,
+        entityId: resolvedId,
         action: 'wallet.updated',
         changes: {
           before: { label: wallet.label, metadata: wallet.metadata },
@@ -180,14 +228,14 @@ export async function freezeWallet(
   actorRole?: string
 ) {
   return await prisma.$transaction(async (tx) => {
-    // Lock the wallet row
-    await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${walletId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
+    const resolvedId = await resolveWalletId(walletId, tenantId, isSandbox, tx);
 
-    const wallet = await tx.wallet.findFirst({
+    // Lock the wallet row
+    await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${resolvedId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
+
+    const wallet = await tx.wallet.findUnique({
       where: {
-        id: walletId,
-        tenantId,
-        isSandbox,
+        id: resolvedId,
       },
     });
 
@@ -200,7 +248,7 @@ export async function freezeWallet(
     }
 
     const updatedWallet = await tx.wallet.update({
-      where: { id: walletId },
+      where: { id: resolvedId },
       data: { status: 'frozen' },
     });
 
@@ -209,7 +257,7 @@ export async function freezeWallet(
       data: {
         tenantId,
         entityType: 'Wallet',
-        entityId: walletId,
+        entityId: resolvedId,
         action: 'wallet.frozen',
         changes: {
           reason,
@@ -242,14 +290,14 @@ export async function unfreezeWallet(
   actorRole?: string
 ) {
   return await prisma.$transaction(async (tx) => {
-    // Lock the wallet row
-    await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${walletId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
+    const resolvedId = await resolveWalletId(walletId, tenantId, isSandbox, tx);
 
-    const wallet = await tx.wallet.findFirst({
+    // Lock the wallet row
+    await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${resolvedId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
+
+    const wallet = await tx.wallet.findUnique({
       where: {
-        id: walletId,
-        tenantId,
-        isSandbox,
+        id: resolvedId,
       },
     });
 
@@ -267,7 +315,7 @@ export async function unfreezeWallet(
     }
 
     const updatedWallet = await tx.wallet.update({
-      where: { id: walletId },
+      where: { id: resolvedId },
       data: { status: 'active' },
     });
 
@@ -276,7 +324,7 @@ export async function unfreezeWallet(
       data: {
         tenantId,
         entityType: 'Wallet',
-        entityId: walletId,
+        entityId: resolvedId,
         action: 'wallet.unfrozen',
         changes: {
           reason,
@@ -307,14 +355,14 @@ export async function closeWallet(
   txClient?: Prisma.TransactionClient
 ) {
   const execute = async (tx: Prisma.TransactionClient) => {
-    // Lock the wallet row
-    await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${walletId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
+    const resolvedId = await resolveWalletId(walletId, tenantId, isSandbox, tx);
 
-    const wallet = await tx.wallet.findFirst({
+    // Lock the wallet row
+    await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${resolvedId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
+
+    const wallet = await tx.wallet.findUnique({
       where: {
-        id: walletId,
-        tenantId,
-        isSandbox,
+        id: resolvedId,
       },
     });
 
@@ -332,7 +380,7 @@ export async function closeWallet(
     }
 
     const updatedWallet = await tx.wallet.update({
-      where: { id: walletId },
+      where: { id: resolvedId },
       data: { status: 'closed' },
     });
 
@@ -341,7 +389,7 @@ export async function closeWallet(
       data: {
         tenantId,
         entityType: 'Wallet',
-        entityId: walletId,
+        entityId: resolvedId,
         action: 'wallet.closed',
         changes: {
           reason,
@@ -371,14 +419,14 @@ export async function lockWallet(
   tenantId: string,
   isSandbox: boolean
 ) {
-  // Lock the wallet row
-  await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${walletId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
+  const resolvedId = await resolveWalletId(walletId, tenantId, isSandbox, tx);
 
-  const wallet = await tx.wallet.findFirst({
+  // Lock the wallet row
+  await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${resolvedId} AND "tenantId" = ${tenantId} AND "isSandbox" = ${isSandbox} FOR UPDATE`;
+
+  const wallet = await tx.wallet.findUnique({
     where: {
-      id: walletId,
-      tenantId,
-      isSandbox,
+      id: resolvedId,
     },
   });
 

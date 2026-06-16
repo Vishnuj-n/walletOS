@@ -1,6 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import {
-  createWallet,
   getWalletById,
   getWalletByExternalUserId,
   updateWallet,
@@ -38,6 +37,7 @@ async function walletReadAuth(req: Request, res: Response, next: NextFunction): 
 function serializeWallet(wallet: any) {
   return {
     wallet_id: wallet.id,
+    public_id: wallet.publicId,
     external_user_id: wallet.externalUserId,
     label: wallet.label,
     balance: wallet.balance.toFixed(4),
@@ -77,10 +77,38 @@ router.post(
         throw new AppError(409, ErrorCode.WALLET_ALREADY_EXISTS, 'Wallet already exists for this user in this tenant and environment');
       }
 
+      // Get tenant to construct tenant-prefixed public ID
+      const tenant = await tx.tenant.findUnique({
+        where: { id: req.tenantId! },
+        select: { name: true },
+      });
+      const tenantName = tenant?.name || 'tst';
+
+      // Generate a unique public ID with collision check loop
+      let publicId = '';
+      let isUnique = false;
+      let retries = 0;
+      while (!isUnique && retries < 10) {
+        publicId = generateWalletPublicId(tenantName);
+        const existing = await tx.wallet.findUnique({
+          where: { publicId },
+          select: { id: true },
+        });
+        if (!existing) {
+          isUnique = true;
+        } else {
+          retries++;
+        }
+      }
+
+      if (!isUnique) {
+        throw new AppError(500, ErrorCode.INTERNAL_ERROR, 'Failed to generate a unique public wallet ID');
+      }
+
       // Create wallet within transaction
       const newWallet = await tx.wallet.create({
         data: {
-          publicId: generateWalletPublicId(),
+          publicId,
           tenantId: req.tenantId!,
           externalUserId: external_user_id,
           currency,
@@ -89,9 +117,7 @@ router.post(
           isSandbox: req.isSandbox || false,
           balance: 0,
         },
-      });
-
-      // Create audit log for API wallet creation within same transaction
+      });      // Create audit log for API wallet creation within same transaction
       await tx.auditLog.create({
         data: {
           tenantId: req.tenantId!,

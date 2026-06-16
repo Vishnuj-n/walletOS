@@ -32,6 +32,9 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:password@localhost:5432/walletos_test
       DIRECT_URL: postgresql://postgres:password@localhost:5432/walletos_test
+      # Build-time placeholder — Next.js module evaluation requires this to be set.
+      # Real value is injected by Vercel at deploy; this is never called in CI.
+      NEXT_PUBLIC_API_URL: http://localhost:3333
 
     services:
       postgres:

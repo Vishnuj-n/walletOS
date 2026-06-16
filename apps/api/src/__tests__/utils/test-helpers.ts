@@ -4,7 +4,7 @@
  * Utility functions for setting up test data and making API requests.
  */
 
-import { PrismaClient, KeyScope } from '@prisma/client';
+import { KeyScope } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { prisma } from '../../lib/prisma';
 import { generateWalletPublicId } from '../../lib/publicId';
@@ -156,6 +156,8 @@ export async function cleanupTestData(tenantId: string) {
     prisma.transaction.deleteMany({ where: { tenantId } }),
     prisma.wallet.deleteMany({ where: { tenantId } }),
     prisma.apiKey.deleteMany({ where: { tenantId } }),
+    prisma.pendingVerification.deleteMany({ where: { tenantId } }),
+    prisma.adminUser.deleteMany({ where: { tenantId } }),
     prisma.tenant.delete({ where: { id: tenantId } }),
   ]);
 }
