@@ -1650,6 +1650,99 @@ router.post(
 );
 
 /**
+ * POST /admin/tenants/:tenantId/resend-invite
+ * Resend bootstrap claim email for a tenant still pending activation.
+ */
+router.post(
+  '/tenants/:tenantId/resend-invite',
+  requireAdminRole('superadmin'),
+  asyncHandler(async (req, res) => {
+    const { tenantId } = req.params;
+    const adminEmail = req.adminUser!.email;
+    const idempotencyKey = getValidatedIdempotencyKey(req.headers['idempotency-key']);
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        id: true,
+        name: true,
+        contactEmail: true,
+        adminUsers: {
+          where: { isActive: false },
+          select: { id: true, email: true, role: true },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new AppError(404, ErrorCode.NOT_FOUND, 'Tenant not found');
+    }
+
+    const contactEmail = tenant.contactEmail?.trim();
+    if (!contactEmail) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Tenant has no contact email');
+    }
+
+    const bootstrapAdmin = tenant.adminUsers.find((user) => user.email === contactEmail);
+    if (!bootstrapAdmin) {
+      throw new AppError(409, ErrorCode.INVALID_OPERATION, 'Tenant has no pending bootstrap invite');
+    }
+
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.pendingVerification.deleteMany({
+        where: {
+          tenantId: tenant.id,
+          email: contactEmail,
+        },
+      });
+
+      await tx.pendingVerification.create({
+        data: {
+          tenantId: tenant.id,
+          email: contactEmail,
+          tokenHash,
+          expiresAt,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          tenantId: tenant.id,
+          entityType: 'tenant',
+          entityId: tenant.id,
+          action: 'tenant.bootstrap_invite_resent',
+          actorId: adminEmail,
+          actorType: 'admin',
+          actorRole: req.adminUser!.role,
+          isSandbox: req.isSandbox || false,
+          changes: {
+            contact_email: contactEmail,
+            admin_user_id: bootstrapAdmin.id,
+            admin_user_role: bootstrapAdmin.role,
+            resent_by: adminEmail,
+            idempotency_key: idempotencyKey,
+            token_hash: tokenHash,
+            expires_at: expiresAt.toISOString(),
+          },
+        },
+      });
+    });
+
+    await sendInviteEmail(tenant.id, contactEmail, rawToken);
+
+    res.status(200).json({
+      tenant_id: tenant.id,
+      contact_email: contactEmail,
+      message: `Claim email resent to ${contactEmail}`,
+    });
+  })
+);
+
+/**
  * GET /admin/audit
  * Query audit logs
  */
@@ -2316,6 +2409,7 @@ router.get(
           select: {
             wallets: true,
             adminUsers: true,
+            pendingVerifications: true,
           },
         },
       },
@@ -2330,6 +2424,7 @@ router.get(
         created_at: t.createdAt,
         wallet_count: t._count.wallets,
         admin_count: t._count.adminUsers,
+        has_pending_bootstrap_invite: t._count.pendingVerifications > 0,
       })),
     });
   })

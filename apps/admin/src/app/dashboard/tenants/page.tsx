@@ -11,6 +11,7 @@ import {
   fetchTenantApiKeys,
   revokeTenantApiKey,
   emergencyRevokeTenantKeys,
+  resendTenantInvite,
 } from '../../../services/adminService';
 import type { CreatedTenantResponse, Tenant, TenantUsageResponse, TenantApiKeyMetadata } from '@walletos/types';
 import { 
@@ -442,7 +443,9 @@ export default function TenantsPage() {
   const stats = React.useMemo(() => {
     const total = tenants.length;
     const keys = total * 2; // live and test key per tenant
-    const pendingBootstrap = tenants.filter(t => t.admin_count === 0).length;
+    const pendingBootstrap = tenants.filter(
+      (t) => t.has_pending_bootstrap_invite ?? t.admin_count === 0
+    ).length;
     return { total, keys, pendingBootstrap };
   }, [tenants]);
 
@@ -462,6 +465,33 @@ export default function TenantsPage() {
     } catch (err) {
       setAlertModal({
         message: err instanceof Error ? err.message : 'Failed to revoke keys',
+        type: 'error'
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleResendTenantInvite = async (tenant: Tenant) => {
+    if (!tenant.contact_email) {
+      setAlertModal({
+        message: 'Tenant has no contact email to resend an invite to.',
+        type: 'error'
+      });
+      return;
+    }
+
+    setActionLoading(`${tenant.tenant_id}-resend-invite`);
+    try {
+      const result = await resendTenantInvite(tenant.tenant_id);
+      setAlertModal({
+        message: result.message,
+        type: 'success'
+      });
+      await refetch();
+    } catch (err) {
+      setAlertModal({
+        message: err instanceof Error ? err.message : 'Failed to resend tenant invite',
         type: 'error'
       });
     } finally {
@@ -663,7 +693,7 @@ export default function TenantsPage() {
                 ) : (
                   filteredTenants.map((tenant) => {
                     const initial = tenant.name?.charAt(0).toUpperCase() || 'T';
-                    const isPendingClaim = tenant.admin_count === 0;
+                    const isPendingClaim = tenant.has_pending_bootstrap_invite ?? tenant.admin_count === 0;
 
                     return (
                       <tr key={tenant.tenant_id} className="hover:bg-slate-50/80 transition-colors group">
@@ -743,6 +773,19 @@ export default function TenantsPage() {
 
                               {openActionsMenuTenantId === tenant.tenant_id && (
                                 <div className="absolute right-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg animate-fade-in">
+                                  {isPendingClaim && tenant.contact_email && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenActionsMenuTenantId(null);
+                                        handleResendTenantInvite(tenant);
+                                      }}
+                                      disabled={actionLoading === `${tenant.tenant_id}-resend-invite`}
+                                      className="block w-full px-4 py-2.5 text-left text-xs text-amber-700 hover:bg-slate-50 font-medium transition-colors border-b border-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      {actionLoading === `${tenant.tenant_id}-resend-invite` ? 'Resending...' : 'Resend Claim Email'}
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => {

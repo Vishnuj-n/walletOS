@@ -186,6 +186,8 @@ export interface Tenant {
   created_at: string;
   wallet_count: number;
   admin_count: number;
+  pending_verification_count?: number;
+  has_pending_bootstrap_invite?: boolean;
 }
 
 export interface TenantListResponse {
@@ -260,6 +262,12 @@ export interface CreatedTenantResponse {
   live_key: string;
   test_key: string;
   created_at: string;
+}
+
+export interface ResendTenantInviteResponse {
+  tenant_id: string;
+  contact_email: string;
+  message: string;
 }
 
 export interface InviteAdminUserRequest {

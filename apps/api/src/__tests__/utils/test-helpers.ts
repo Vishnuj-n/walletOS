@@ -156,6 +156,8 @@ export async function cleanupTestData(tenantId: string) {
     prisma.transaction.deleteMany({ where: { tenantId } }),
     prisma.wallet.deleteMany({ where: { tenantId } }),
     prisma.apiKey.deleteMany({ where: { tenantId } }),
+    prisma.pendingVerification.deleteMany({ where: { tenantId } }),
+    prisma.adminUser.deleteMany({ where: { tenantId } }),
     prisma.tenant.delete({ where: { id: tenantId } }),
   ]);
 }
