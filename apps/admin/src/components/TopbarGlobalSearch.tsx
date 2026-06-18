@@ -6,10 +6,6 @@ import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { useUnifiedSearch } from '../hooks/useUnifiedSearch';
 
-function flattenGroups(groups: ReturnType<typeof useUnifiedSearch>['groups']) {
-  return groups.flatMap((group) => group.items);
-}
-
 interface TopbarGlobalSearchProps {
   compact?: boolean;
   autoOpen?: boolean;
@@ -20,19 +16,47 @@ export function TopbarGlobalSearch({ compact = false, autoOpen = false, initialQ
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(autoOpen);
+  const [inputValue, setInputValue] = useState(initialQuery);
   const [query, setQuery] = useState(initialQuery);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [isMac, setIsMac] = useState(false);
 
   const state = useUnifiedSearch(query);
-  const flatItems = useMemo(() => flattenGroups(state.groups), [state.groups]);
+
+  const { groupsWithIndex, flatItems } = useMemo(() => {
+    let absoluteIndex = 0;
+    const groupsWithIndex = state.groups.map((group) => ({
+      ...group,
+      items: group.items.map((item) => ({
+        ...item,
+        absoluteIndex: absoluteIndex++,
+      })),
+    }));
+    const flatItems = groupsWithIndex.flatMap((group) => group.items);
+    return { groupsWithIndex, flatItems };
+  }, [state.groups]);
 
   useEffect(() => {
+    setInputValue(initialQuery);
     setQuery(initialQuery);
   }, [initialQuery]);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setQuery(inputValue);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [inputValue]);
+
+  useEffect(() => {
     setHighlightedIndex(0);
   }, [state.groups]);
+
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC')) {
+      setIsMac(true);
+    }
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -101,9 +125,9 @@ export function TopbarGlobalSearch({ compact = false, autoOpen = false, initialQ
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
           type="text"
-          value={query}
+          value={inputValue}
           onFocus={() => setIsOpen(true)}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => setInputValue(event.target.value)}
           onKeyDown={onInputKeyDown}
           placeholder="Search wallets, transactions, requests, users"
           className="w-full rounded-full border border-slate-300 bg-white py-1.5 pl-8 pr-20 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -114,7 +138,7 @@ export function TopbarGlobalSearch({ compact = false, autoOpen = false, initialQ
           aria-controls="admin-global-search-results"
         />
         <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-500 xl:block">
-          {typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC') ? 'CMD+K' : 'CTRL+K'}
+          {isMac ? 'CMD+K' : 'CTRL+K'}
         </kbd>
       </div>
 
@@ -124,7 +148,7 @@ export function TopbarGlobalSearch({ compact = false, autoOpen = false, initialQ
           role="listbox"
           className="absolute z-50 mt-1 max-h-[28rem] w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl"
         >
-          {!query.trim() && (
+          {!inputValue.trim() && (
             <div className="px-4 py-3 text-sm text-slate-500">
               Search by ID (e.g., wal_, txn_), email, label, reference, or external user ID.
             </div>
@@ -142,19 +166,19 @@ export function TopbarGlobalSearch({ compact = false, autoOpen = false, initialQ
             </div>
           )}
 
-          {!state.loading && !state.error && query.trim() && state.groups.length === 0 && (
+          {!state.loading && !state.error && inputValue.trim() && groupsWithIndex.length === 0 && (
             <div className="px-4 py-3 text-sm text-slate-500" aria-live="polite">
               No matches found.
             </div>
           )}
 
-          {!state.loading && !state.error && state.groups.map((group) => (
+          {!state.loading && !state.error && groupsWithIndex.map((group) => (
             <div key={group.key} className="border-t border-slate-100 first:border-t-0">
               <div className="bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 {group.label}
               </div>
               {group.items.map((item) => {
-                const index = flatItems.findIndex((flatItem) => flatItem.group === item.group && flatItem.id === item.id);
+                const index = item.absoluteIndex;
                 const isHighlighted = index === highlightedIndex;
 
                 return (
