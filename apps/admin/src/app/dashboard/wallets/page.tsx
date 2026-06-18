@@ -11,7 +11,7 @@ import {
   unfreezeWallet,
 } from '../../../services/walletService';
 import type { Wallet, CreateWalletRequest } from '@walletos/types';
-import { Plus, Search, Wallet as WalletIcon } from 'lucide-react';
+import { Plus, Search, Wallet as WalletIcon, Eye, Pencil, Snowflake, Unlock, X } from 'lucide-react';
 
 export default function WalletsPage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -238,49 +238,61 @@ export default function WalletsPage() {
                       {wallet.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium space-x-2">
-                    <Link
-                      href={`/dashboard/wallets/${wallet.wallet_id}`}
-                      className="text-indigo-600 hover:text-indigo-900"
-                    >
-                      View
-                    </Link>
-                    <button
-                      onClick={() => {
-                        setSelectedWallet(wallet);
-                        setShowEditModal(true);
-                      }}
-                      className="text-blue-600 hover:text-blue-900"
-                    >
-                      Edit
-                    </button>
-                    {wallet.status === 'active' && (
-                      <button
-                        onClick={() => handleFreeze(wallet.wallet_id)}
-                        className="text-red-600 hover:text-red-900"
+                  <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
+                    <div className="flex items-center gap-1.5">
+                      <Link
+                        href={`/dashboard/wallets/${wallet.wallet_id}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
+                        title="View Details"
                       >
-                        Freeze
-                      </button>
-                    )}
-                    {wallet.status === 'frozen' && (
-                      <button
-                        onClick={() => handleUnfreeze(wallet.wallet_id)}
-                        className="text-green-600 hover:text-green-900"
-                      >
-                        Unfreeze
-                      </button>
-                    )}
-                    {(wallet.status === 'active' || wallet.status === 'frozen') && wallet.balance === '0.0000' && (
+                        <Eye size={14} />
+                        <span>View</span>
+                      </Link>
                       <button
                         onClick={() => {
                           setSelectedWallet(wallet);
-                          setShowDeleteModal(true);
+                          setShowEditModal(true);
                         }}
-                        className="text-red-600 hover:text-red-900"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
+                        title="Edit Wallet"
                       >
-                        Close
+                        <Pencil size={14} />
+                        <span>Edit</span>
                       </button>
-                    )}
+                      {wallet.status === 'active' && (
+                        <button
+                          onClick={() => handleFreeze(wallet.wallet_id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+                          title="Freeze Wallet"
+                        >
+                          <Snowflake size={14} />
+                          <span>Freeze</span>
+                        </button>
+                      )}
+                      {wallet.status === 'frozen' && (
+                        <button
+                          onClick={() => handleUnfreeze(wallet.wallet_id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                          title="Unfreeze Wallet"
+                        >
+                          <Unlock size={14} />
+                          <span>Unfreeze</span>
+                        </button>
+                      )}
+                      {(wallet.status === 'active' || wallet.status === 'frozen') && wallet.balance === '0.0000' && (
+                        <button
+                          onClick={() => {
+                            setSelectedWallet(wallet);
+                            setShowDeleteModal(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors"
+                          title="Close Wallet"
+                        >
+                          <X size={14} />
+                          <span>Close</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
