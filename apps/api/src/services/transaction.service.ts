@@ -122,7 +122,7 @@ export async function creditWallet(params: CreditParams) {
     });
 
     return txRecord;
-  }, { timeout: 20000, maxWait: 20000 });
+  }, { timeout: 5000, maxWait: 5000 });
 
   // Publish webhook event asynchronously after commit
   publishWebhookEvent(
@@ -217,7 +217,7 @@ export async function debitWallet(params: DebitParams) {
     });
 
     return txRecord;
-  }, { timeout: 20000, maxWait: 20000 });
+  }, { timeout: 5000, maxWait: 5000 });
 
   // Publish webhook event asynchronously after commit
   publishWebhookEvent(
@@ -366,7 +366,7 @@ export async function transferBetweenWallets(params: TransferParams) {
       debitTransaction,
       creditTransaction,
     };
-  }, { timeout: 20000, maxWait: 20000 });
+  }, { timeout: 5000, maxWait: 5000 });
 
   // Publish source wallet debit event
   publishWebhookEvent(
@@ -531,7 +531,7 @@ export async function reverseTransaction(params: ReverseParams) {
     });
 
     return reversalTx;
-  }, { timeout: 20000, maxWait: 20000 });
+  }, { timeout: 5000, maxWait: 5000 });
 
   // Publish webhook event asynchronously after commit
   publishWebhookEvent(

@@ -114,7 +114,7 @@ export async function createWallet(params: CreateWalletParams) {
       });
 
       return wallet;
-    }, { timeout: 20000 });
+    }, { timeout: 5000, maxWait: 5000 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       throw new AppError(409, ErrorCode.WALLET_ALREADY_EXISTS, 'Wallet already exists for this user in this tenant and environment');
@@ -211,7 +211,7 @@ export async function updateWallet(
     });
 
     return updatedWallet;
-  }, { timeout: 20000 });
+  }, { timeout: 5000, maxWait: 5000 });
 }
 
 /**
@@ -273,7 +273,7 @@ export async function freezeWallet(
     });
 
     return updatedWallet;
-  }, { timeout: 20000 });
+  }, { timeout: 5000, maxWait: 5000 });
 }
 
 /**
@@ -340,7 +340,7 @@ export async function unfreezeWallet(
     });
 
     return updatedWallet;
-  }, { timeout: 20000 });
+  }, { timeout: 5000, maxWait: 5000 });
 }
 
 /**
@@ -406,7 +406,7 @@ export async function closeWallet(
   if (txClient) {
     return execute(txClient);
   }
-  return await prisma.$transaction(execute, { timeout: 20000 });
+  return await prisma.$transaction(execute, { timeout: 5000, maxWait: 5000 });
 }
 
 /**
