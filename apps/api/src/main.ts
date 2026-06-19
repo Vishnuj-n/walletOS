@@ -124,7 +124,7 @@ app.use(cors(async (req, cb) => {
       },
     });
 
-    corsOptions.origin = !!matchingConfig ? origin : false;
+    corsOptions.origin = matchingConfig ? origin : false;
     cb(null, corsOptions);
   } catch (err) {
     console.error('CORS dynamic origin check error:', err);
