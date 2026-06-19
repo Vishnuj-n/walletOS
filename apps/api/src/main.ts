@@ -22,9 +22,13 @@ const corsOrigins: (string | RegExp)[] = process.env.CORS_ORIGINS
       return o.startsWith('/') && o.endsWith('/') ? new RegExp(o.slice(1, -1)) : o;
     })
   : [
+      // First-party infra — always allowed, no DB lookup needed.
+      // Do NOT add tenant/experiment origins here; they must go through the DB path.
       'http://localhost:3000',
       'http://localhost:3001',
+      'http://localhost:3003', // superadmin (no TenantConfig row in DB)
       /^https:\/\/walletos-admin-.*\.vercel\.app$/,
+      /^https:\/\/walletos-web-.*\.vercel\.app$/,
       /^https:\/\/walletos-web-.*\.netlify\.app$/,
     ];
 
@@ -95,16 +99,16 @@ app.use(cors(async (req, cb) => {
       }
     }
 
-    // 4. Check subdomain
+    // 4. Check subdomain — only for walletos.com tenant subdomains (e.g. acme.walletos.com).
+    // Deliberately skipped for cloud hostnames like walletos.onrender.com to prevent
+    // extracting 'walletos' as a tenantId and poisoning the DB query.
     if (!tenantId) {
       const host = req.headers.host || req.hostname;
-      if (host) {
-        const parts = host.split('.');
-        if (parts.length > 2) {
-          const subdomain = parts[0].toLowerCase();
-          if (!['api', 'admin', 'web', 'www', 'localhost', 'dev', 'staging', 'mail'].includes(subdomain)) {
-            tenantId = subdomain;
-          }
+      const BASE_DOMAIN = process.env.BASE_DOMAIN || 'walletos.com';
+      if (host && host.endsWith(`.${BASE_DOMAIN}`)) {
+        const subdomain = host.slice(0, host.length - BASE_DOMAIN.length - 1).toLowerCase();
+        if (subdomain && !['api', 'admin', 'web', 'www', 'dev', 'staging', 'mail'].includes(subdomain)) {
+          tenantId = subdomain;
         }
       }
     }
@@ -126,7 +130,8 @@ app.use(cors(async (req, cb) => {
     corsOptions.origin = matchingConfig ? origin : false;
     cb(null, corsOptions);
   } catch (err) {
-    console.error('CORS dynamic origin check error:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[CORS] dynamic origin check failed for origin=%s reason=%s', origin, msg);
     corsOptions.origin = false;
     cb(null, corsOptions);
   }
