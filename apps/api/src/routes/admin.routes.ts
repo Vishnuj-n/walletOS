@@ -3880,6 +3880,7 @@ router.post(
 const tenantConfigUpdateSchema = z.object({
   defaultCurrency: z.string().length(3).optional(),
   autoCreateWallet: z.boolean().optional(),
+  allowedOrigins: z.array(z.string()).optional(),
 });
 
 /**
@@ -3900,6 +3901,7 @@ router.get(
       tenant_id: config.tenantId,
       default_currency: config.defaultCurrency,
       auto_create_wallet: config.autoCreateWallet,
+      allowed_origins: config.allowedOrigins,
       updated_at: config.updatedAt.toISOString(),
     });
   })
@@ -3918,9 +3920,10 @@ router.put(
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, parsed.error.issues[0].message);
     }
 
-    const updateData: { defaultCurrency?: string; autoCreateWallet?: boolean } = {};
+    const updateData: { defaultCurrency?: string; autoCreateWallet?: boolean; allowedOrigins?: string[] } = {};
     if (parsed.data.defaultCurrency !== undefined) updateData.defaultCurrency = parsed.data.defaultCurrency;
     if (parsed.data.autoCreateWallet !== undefined) updateData.autoCreateWallet = parsed.data.autoCreateWallet;
+    if (parsed.data.allowedOrigins !== undefined) updateData.allowedOrigins = parsed.data.allowedOrigins;
 
     const config = await prisma.tenantConfig.upsert({
       where: { tenantId: req.adminUser!.tenantId },
@@ -3947,6 +3950,7 @@ router.put(
       tenant_id: config.tenantId,
       default_currency: config.defaultCurrency,
       auto_create_wallet: config.autoCreateWallet,
+      allowed_origins: config.allowedOrigins,
       updated_at: config.updatedAt.toISOString(),
     });
   })

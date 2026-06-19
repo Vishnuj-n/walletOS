@@ -377,3 +377,32 @@ export async function exportAuditLogsCsv(params?: {
 
   return res.body;
 }
+
+export interface TenantConfigResponse {
+  id: string;
+  tenant_id: string;
+  default_currency: string;
+  auto_create_wallet: boolean;
+  allowed_origins: string[];
+  updated_at: string;
+}
+
+export interface UpdateTenantConfigRequest {
+  defaultCurrency?: string;
+  autoCreateWallet?: boolean;
+  allowedOrigins?: string[];
+}
+
+export async function fetchTenantConfig(): Promise<TenantConfigResponse> {
+  return apiRequest<TenantConfigResponse>('/admin/tenant-config', {
+    fallbackMessage: 'Failed to fetch tenant configuration',
+  });
+}
+
+export async function updateTenantConfig(request: UpdateTenantConfigRequest): Promise<TenantConfigResponse> {
+  return apiRequest<TenantConfigResponse>('/admin/tenant-config', {
+    method: 'PUT',
+    body: request,
+    fallbackMessage: 'Failed to update tenant configuration',
+  });
+}

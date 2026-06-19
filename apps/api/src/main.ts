@@ -10,6 +10,7 @@ import adminRoutes from './routes/admin.routes';
 import authRoutes from './routes/auth.routes';
 import { verifyGlobalSmtpHealth } from './services/mail.service';
 import { startWebhookRetryWorker } from './services/webhook.service';
+import { prisma } from './lib/prisma';
 
 
 const app = express();
@@ -28,10 +29,26 @@ const corsOrigins: (string | RegExp)[] = process.env.CORS_ORIGINS
     ];
 
 app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin || corsOrigins.some(o => (typeof o === 'string' ? o === origin : o.test(origin)))) {
+  origin: async (origin, cb) => {
+    if (!origin) {
       cb(null, true);
-    } else {
+      return;
+    }
+    if (corsOrigins.some(o => (typeof o === 'string' ? o === origin : o.test(origin)))) {
+      cb(null, true);
+      return;
+    }
+    try {
+      const matchingConfig = await prisma.tenantConfig.findFirst({
+        where: {
+          allowedOrigins: {
+            has: origin,
+          },
+        },
+      });
+      cb(null, !!matchingConfig);
+    } catch (err) {
+      console.error('CORS dynamic origin check error:', err);
       cb(null, false);
     }
   },
