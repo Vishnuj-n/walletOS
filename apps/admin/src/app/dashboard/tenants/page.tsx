@@ -393,6 +393,8 @@ export default function TenantsPage() {
   const [createdTenant, setCreatedTenant] = useState<CreatedTenantResponse | null>(null);
   const [copyStatus, setCopyStatus] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState<'live' | 'test' | null>(null);
+  const [copyVariant, setCopyVariant] = useState<'success' | 'error'>('success');
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [openActionsMenuTenantId, setOpenActionsMenuTenantId] = useState<string | null>(null);
   const actionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -544,19 +546,22 @@ export default function TenantsPage() {
   };
 
   const copyToClipboard = async (text: string, type: 'live' | 'test') => {
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     setCopyStatus('');
     setCopiedKey(type);
     try {
       await navigator.clipboard.writeText(text);
       setCopyStatus(`${type === 'live' ? 'Live' : 'Test'} API Key copied to clipboard`);
-      setTimeout(() => {
+      setCopyVariant('success');
+      copyTimeoutRef.current = setTimeout(() => {
         setCopyStatus('');
         setCopiedKey(null);
       }, 2000);
     } catch {
       setCopyStatus('Select & copy manually');
+      setCopyVariant('error');
       setCopiedKey(null);
-      setTimeout(() => setCopyStatus(''), 3000);
+      copyTimeoutRef.current = setTimeout(() => setCopyStatus(''), 3000);
     }
   };
 
@@ -955,7 +960,7 @@ export default function TenantsPage() {
                           onClick={() => copyToClipboard(createdTenant.live_key, 'live')}
                           className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-xs transition-all duration-200 border ${
                             copiedKey === 'live'
-                              ? 'bg-emerald-600 hover:bg-emerald-750 border-emerald-600 text-white shadow-sm'
+                              ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white shadow-sm'
                               : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
                           }`}
                         >
@@ -990,7 +995,7 @@ export default function TenantsPage() {
                           onClick={() => copyToClipboard(createdTenant.test_key, 'test')}
                           className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-xs transition-all duration-200 border ${
                             copiedKey === 'test'
-                              ? 'bg-emerald-600 hover:bg-emerald-750 border-emerald-600 text-white shadow-sm'
+                              ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white shadow-sm'
                               : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
                           }`}
                         >
@@ -1056,9 +1061,9 @@ export default function TenantsPage() {
         {/* Floating Toast Notification */}
         {copyStatus && (
           <div className="fixed bottom-6 right-6 z-50 shadow-2xl">
-            <div className="bg-slate-950 text-white text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2 border border-slate-800">
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-slate-950 font-black text-[10px]">
-                ✓
+            <div className={`text-white text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2 border ${copyVariant === 'error' ? 'bg-rose-600 border-rose-500' : 'bg-slate-950 border-slate-800'}`}>
+              <span className={`flex h-4 w-4 items-center justify-center rounded-full text-slate-950 font-black text-[10px] ${copyVariant === 'error' ? 'bg-rose-300' : 'bg-emerald-500'}`}>
+                {copyVariant === 'error' ? '!' : '✓'}
               </span>
               <span>{copyStatus}</span>
             </div>

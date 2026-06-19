@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyRound, RefreshCcw, ShieldCheck, Webhook, Plus, Trash2, CheckCircle2, Activity, Play, AlertTriangle, Code, Key, Settings } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { PermissionGate } from '../../../components/PermissionGate';
@@ -62,6 +62,7 @@ export default function SettingsPage() {
   const [configSaving, setConfigSaving] = useState(false);
   const [newOrigin, setNewOrigin] = useState('');
   const [configError, setConfigError] = useState<string | null>(null);
+  const currencyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
@@ -152,8 +153,8 @@ export default function SettingsPage() {
     if (!newOrigin.trim() || !tenantConfig) return;
     const originToAdd = newOrigin.trim();
     
-    if (!originToAdd.startsWith('http://') && !originToAdd.startsWith('https://') && originToAdd !== '*') {
-      setConfigError('CORS origin must start with http://, https://, or be *');
+    if (!originToAdd.startsWith('http://') && !originToAdd.startsWith('https://')) {
+      setConfigError('CORS origin must start with http:// or https://');
       return;
     }
 
@@ -747,7 +748,14 @@ export default function SettingsPage() {
                         <input
                           type="text"
                           value={tenantConfig?.default_currency || ''}
-                          onChange={(e) => handleUpdateTenantConfig({ defaultCurrency: e.target.value.toUpperCase() })}
+                          onChange={(e) => {
+                            const val = e.target.value.toUpperCase();
+                            setTenantConfig(prev => prev ? { ...prev, default_currency: val } : prev);
+                            if (currencyDebounceRef.current) clearTimeout(currencyDebounceRef.current);
+                            currencyDebounceRef.current = setTimeout(() => {
+                              handleUpdateTenantConfig({ defaultCurrency: val });
+                            }, 500);
+                          }}
                           maxLength={3}
                           className="w-full max-w-[150px] rounded-lg border border-slate-200 py-2 px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-mono font-bold text-slate-700 bg-white"
                           placeholder="USD"
