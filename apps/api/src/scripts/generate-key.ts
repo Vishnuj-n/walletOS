@@ -51,7 +51,13 @@ async function main() {
   let tenant = await prisma.tenant.findFirst({ where: { name: tenantName } });
   if (!tenant) {
     tenant = await prisma.tenant.create({
-      data: { name: tenantName, contactEmail: `admin@${emailDomain}.com` }
+      data: {
+        name: tenantName,
+        contactEmail: `admin@${emailDomain}.com`,
+        tenantConfig: {
+          create: {}
+        }
+      }
     });
     console.log(`\n🚀 Created Tenant: ${tenant.name}`);
   } else {

@@ -51,6 +51,9 @@ export async function createTestTenant(name = 'Test Tenant'): Promise<TestTenant
     data: {
       name,
       contactEmail: `test-${Date.now()}-${randomSuffix}@example.com`,
+      tenantConfig: {
+        create: {}
+      },
     },
   });
 

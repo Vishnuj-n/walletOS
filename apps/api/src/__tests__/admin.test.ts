@@ -1119,6 +1119,9 @@ describe('Admin API Endpoints', () => {
         data: {
           name: `Other Tenant ${Date.now()}`,
           contactEmail: `other-${Date.now()}@example.com`,
+          tenantConfig: {
+            create: {}
+          },
         },
       });
 

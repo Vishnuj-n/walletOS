@@ -4,7 +4,7 @@ This guide explains the simplified .env configuration for WalletOS and how to pr
 
 ## Simplified Structure
 
-WalletOS uses **2 root-level .env files**:
+WalletOS uses **3 root-level .env files**:
 
 - **`.env`** - Development and production environment (uses remote Supabase for both database and auth)
 - **`.env.test`** - Testing environment (uses local Docker database + remote Supabase auth)
@@ -170,8 +170,8 @@ npx nx run-many -t test
 # API tests with real Supabase
 TEST_REAL_SUPABASE=true npx nx test api
 
-# Admin E2E tests
-npx nx e2e admin-e2e
+# Admin E2E tests (not yet implemented)
+# npx nx e2e admin-e2e
 ```
 
 ### Database Migrations
@@ -189,9 +189,8 @@ npx prisma migrate deploy
 
 ⚠️ **IMPORTANT:**
 
-- Foreit `.env` idepsoym nt,tiea .gitignore)istead fing `.env` fils
+- Never commit `.env` or `.env.test` files - use CI/CD secrets for deployment
 - Never commit real credentials to `.env.example`
-- The `.env.production` file should be set via CI/CD environment variables, not committed
 - `SUPABASE_SERVICE_ROLE_KEY` has full admin access - keep it secret
 - `NEXT_PUBLIC_*` variables are exposed to the browser - use only public keys
 

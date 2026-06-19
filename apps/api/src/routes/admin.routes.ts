@@ -1560,6 +1560,13 @@ router.post(
           name,
           contactEmail: contact_email,
           config,
+          tenantConfig: {
+            create: {
+              defaultCurrency: 'USD',
+              autoCreateWallet: false,
+              allowedOrigins: [],
+            },
+          },
         },
       });
 

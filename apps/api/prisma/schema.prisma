@@ -222,6 +222,7 @@ model TenantConfig {
   tenantId         String   @unique
   defaultCurrency  String   @default("USD")
   autoCreateWallet Boolean  @default(false)
+  allowedOrigins   String[] @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)

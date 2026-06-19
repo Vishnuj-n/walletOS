@@ -141,7 +141,10 @@ describe('POST /admin/tenants/:tenantId/resend-invite', () => {
 
   it('returns 400 when tenant has no contact email', async () => {
     const tenant = await prisma.tenant.create({
-      data: { name: 'No Email Tenant' },
+      data: {
+        name: 'No Email Tenant',
+        tenantConfig: { create: {} },
+      },
     });
 
     try {
@@ -160,7 +163,11 @@ describe('POST /admin/tenants/:tenantId/resend-invite', () => {
   it('returns 409 when tenant has no pending bootstrap admin user', async () => {
     // Tenant with contactEmail but NO matching inactive adminUser
     const tenant = await prisma.tenant.create({
-      data: { name: 'No Pending Admin', contactEmail: 'bootstrap@noadmin.com' },
+      data: {
+        name: 'No Pending Admin',
+        contactEmail: 'bootstrap@noadmin.com',
+        tenantConfig: { create: {} },
+      },
     });
 
     try {
@@ -181,7 +188,11 @@ describe('POST /admin/tenants/:tenantId/resend-invite', () => {
   it('200: rotates token, writes audit, calls sendInviteEmail', async () => {
     const contactEmail = `bootstrap-${Date.now()}@tenant.com`;
     const tenant = await prisma.tenant.create({
-      data: { name: 'Pending Tenant', contactEmail },
+      data: {
+        name: 'Pending Tenant',
+        contactEmail,
+        tenantConfig: { create: {} },
+      },
     });
 
     // Seed inactive bootstrap admin user matching contact email
@@ -248,7 +259,11 @@ describe('POST /admin/tenants/:tenantId/resend-invite', () => {
   it('does not expose token in response body', async () => {
     const contactEmail = `bootstrap-nodeep-${Date.now()}@tenant.com`;
     const tenant = await prisma.tenant.create({
-      data: { name: 'Token Safe Tenant', contactEmail },
+      data: {
+        name: 'Token Safe Tenant',
+        contactEmail,
+        tenantConfig: { create: {} },
+      },
     });
 
     await prisma.adminUser.create({
