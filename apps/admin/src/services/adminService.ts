@@ -387,6 +387,7 @@ export async function updateTenantConfig(request: UpdateTenantConfigRequest): Pr
   return apiRequest<TenantConfigResponse>('/admin/tenant-config', {
     method: 'PUT',
     body: request,
+    requireIdempotencyKey: true,
     fallbackMessage: 'Failed to update tenant configuration',
   });
 }

@@ -51,6 +51,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'api-keys' | 'webhooks' | 'tenant-config'>('api-keys');
   const [settings, setSettings] = useState<TenantApiKeySettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rotationError, setRotationError] = useState<string | null>(null);
 
@@ -85,7 +86,7 @@ export default function SettingsPage() {
       });
       setGeneratedRawKey(response.api_key);
       setGenerateModalOpen(false);
-      await loadSettings();
+      await loadSettings(true);
     } catch (err) {
       setRotationError(err instanceof Error ? err.message : 'Failed to generate API key');
     } finally {
@@ -191,7 +192,7 @@ export default function SettingsPage() {
 
 
 
-  const loadSettings = useCallback(async () => {
+  const loadSettings = useCallback(async (isSilent = false) => {
     if (!canManageSettings) {
       setSettings(null);
       setLoading(false);
@@ -199,7 +200,11 @@ export default function SettingsPage() {
       return;
     }
 
-    setLoading(true);
+    if (!isSilent) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
     setError(null);
 
     try {
@@ -209,6 +214,7 @@ export default function SettingsPage() {
       setError(err instanceof Error ? err.message : 'Failed to load account settings');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [canManageSettings]);
 
@@ -218,7 +224,7 @@ export default function SettingsPage() {
     loadTenantConfig();
 
     const intervalId = window.setInterval(() => {
-      loadSettings();
+      loadSettings(true);
       loadTenantConfig();
     }, 300000);
 
@@ -427,11 +433,11 @@ export default function SettingsPage() {
           </div>
           <button
             onClick={() => {
-              loadSettings();
+              loadSettings(true);
             }}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm bg-white"
           >
-            <RefreshCcw size={14} className={`${loading ? 'animate-spin' : ''}`} />
+            <RefreshCcw size={14} className={`${loading || refreshing ? 'animate-spin' : ''}`} />
             Sync Configuration
           </button>
         </div>
@@ -760,7 +766,7 @@ export default function SettingsPage() {
                           className="w-full max-w-[150px] rounded-lg border border-slate-200 py-2 px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-mono font-bold text-slate-700 bg-white"
                           placeholder="USD"
                         />
-                        <p className="text-[10px] text-slate-400">Three-letter ISO currency identifier (e.g. USD, EUR).</p>
+                        <p className="text-[10px] text-slate-400">Three-letter ISO currency identifier (e.g. USD, INR).</p>
                       </div>
 
                       <div className="flex items-start gap-3 pt-2">
