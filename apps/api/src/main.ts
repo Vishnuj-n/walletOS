@@ -109,19 +109,18 @@ app.use(cors(async (req, cb) => {
       }
     }
 
-    if (!tenantId) {
-      corsOptions.origin = false;
-      cb(null, corsOptions);
-      return;
+    const whereClause: { tenantId?: string; allowedOrigins: { has: string } } = {
+      allowedOrigins: {
+        has: origin,
+      },
+    };
+
+    if (tenantId) {
+      whereClause.tenantId = tenantId;
     }
 
     const matchingConfig = await prisma.tenantConfig.findFirst({
-      where: {
-        tenantId,
-        allowedOrigins: {
-          has: origin,
-        },
-      },
+      where: whereClause,
     });
 
     corsOptions.origin = matchingConfig ? origin : false;
