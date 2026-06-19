@@ -184,17 +184,6 @@ export interface TenantListResponse {
 
 type KeyScope = 'read_only' | 'read_write' | 'admin';
 
-export interface RotateKeyRequest {
-  scope: 'live' | 'test';
-  keyScope?: KeyScope;
-}
-
-export interface RotateKeyResponse {
-  api_key: string;
-  scope: string;
-  tenant_id: string;
-  created_at: string;
-}
 
 export interface CreateApiKeyRequest {
   name: string;
@@ -335,14 +324,6 @@ export interface UnifiedSearchResponse {
   users: UnifiedSearchUserResult[];
 }
 
-export interface SystemBalanceResponse {
-  total_live: string;
-  total_sandbox: string;
-  currency_breakdown: Record<string, { live: string; sandbox: string }>;
-  calculated_at: string;
-  currency?: string;
-  currency_code?: string;
-}
 
 export interface AdminActivityLog {
   id: string;
