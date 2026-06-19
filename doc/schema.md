@@ -287,8 +287,8 @@ Per-tenant configuration with CORS and wallet defaults.
 
 ## CORS Resolution
 
-1. Request `Origin` checked against `TenantConfig.allowedOrigins` for the tenant
-2. If not matched, checked against env `CORS_ORIGINS` (comma-separated)
+1. Request `Origin` checked against env `CORS_ORIGINS` (comma-separated, supports regex)
+2. If not matched, checked against DB `TenantConfig.allowedOrigins` (scoped to identified tenant, or fallback to any tenant if tenant cannot be resolved during preflight)
 3. If neither matches, CORS is denied
 
 ---

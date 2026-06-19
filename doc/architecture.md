@@ -120,12 +120,14 @@ Rate limiting sits inside the route handlers, after `apiKeyAuth` has set `req.ap
 
 ```
 1. Check global CORS_ORIGINS env var (comma-separated, supports /regex/ patterns)
-2. If no match, resolve tenant via:
+2. If no match, check if tenant can be identified via:
    a. X-Tenant-Id header
    b. X-API-Key header → SHA-256 hash → lookup api_keys
    c. Authorization header (sess_/adm_ token) → SHA-256 hash → lookup session_tokens
    d. Subdomain of Host header
-3. Look up TenantConfig.allowedOrigins for that tenant
+3. Look up TenantConfig allowed origins:
+   - If tenant is identified: check allowedOrigins for that tenant.
+   - If no tenant is identified (preflight OPTIONS): check if origin is allowed by any tenant.
 4. Allow if origin matches, reject otherwise
 ```
 

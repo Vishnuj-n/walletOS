@@ -35,7 +35,7 @@ app.use(cors(async (req, cb) => {
   const corsOptions: cors.CorsOptions = {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Sandbox', 'Idempotency-Key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Sandbox', 'Idempotency-Key', 'X-Tenant-Id', 'X-API-Key', 'x-tenant-id', 'x-api-key'],
   };
 
   if (!origin) {
