@@ -12,11 +12,8 @@ import type {
   DebitTransactionRequest,
   ReversalTransactionRequest,
   ResendTenantInviteResponse,
-  RotateKeyRequest,
-  RotateKeyResponse,
   CreateApiKeyRequest,
   CreateApiKeyResponse,
-  SystemBalanceResponse,
   SystemErrorsResponse,
   Tenant,
   TenantEmployeeListResponse,
@@ -52,14 +49,6 @@ export async function fetchCurrentTenantApiKeys(): Promise<TenantApiKeySettingsR
   });
 }
 
-export async function rotateCurrentTenantKey(request: RotateKeyRequest): Promise<RotateKeyResponse> {
-  return apiRequest<RotateKeyResponse>('/admin/account/api-keys/rotate', {
-    method: 'POST',
-    body: request,
-    requireIdempotencyKey: true,
-    fallbackMessage: 'Failed to rotate API key',
-  });
-}
 
 export async function createCurrentTenantApiKey(request: CreateApiKeyRequest): Promise<CreateApiKeyResponse> {
   return apiRequest<CreateApiKeyResponse>('/admin/account/api-keys', {
@@ -210,11 +199,6 @@ export async function searchUnified(query: string): Promise<UnifiedSearchRespons
   });
 }
 
-export async function fetchSystemBalance(): Promise<SystemBalanceResponse> {
-  return apiRequest<SystemBalanceResponse>('/admin/system/balance', {
-    fallbackMessage: 'Failed to fetch system balance',
-  });
-}
 
 export async function fetchAdminActivity(params: AdminActivityQuery): Promise<AdminActivityResponse> {
   return apiRequest<AdminActivityResponse>('/admin/audit/admin-activity', {

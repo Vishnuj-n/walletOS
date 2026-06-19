@@ -1,7 +1,4 @@
-/**
- * Transaction metadata types
- */
-export interface TransactionMetadata {
+interface TransactionMetadata {
   description?: string;
   createdBy?: string;
   transferType?: 'source' | 'destination';
@@ -74,12 +71,6 @@ export interface UpdateWalletRequest {
   metadata?: Record<string, unknown>;
 }
 
-/**
- * Request to freeze a wallet
- */
-export interface FreezeWalletRequest {
-  reason: string;
-}
 
 /**
  * Audit log entry
@@ -103,10 +94,7 @@ export interface AuditLogListResponse {
   next_cursor?: string;
 }
 
-/**
- * Base transaction request fields
- */
-export interface TransactionRequest {
+interface TransactionRequest {
   wallet_id: string;
   amount: string;
   description: string;
@@ -158,7 +146,7 @@ export interface AdminUserInfo {
   role: AdminRole;
 }
 
-export type DashboardCapabilityScope = 'tenant' | 'platform' | 'account';
+type DashboardCapabilityScope = 'tenant' | 'platform' | 'account';
 
 export interface DashboardCapability {
   id: string;
@@ -194,7 +182,7 @@ export interface TenantListResponse {
   data: Tenant[];
 }
 
-export type KeyScope = 'read_only' | 'read_write' | 'admin';
+type KeyScope = 'read_only' | 'read_write' | 'admin';
 
 export interface RotateKeyRequest {
   scope: 'live' | 'test';
@@ -303,7 +291,7 @@ export interface TenantEmployeeListResponse {
 }
 
 
-export interface UnifiedSearchWalletResult {
+interface UnifiedSearchWalletResult {
   id: string;
   external_user_id: string;
   status: string;
@@ -313,7 +301,7 @@ export interface UnifiedSearchWalletResult {
   label: string | null;
 }
 
-export interface UnifiedSearchTransactionResult {
+interface UnifiedSearchTransactionResult {
   id: string;
   type: string;
   amount: string;
@@ -325,7 +313,7 @@ export interface UnifiedSearchTransactionResult {
   created_at: string;
 }
 
-export interface UnifiedSearchRequestResult {
+interface UnifiedSearchRequestResult {
   id: string;
   transaction_id: string;
   wallet_id: string;
@@ -333,7 +321,7 @@ export interface UnifiedSearchRequestResult {
   created_at: string;
 }
 
-export interface UnifiedSearchUserResult {
+interface UnifiedSearchUserResult {
   id: string;
   email: string;
   role: string;

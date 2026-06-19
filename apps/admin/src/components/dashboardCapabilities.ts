@@ -51,6 +51,3 @@ export const DASHBOARD_CAPABILITIES: DashboardCapability[] = [
   },
 ];
 
-export function getDashboardCapability(id: string): DashboardCapability | undefined {
-  return DASHBOARD_CAPABILITIES.find((capability) => capability.id === id);
-}

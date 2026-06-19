@@ -17,7 +17,6 @@ jest.mock('../src/services/adminService', () => ({
   fetchCurrentTenantApiKeys: jest.fn(),
   fetchCurrentTenantEmployees: jest.fn(),
   inviteTenantUser: jest.fn(),
-  rotateCurrentTenantKey: jest.fn(),
 }));
 
 jest.mock('../src/components/PermissionGate', () => ({
