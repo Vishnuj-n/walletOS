@@ -131,60 +131,47 @@ The embedded wallet app:
 - The consuming app's API key controls which wallets can create tokens.
 - Use HTTPS in production to protect tokens in transit.
 
-### Creating a Superadmin User (Supabase Remote)
+### Creating an Admin User (Invite Flow)
 
-Use magic links or the Supabase dashboard for secure account creation. Direct SQL insertion is not recommended for production use.
+Admin users authenticate via local email/password with bcrypt (no Supabase auth). Use the invite flow for secure onboarding.
 
-#### 1) Insert user record (auth schema)
+#### Option 1: Invite via API (Recommended)
 
-```sql
-INSERT INTO auth.users (
-  id, aud, role, email, encrypted_password,
-  raw_user_meta_data, raw_app_meta_data,
-  created_at, updated_at
-) VALUES (
-  '<UUID>', 'authenticated', 'authenticated',
-  'admin@example.com', '', '{}',
-  '{"tenantId":"your-tenant-id"}', now(), now()
-);
+```bash
+# Requires a superadmin or tenant_admin adm_xxx token
+curl -X POST /api/v1/admin/invite-user \
+  -H "Authorization: Bearer adm_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@example.com", "role": "superadmin"}'
 ```
 
-Replace:
-- `<UUID>`: a valid UUID (e.g., `550e8400-e29b-41d4-a716-446655440000`)
-- `admin@example.com`: your admin email
-- `your-tenant-id`: the tenant ID (e.g., `default`)
+The system creates an `AdminUser` record (inactive), generates a one-time invite token, and stores its SHA-256 hash in `PendingVerification`. An SMTP email is sent with the activation link.
 
-Note: For production, use Supabase dashboard or magic links to create users securely.
+The admin clicks the link, which redirects to the claim page with the raw token:
 
-#### 2) Mark email as confirmed (optional)
-
-```sql
-UPDATE auth.users
-SET email_confirmed_at = now()
+```
+POST /api/v1/auth/claim-account
+Body: { "token": "<invite_token>", "password": "secure_password" }
 ```
 
-#### 3) Create the AdminUser record (app database)
+On success: password is bcrypt-hashed (cost 12), account activated, `PendingVerification` deleted.
+
+#### Option 2: Direct SQL (Dev/Test Only)
+
+Insert directly into the application database. Password must be pre-hashed with bcrypt:
 
 ```sql
 INSERT INTO "AdminUser"
-  ("id", "tenantId", "supabaseUid", "email", "role", "isActive")
+  ("id", "publicId", "tenantId", "email", "passwordHash", "role", "isActive", "activatedAt")
 VALUES
-  ('<cuid-or-uuid>', 'your-tenant-id', '<UUID>', 'admin@example.com', 'superadmin', true);
+  ('<cuid>', 'adm_xxx', 'your-tenant-id', 'admin@example.com', '<bcrypt_hash>', 'superadmin', true, now());
 ```
 
 **Valid roles:** `support`, `finance`, `tenant_admin`, `superadmin`
 
-Replace:
-- `<cuid-or-uuid>`: a unique identifier (CUID or UUID)
-- `your-tenant-id`: same tenant ID as above
-- `<UUID>`: the **same UUID** used in step 1
-- `admin@example.com`: same email
+Generate a bcrypt hash (cost 12):
+```bash
+npx ts-node -e "const bcrypt = require('bcryptjs'); bcrypt.hash('your_password', 12).then(console.log)"
+```
 
-**Important**: The `supabaseUid` must match the `id` you created in the Supabase auth user (step 1), otherwise authentication will fail.
-
-#### Recommended: Use Supabase Dashboard instead
-
-For production, prefer:
-1. **Supabase Dashboard** → Auth → Create user manually
-2. Add `tenantId` to `app_metadata` via the dashboard
-3. Run step 3 above to link the app DB record
+**Important:** The `passwordHash` must be a valid bcrypt hash. The API's `POST /api/v1/auth/login` uses `bcryptjs.compare()` for verification.

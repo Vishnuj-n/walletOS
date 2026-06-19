@@ -36,7 +36,7 @@ function isPrivateIpv6(ip: string): boolean {
   return false;
 }
 
-export async function validateWebhookUrl(urlStr: string): Promise<boolean> {
+async function validateWebhookUrl(urlStr: string): Promise<boolean> {
   try {
     const url = new URL(urlStr);
     
@@ -412,12 +412,3 @@ export function startWebhookRetryWorker(intervalMs = 30000): void {
   }, intervalMs);
 }
 
-export function stopWebhookRetryWorker(): void {
-  if (workerIntervalId) {
-    clearInterval(workerIntervalId);
-    workerIntervalId = null;
-    if (process.env.NODE_ENV !== 'test') {
-      console.log('[Webhook Worker] Stopped background retry worker');
-    }
-  }
-}

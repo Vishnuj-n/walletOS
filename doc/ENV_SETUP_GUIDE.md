@@ -1,30 +1,27 @@
 # Environment Setup Guide
 
-This guide explains the simplified .env configuration for WalletOS and how to properly test with remote Supabase.
+This guide explains the .env configuration for WalletOS.
 
 ## Simplified Structure
 
-WalletOS uses **2 root-level .env files**:
+WalletOS uses **3 root-level .env files**:
 
-- **`.env`** - Development and production environment (uses remote Supabase for both database and auth)
-- **`.env.test`** - Testing environment (uses local Docker database + remote Supabase auth)
+- **`.env`** - Development and production environment (uses Supabase Postgres for database)
+- **`.env.test`** - Testing environment (uses local Docker database)
 - **`.env.example`** - Template with instructions
 
-**Development/production** connects directly to Supabase for everything. **Testing** uses local Docker for fast database operations while still using Supabase for authentication.
+**Development/production** connects to Supabase Postgres. Admin auth is handled locally via email/password (bcrypt) with `adm_` session tokens, no Supabase Auth dependency.
 
 ## How to Configure
 
-### Step 1: Get Supabase Credentials
+### Step 1: Get Credentials
 
 1. Go to your Supabase dashboard: https://supabase.com/dashboard
 2. Navigate to your project
 3. Go to **Settings → Database**
 4. Copy **Connection String (Transaction Pooler)** → Use for `DATABASE_URL`
 5. Copy **Connection String (Direct)** → Use for `DIRECT_URL`
-6. Go to **Settings → API**
-7. Copy **Project URL** → Use for `SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_URL`
-8. Copy **anon public** key → Use for `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-9. Copy **service_role** key → Use for `SUPABASE_SERVICE_ROLE_KEY`
+6. Configure SMTP credentials for admin invite emails (Gmail, SendGrid, etc.)
 
 ### Step 2: Update .env Files
 
@@ -35,30 +32,35 @@ Edit `.env` for development/production:
 DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:6543/postgres?pgbouncer=true&sslmode=require"
 DIRECT_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres?sslmode=require"
 
-# Supabase Auth (for API admin authentication)
-SUPABASE_URL="https://[YOUR-PROJECT-REF].supabase.co"
-SUPABASE_SERVICE_ROLE_KEY="[YOUR-SERVICE-ROLE-KEY]"
+# SMTP for Admin Invite Emails
+GLOBAL_SMTP_HOST="smtp.gmail.com"
+GLOBAL_SMTP_PORT=465
+GLOBAL_SMTP_SECURE="true"
+GLOBAL_SMTP_USER="your-email@gmail.com"
+GLOBAL_SMTP_PASS="your-app-password"
+ADMIN_CLAIM_REDIRECT_URL="http://localhost:3000"
+
+# CORS (fallback origins if per-tenant config is empty)
+CORS_ORIGINS="http://localhost:3000,http://localhost:4200"
 
 # Admin Dashboard (client-side)
-NEXT_PUBLIC_SUPABASE_URL="https://[YOUR-PROJECT-REF].supabase.co"
-NEXT_PUBLIC_SUPABASE_ANON_KEY="[YOUR-ANON-KEY]"
 NEXT_PUBLIC_API_URL="http://localhost:3333/api/v1"
 
 NODE_ENV="development"
 ```
 
-Edit `.env.test` for testing (uses local Docker database + remote Supabase auth):
+Edit `.env.test` for testing (uses local Docker database):
 
 ```env
 # Database Connection (Local Docker - port 6543 for test)
 DATABASE_URL="postgresql://postgres:password@localhost:6543/walletos_test"
 DIRECT_URL="postgresql://postgres:password@localhost:6543/walletos_test"
 
-# Supabase Auth (for API admin authentication in tests)
-SUPABASE_URL="https://[YOUR-PROJECT-REF].supabase.co"
-SUPABASE_SERVICE_ROLE_KEY="[YOUR-SERVICE-ROLE-KEY]"
+# SMTP for Admin Invite Emails (mocked in tests)
+ADMIN_CLAIM_REDIRECT_URL="http://localhost:3000"
 
 NODE_ENV="test"
+```
 
 ## Test Postgres Container
 
@@ -98,56 +100,34 @@ cd apps/api
 npx prisma migrate dev
 ```
 
-## Testing with Remote Supabase
+## Testing
 
-### Option 1: Fast Unit Tests (Mocked Supabase)
+### Option 1: Fast Unit Tests (Default)
 
-Default behavior - tests use mocked Supabase for speed:
+Default behavior - tests use mocked mail service:
 
 ```bash
-# Run tests (uses mocked Supabase by default)
+# Run tests
 npx nx test api
 ```
 
 **Pros:**
 - Fast (no network calls)
-- No need for real Supabase user setup
+- No need for real SMTP setup
 - Good for unit testing business logic
 
 **Cons:**
-- Doesn't test actual Supabase integration
-- Mocked responses may not match real behavior
+- Doesn't test actual email delivery
 
-### Option 2: Integration Tests (Real Supabase)
+### Option 2: Password Hashing for Direct Setup
 
-To test with real Supabase authentication:
+For creating admin users without the invite flow (dev/test only):
 
 ```bash
-# Run tests with real Supabase
-TEST_REAL_SUPABASE=true npx nx test api
+npx ts-node -e "const bcrypt = require('bcryptjs'); bcrypt.hash('your_test_password', 12).then(console.log)"
 ```
 
-**Before running real Supabase tests:**
-
-1. Create a test admin user in Supabase:
-   - Go to Supabase Dashboard → Authentication → Users
-   - Create a user with email: `admin@test.com`
-   - Set the user's `app_metadata.tenantId` to `default` via SQL:
-     ```sql
-     update auth.users set app_metadata = '{"tenantId": "default"}' where email = 'admin@test.com';
-     ```
-
-2. Get a valid JWT token for this user (you'll need to implement a login endpoint or use Supabase client to generate one)
-
-**Pros:**
-- Tests actual Supabase integration
-- Catches authentication issues early
-- More realistic testing
-
-**Cons:**
-- Slower (network calls)
-- Requires test user setup
-- Tests may be flaky if Supabase is down
+Use the resulting hash as `passwordHash` in the `AdminUser` table for direct login.
 
 ## Running the Application
 
@@ -164,14 +144,14 @@ npx nx serve admin
 ### Testing
 
 ```bash
-# All tests (mocked Supabase)
+# All tests
 npx nx run-many -t test
 
-# API tests with real Supabase
-TEST_REAL_SUPABASE=true npx nx test api
+# API test suite
+npx nx test api
 
-# Admin E2E tests
-npx nx e2e admin-e2e
+# Admin test suite
+npx nx test admin
 ```
 
 ### Database Migrations
@@ -189,11 +169,11 @@ npx prisma migrate deploy
 
 ⚠️ **IMPORTANT:**
 
-- Foreit `.env` idepsoym nt,tiea .gitignore)istead fing `.env` fils
+- Never commit `.env` or `.env.test` files - use CI/CD secrets for deployment
 - Never commit real credentials to `.env.example`
-- The `.env.production` file should be set via CI/CD environment variables, not committed
-- `SUPABASE_SERVICE_ROLE_KEY` has full admin access - keep it secret
-- `NEXT_PUBLIC_*` variables are exposed to the browser - use only public keys
+- `GLOBAL_SMTP_PASS` is your email app password - keep it secret
+- `DATABASE_URL` and `DIRECT_URL` contain database credentials - keep them secret
+- `NEXT_PUBLIC_*` variables are exposed to the browser - use only public values
 
 ## Troubleshooting
 
@@ -204,11 +184,11 @@ This happens when using the direct connection instead of the pooler. Ensure:
 - `DATABASE_URL` includes `?pgbouncer=true`
 - `DIRECT_URL` is used ONLY for `npx prisma migrate` commands
 
-### Tests fail with authentication errors
+### Tests fail with database errors
 
-- Check that `.env.test` has valid Supabase credentials
-- If using `TEST_REAL_SUPABASE=true`, ensure test user exists in Supabase
-- Verify `SUPABASE_SERVICE_ROLE_KEY` is correct (not anon key)
+- Check that Docker is running and the test container is up: `docker ps`
+- Verify `.env.test` has correct local database connection string
+- Ensure migrations are up to date: `npx dotenv-cli -e ../../.env.test -- npx prisma migrate dev`
 
 ### Connection refused errors
 

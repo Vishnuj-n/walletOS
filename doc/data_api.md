@@ -2,7 +2,7 @@
 
 Base URL: `https://api.walletOS.io/v1`
 
-All requests require `Authorization: Bearer wlt_live_xxx` or `Authorization: Bearer wlt_test_xxx`. Write endpoints additionally require an `Idempotency-Key` header.
+All API key requests require `Authorization: Bearer wlt_live_xxx` or `Authorization: Bearer wlt_test_xxx`. Admin requests use `Authorization: Bearer adm_xxx`. User session requests use `Authorization: Bearer sess_xxx`. Write endpoints additionally require an `Idempotency-Key` header.
 
 All responses are JSON. Errors use the envelope:
 
@@ -31,6 +31,22 @@ Headers on every response: `X-RateLimit-Remaining`, `X-RateLimit-Reset`. Exceede
 
 ---
 
+## API key scopes
+
+| Scope | Allowed operations |
+|---|---|
+| `read_only` | GET endpoints only |
+| `read_write` | Create wallets, credit, debit, transfer, create sessions |
+| `admin` | Freeze, close, list all wallets, manage webhooks |
+
+---
+
+## Idempotency
+
+All write endpoints require `Idempotency-Key` header. Max 255 characters. The system checks for an existing transaction with the same `(tenantId, idempotencyKey)` within a **30-day** window. If reused with the same parameters, the original response is returned. If reused with different parameters, returns 409 `IDEMPOTENCY_CONFLICT`. Transfer idempotency uses `pg_advisory_xact_lock` for concurrency safety.
+
+---
+
 ## Wallets
 
 ### POST /wallets
@@ -55,8 +71,6 @@ Create a wallet for a user. Requires `read_write` scope.
 | `currency` | string | Yes | 3-letter currency code (e.g., "INR", "USD") |
 | `label` | string | No | Human-readable label for the wallet |
 | `metadata` | object | No | Arbitrary JSON metadata for the wallet |
-
-`currency` is required. `label` and `metadata` are optional.
 
 **Response 201**
 ```json
@@ -166,7 +180,7 @@ Restore a frozen wallet to active. Requires `admin` scope.
 
 ### POST /wallets/:walletId/close
 
-Permanently close a wallet. Only allowed when `balance = 0.0000`. Irreversible. Requires `admin` scope. The system supports a `pending_closure` status with a grace period to allow account recovery before permanent closure.
+Permanently close a wallet. Only allowed when `balance = 0.0000`. Irreversible. Requires `admin` scope. The system supports `active` / `frozen` / `pending_closure` / `closed` statuses.
 
 **Request**
 ```json
@@ -181,11 +195,38 @@ Permanently close a wallet. Only allowed when `balance = 0.0000`. Irreversible. 
 
 ---
 
+### POST /wallets/transfer
+
+Transfer between two wallets in the same tenant. Both wallets locked with `SELECT FOR UPDATE` in lexicographic order to prevent deadlocks. Requires `read_write` scope.
+
+**Request**
+```json
+{
+  "from_wallet_id": "claaa...",
+  "to_wallet_id": "clbbb...",
+  "amount": "100.00",
+  "description": "Reward transfer",
+  "reference_id": "transfer_ref_001"
+}
+```
+
+**Response 201**
+```json
+{
+  "debit_transaction": { /* full transaction object */ },
+  "credit_transaction": { /* full transaction object */ }
+}
+```
+
+**Errors:** `INSUFFICIENT_BALANCE` (422), `WALLET_FROZEN` (409), `CROSS_TENANT_TRANSFER` (403), `NOT_FOUND` (404)
+
+---
+
 ### GET /wallets
 
-List all wallets for the tenant. Admin-only endpoint (requires Supabase admin auth, not an API key).
+List all wallets for the tenant. Admin-only endpoint (requires admin session auth, not an API key).
 
-**Query params:** `status`, `currency`, `from` (ISO date), `to` (ISO date), `limit`, `after`
+**Query params:** `status` (active/frozen/pending_closure/closed), `currency`, `from` (ISO date), `to` (ISO date), `limit`, `after`
 
 **Response 200**
 ```json
@@ -198,7 +239,9 @@ List all wallets for the tenant. Admin-only endpoint (requires Supabase admin au
 
 ---
 
-### POST /api/v1/auth/session
+## Auth
+
+### POST /auth/session
 
 Issue a short-lived session token for the user-facing UI. Server-to-server only. Requires `read_write` scope.
 
@@ -227,39 +270,21 @@ Issue a short-lived session token for the user-facing UI. Server-to-server only.
 }
 ```
 
-**Response Fields**
-
 | Field | Type | Description |
 |---|---|---|
 | `token` | string | Opaque session token (always starts with `sess_`). Use as `Authorization: Bearer {token}`. |
 | `expires_at` | ISO 8601 | Token expiration timestamp. Expires in 1 hour. |
 | `wallet` | object | Full wallet profile associated with this session (read-only in UI). |
 
-**Security**
+**Security:** Token is cryptographically scoped to the one `wallet_id`. SHA-256 hashed in the database; raw token never stored.
 
-- Token is cryptographically scoped to the one `wallet_id`. Clients cannot access other wallets even if they try to modify the `wallet_id` URL parameter.
-- The consuming app passes only the `token` to the embedded iframe; the API key never leaves the server.
-- Session tokens are hashed in the database; raw tokens are never stored.
-
-**Iframe Integration**
-
-Send only the token to the embedded wallet app:
-
-```html
-<iframe src="https://wallet.yourapp.com/?token=sess_..." />
-```
-
-The embedded app will call `GET /api/v1/auth/session/profile` to fetch the wallet and user profile.
-
----
-
-### GET /api/v1/auth/session/profile
+### GET /auth/session/profile
 
 Fetch the wallet profile for the authenticated session token (client-facing). Requires a valid `Authorization: Bearer sess_...` header.
 
 **Request**
-```bash
-GET /api/v1/auth/session/profile
+```
+GET /auth/session/profile
 Authorization: Bearer sess_b0ac548cd56140be3da75f045e7358cbbb4843c90912db50ab35d377e8e8e6ce
 ```
 
@@ -279,58 +304,15 @@ Authorization: Bearer sess_b0ac548cd56140be3da75f045e7358cbbb4843c90912db50ab35d
 }
 ```
 
-**Errors**
-
-| Code | HTTP | Condition |
-|---|---|---|
-| `UNAUTHORIZED` | 401 | Missing or invalid session token |
-| `NOT_FOUND` | 404 | Wallet associated with session not found (edge case) |
-
----
-
-## Admin API
-
-Admin routes use Supabase JWTs, not API keys. Requests must send `Authorization: Bearer <admin_jwt>`.
-
-Role hierarchy:
-
-- `support` < `finance` < `superadmin`
-
-Selected routes:
-
-- `GET /admin/me` - current admin identity and role
-- `GET /admin/audit` - tenant-scoped audit logs
-- `GET /admin/tenants` - list all tenants, superadmin only
-- `POST /admin/tenants` - create a tenant, superadmin only
-- `POST /admin/tenants/:tenantId/rotate-key` - rotate a tenant API key, superadmin only
-- `POST /admin/tenants/:tenantId/revoke-key` - revoke a tenant API key, superadmin only
-- `GET /admin/audit/admin-activity` - cross-tenant admin activity, superadmin only
-- `GET /admin/system/errors` - recent system errors, superadmin only
-- `GET /admin/search/wallets` - cross-tenant wallet search, superadmin only
-- `GET /admin/search/transactions` - transaction tracer, superadmin only
-- `GET /admin/system/balance` - total live and sandbox balances across all tenants, superadmin only
-
-`GET /admin/search/transactions` query params are `transactionId`, `requestId`, and `idempotencyKey`.
-`GET /admin/audit/admin-activity` query params are `adminEmail`, `actionType`, `limit`, and `after`.
-
-### POST /admin/wallets
-
-Idempotent wallet create endpoint for admin tooling. A repeated request with the same idempotency key returns the previously created resource.
-
-- `201 Created`: wallet newly created
-- `200 OK`: wallet already existed for that idempotency key/request
-
-Sandbox mode for admin routes is controlled with `X-Sandbox: true`.
+**Errors:** `UNAUTHORIZED` (401), `NOT_FOUND` (404)
 
 ---
 
 ## Transactions
 
-All write endpoints require `Idempotency-Key` header. Max 255 characters. The database enforces a permanent unique constraint on the tenant ID and idempotency key combination. If reused with the same parameters, the original response is returned. If reused with different parameters, returns 409 `IDEMPOTENCY_CONFLICT`.
-
 ### POST /transactions/credit
 
-Credit a wallet. Requires `read_write` scope. The wallet row is locked with `SELECT FOR UPDATE` before the credit to prevent lost updates under load.
+Credit a wallet. Requires `read_write` scope. The wallet row is locked with `SELECT FOR UPDATE` before the credit.
 
 **Headers:** `Idempotency-Key: order_789_credit`
 
@@ -500,50 +482,75 @@ Register a webhook endpoint. Requires `admin` scope.
 **Response 201**
 ```json
 {
-  "endpoint_id": "clwh...",
+  "id": "clwh...",
   "url": "https://yourproject.io/webhooks/wallet",
   "events": ["wallet.credited", "wallet.debited", "wallet.frozen"],
   "secret": "whsec_xxx",
+  "status": "active",
+  "is_active": true,
   "created_at": "2025-06-01T10:00:00.000Z"
 }
 ```
 
 `secret` is shown once. Store it. Use it to verify the `X-WalletOS-Signature` header on incoming webhook payloads.
 
-**Verifying a payload:**
-```
-expected = HMAC-SHA256(secret, raw_request_body)
-received = X-WalletOS-Signature header value
-valid = timingSafeEqual(expected, received)
-```
-
----
-
 ### GET /webhooks
 
 List all webhook endpoints for the tenant. Requires `read_only` or higher.
 
----
+**Response 200**
+```json
+{
+  "data": [
+    {
+      "id": "clwh...",
+      "url": "https://yourproject.io/webhooks/wallet",
+      "events": ["wallet.credited", "wallet.debited"],
+      "status": "active",
+      "is_active": true,
+      "created_at": "2025-06-01T10:00:00.000Z"
+    }
+  ]
+}
+```
 
-### DELETE /webhooks/:endpointId
+### DELETE /webhooks/:webhookId
 
-Deactivate a webhook endpoint. Requires `admin` scope.
+Deactivate (soft-delete) a webhook endpoint. Requires `admin` scope.
 
----
+**Response 200**
+```json
+{
+  "id": "clwh...",
+  "is_active": false,
+  "status": "disabled"
+}
+```
 
-### POST /webhooks/:endpointId/test
+### POST /webhooks/:webhookId/test
 
-Send a sample `wallet.credited` payload to the endpoint. Requires `admin` scope.
+Send a test ping payload to the endpoint. Requires `admin` scope. Returns delivery ID.
 
----
+**Response 200**
+```json
+{
+  "delivery_id": "cldel...",
+  "message": "Test webhook dispatched"
+}
+```
 
 ### GET /webhooks/:endpointId/deliveries
 
-Delivery log for an endpoint. Returns attempt history with status codes and timestamps. The system implements a circuit breaker that marks unresponsive endpoints as `degraded` and pauses dispatching to prevent queue blocking.
+Delivery log for an endpoint. Returns attempt history with status codes and timestamps. The system implements a circuit breaker that marks endpoints as `failed` after 5 consecutive delivery failures.
 
----
+**Verifying a payload:**
+```
+expected = HMAC-SHA256(secret, raw_request_body)
+received = X-WalletOS-Signature header value (format: "sha256=<hex>")
+valid = timingSafeEqual(expected, received)
+```
 
-## Webhook payload shape
+### Webhook payload shape
 
 All webhook payloads follow this envelope:
 
@@ -559,15 +566,105 @@ All webhook payloads follow this envelope:
 }
 ```
 
+### Webhook event types
+
+| Event | Trigger |
+|---|---|
+| `wallet.created` | Wallet created |
+| `wallet.credited` | Credit executed |
+| `wallet.debited` | Debit executed |
+| `wallet.frozen` | Wallet frozen |
+| `wallet.unfrozen` | Wallet unfrozen |
+| `wallet.closed` | Wallet closed |
+| `webhook.test` | Test dispatch |
+
+---
+
+## Admin API
+
+Admin routes use custom `adm_` session tokens, not API keys. Requests must send `Authorization: Bearer adm_xxx`. Sandbox mode is controlled via `X-Sandbox: true` header.
+
+### Admin authentication
+
+```
+POST /api/v1/auth/login
+Body: { email, password }
+
+Response 200:
+{
+  "token": "adm_xxx",
+  "expires_at": "2025-06-02T10:00:00.000Z",
+  "adminUser": {
+    "id": "cladm...",
+    "email": "admin@company.io",
+    "tenantId": "cltenant...",
+    "role": "superadmin"
+  }
+}
+```
+
+### Admin account claim (invite flow)
+
+```
+POST /api/v1/auth/claim-account
+Body: { token: "invite_token", password: "secure_password" }
+
+Response 200:
+{
+  "message": "Account successfully activated. You can now log in."
+}
+```
+
+### Role hierarchy
+
+| Role | Rank | Capabilities |
+|---|---|---|
+| `support` | 0 | View wallets, transactions, audit logs; manual credit/debit |
+| `finance` | 1 | View + export reports, audit log export |
+| `tenant_admin` | 2 | Tenant-scoped management, webhook CRUD, admin user listing, invite users (non-superadmin roles) |
+| `superadmin` | 3 | Everything including tenant CRUD, key rotation/revocation, cross-tenant search, invite superadmins |
+
+### Admin endpoints
+
+All paths prefixed with `/admin` (full path: `POST /api/v1/admin/...`).
+
+| Method | Path | RBAC | Description |
+|---|---|---|---|
+| GET | /me | any | Current admin identity and role |
+| POST | /wallets | support+ | Create a wallet (idempotent) |
+| PATCH | /wallets/:walletId | support+ | Update wallet label/metadata |
+| DELETE | /wallets/:walletId | support+ | Close a wallet with reason |
+| GET | /wallets | support+ | List wallets for tenant |
+| GET | /audit | support+ | Tenant-scoped audit logs |
+| POST | /invite-user | tenant_admin+ | Invite new admin user |
+| POST | /users/invite | tenant_admin+ | Invite new admin user (alias) |
+| GET | /account/api-keys | tenant_admin+ | List tenant API keys |
+| GET | /account/users | tenant_admin+ | List tenant admin users |
+| GET | /tenants | superadmin | List all tenants |
+| POST | /tenants | superadmin | Create a tenant |
+| POST | /tenants/:tenantId/rotate-key | superadmin | Rotate a tenant API key |
+| POST | /tenants/:tenantId/revoke-key | superadmin | Revoke a tenant API key |
+| GET | /tenants/:tenantId/usage | superadmin | API usage stats for a tenant |
+| GET | /search/wallets | superadmin | Cross-tenant wallet search |
+| GET | /search/transactions | superadmin | Transaction tracer |
+| GET | /audit/admin-activity | superadmin | Cross-tenant admin activity |
+| GET | /system/errors | superadmin | Recent system errors |
+| GET | /system/balance | superadmin | Total live/sandbox balances across all tenants |
+| POST | /webhooks | admin+ | Register webhook endpoint |
+| GET | /webhooks | read_only+ | List webhook endpoints |
+| DELETE | /webhooks/:webhookId | admin+ | Deactivate webhook |
+| POST | /webhooks/:webhookId/test | admin+ | Send test ping |
+| GET | /webhooks/:webhookId/deliveries | read_only+ | Delivery log |
+
+**Note:** Role requirement shown as minimum. `support+` means the endpoint is available to support and all higher roles.
+
 ---
 
 ## Audit log (admin only)
 
-All audit endpoints require Supabase admin auth.
-
 ### GET /audit
 
-Query the audit log.
+Query the audit log. Requires `support` or higher.
 
 **Query params:** `wallet_id`, `actor`, `action`, `from`, `to`, `limit`, `after`
 
@@ -579,11 +676,10 @@ Query the audit log.
       "id": "claudit...",
       "tenant_id": "cltenant...",
       "wallet_id": "clxyz...",
+      "wallet_public_id": "wal_xxx...",
       "action": "wallet.frozen",
       "actor": "admin:support@company.io",
-      "before": { "status": "active" },
-      "after": { "status": "frozen" },
-      "ip_address": "203.0.113.42",
+      "changes": { "before": { "status": "active" }, "after": { "status": "frozen" } },
       "created_at": "2025-06-15T14:22:00.000Z"
     }
   ],
@@ -599,6 +695,10 @@ Stream audit log as CSV for a date range. No pagination — full export.
 
 Response: `Content-Type: text/csv` with `Content-Disposition: attachment; filename=audit_export.csv`
 
+### GET /audit/admin-activity
+
+Cross-tenant admin activity log (superadmin only). Query params: `adminEmail`, `actionType`, `limit`, `after`.
+
 ---
 
 ## Error codes reference
@@ -610,13 +710,14 @@ Response: `Content-Type: text/csv` with `Content-Disposition: attachment; filena
 | `WALLET_CLOSED` | 409 | Wallet is permanently closed |
 | `WALLET_ALREADY_EXISTS` | 409 | Wallet already exists for this user in this tenant/environment |
 | `WALLET_BALANCE_NOT_ZERO` | 422 | Cannot close a wallet with a non-zero balance |
+| `WALLET_ALREADY_FROZEN` | 409 | Wallet is already frozen |
 | `IDEMPOTENCY_CONFLICT` | 409 | Idempotency key reused with different parameters |
 | `CANNOT_REVERSE_REVERSAL` | 409 | Cannot create a reversal of a reversal |
 | `CROSS_TENANT_TRANSFER` | 403 | Transfer targets a wallet in a different tenant |
 | `TENANT_ISOLATION` | 403 | Resource does not belong to the authenticated tenant |
 | `NOT_FOUND` | 404 | Resource does not exist |
-| `UNAUTHORIZED` | 401 | Missing or invalid API key |
-| `FORBIDDEN` | 403 | API key scope insufficient for this action |
+| `UNAUTHORIZED` | 401 | Missing or invalid credentials |
+| `FORBIDDEN` | 403 | Credentials valid but insufficient permissions |
 | `RATE_LIMIT_EXCEEDED` | 429 | Request rate exceeded |
 | `VALIDATION_ERROR` | 400 | Request body failed validation |
 | `INTERNAL_ERROR` | 500 | Unexpected server error |

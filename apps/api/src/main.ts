@@ -10,6 +10,7 @@ import adminRoutes from './routes/admin.routes';
 import authRoutes from './routes/auth.routes';
 import { verifyGlobalSmtpHealth } from './services/mail.service';
 import { startWebhookRetryWorker } from './services/webhook.service';
+import { prisma } from './lib/prisma';
 
 
 const app = express();
@@ -27,17 +28,109 @@ const corsOrigins: (string | RegExp)[] = process.env.CORS_ORIGINS
       /^https:\/\/walletos-web-.*\.netlify\.app$/,
     ];
 
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin || corsOrigins.some(o => (typeof o === 'string' ? o === origin : o.test(origin)))) {
-      cb(null, true);
-    } else {
-      cb(null, false);
+import { createHash } from 'crypto';
+
+app.use(cors(async (req, cb) => {
+  const origin = req.header('Origin');
+  const corsOptions: cors.CorsOptions = {
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Sandbox', 'Idempotency-Key'],
+  };
+
+  if (!origin) {
+    corsOptions.origin = true;
+    cb(null, corsOptions);
+    return;
+  }
+
+  if (corsOrigins.some(o => (typeof o === 'string' ? o === origin : o.test(origin)))) {
+    corsOptions.origin = origin;
+    cb(null, corsOptions);
+    return;
+  }
+
+  try {
+    let tenantId: string | null = null;
+
+    // 1. Check custom X-Tenant-Id header
+    const tenantHeader = req.headers['x-tenant-id'];
+    if (typeof tenantHeader === 'string' && tenantHeader.trim()) {
+      tenantId = tenantHeader.trim();
     }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Sandbox', 'Idempotency-Key'],
+
+    // 2. Check X-API-Key header
+    if (!tenantId) {
+      const apiKey = req.headers['x-api-key'];
+      if (typeof apiKey === 'string' && apiKey.trim()) {
+        const keyHash = createHash('sha256').update(apiKey.trim()).digest('hex');
+        const apiKeyRecord = await prisma.apiKey.findUnique({
+          where: { keyHash },
+          select: { tenantId: true },
+        });
+        if (apiKeyRecord) {
+          tenantId = apiKeyRecord.tenantId;
+        }
+      }
+    }
+
+    // 3. Check Authorization header
+    if (!tenantId) {
+      const authHeader = req.headers['authorization'];
+      if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7).trim();
+        if (token.startsWith('sess_') || token.startsWith('adm_')) {
+          const tokenHash = createHash('sha256').update(token).digest('hex');
+          const session = await prisma.sessionToken.findFirst({
+            where: {
+              tokenHash,
+              expiresAt: { gt: new Date() },
+            },
+            select: { tenantId: true },
+          });
+          if (session) {
+            tenantId = session.tenantId;
+          }
+        }
+      }
+    }
+
+    // 4. Check subdomain
+    if (!tenantId) {
+      const host = req.headers.host || req.hostname;
+      if (host) {
+        const parts = host.split('.');
+        if (parts.length > 2) {
+          const subdomain = parts[0].toLowerCase();
+          if (!['api', 'admin', 'web', 'www', 'localhost', 'dev', 'staging', 'mail'].includes(subdomain)) {
+            tenantId = subdomain;
+          }
+        }
+      }
+    }
+
+    if (!tenantId) {
+      corsOptions.origin = false;
+      cb(null, corsOptions);
+      return;
+    }
+
+    const matchingConfig = await prisma.tenantConfig.findFirst({
+      where: {
+        tenantId,
+        allowedOrigins: {
+          has: origin,
+        },
+      },
+    });
+
+    corsOptions.origin = matchingConfig ? origin : false;
+    cb(null, corsOptions);
+  } catch (err) {
+    console.error('CORS dynamic origin check error:', err);
+    corsOptions.origin = false;
+    cb(null, corsOptions);
+  }
 }));
 app.use(express.json());
 app.use(requestIdMiddleware);

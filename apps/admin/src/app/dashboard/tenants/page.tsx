@@ -24,7 +24,9 @@ import {
   Clock, 
   Mail, 
   Activity,
-  ArrowUpRight
+  ArrowUpRight,
+  Check,
+  Copy
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -390,6 +392,9 @@ export default function TenantsPage() {
   const [createSuccess, setCreateSuccess] = useState('');
   const [createdTenant, setCreatedTenant] = useState<CreatedTenantResponse | null>(null);
   const [copyStatus, setCopyStatus] = useState<string>('');
+  const [copiedKey, setCopiedKey] = useState<'live' | 'test' | null>(null);
+  const [copyVariant, setCopyVariant] = useState<'success' | 'error'>('success');
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [openActionsMenuTenantId, setOpenActionsMenuTenantId] = useState<string | null>(null);
   const actionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -540,15 +545,23 @@ export default function TenantsPage() {
     }
   };
 
-  const copyToClipboard = async (text: string) => {
+  const copyToClipboard = async (text: string, type: 'live' | 'test') => {
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     setCopyStatus('');
+    setCopiedKey(type);
     try {
       await navigator.clipboard.writeText(text);
-      setCopyStatus('Copied!');
-      setTimeout(() => setCopyStatus(''), 2000);
+      setCopyStatus(`${type === 'live' ? 'Live' : 'Test'} API Key copied to clipboard`);
+      setCopyVariant('success');
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopyStatus('');
+        setCopiedKey(null);
+      }, 2000);
     } catch {
       setCopyStatus('Select & copy manually');
-      setTimeout(() => setCopyStatus(''), 3000);
+      setCopyVariant('error');
+      setCopiedKey(null);
+      copyTimeoutRef.current = setTimeout(() => setCopyStatus(''), 3000);
     }
   };
 
@@ -857,11 +870,7 @@ export default function TenantsPage() {
                 </div>
               )}
 
-              {copyStatus && (
-                <div className="bg-blue-50 border border-blue-200 text-blue-800 text-xs px-4 py-3 rounded-xl">
-                  {copyStatus}
-                </div>
-              )}
+
 
               {!createdTenant ? (
                 <form onSubmit={handleCreateTenant} className="space-y-4">
@@ -948,10 +957,24 @@ export default function TenantsPage() {
                         />
                         <button
                           type="button"
-                          onClick={() => copyToClipboard(createdTenant.live_key)}
-                          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs transition-colors border border-slate-200"
+                          onClick={() => copyToClipboard(createdTenant.live_key, 'live')}
+                          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-xs transition-all duration-200 border ${
+                            copiedKey === 'live'
+                              ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white shadow-sm'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                          }`}
                         >
-                          Copy
+                          {copiedKey === 'live' ? (
+                            <>
+                              <Check size={12} className="stroke-[3]" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={12} />
+                              Copy
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -969,10 +992,24 @@ export default function TenantsPage() {
                         />
                         <button
                           type="button"
-                          onClick={() => copyToClipboard(createdTenant.test_key)}
-                          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs transition-colors border border-slate-200"
+                          onClick={() => copyToClipboard(createdTenant.test_key, 'test')}
+                          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-xs transition-all duration-200 border ${
+                            copiedKey === 'test'
+                              ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white shadow-sm'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                          }`}
                         >
-                          Copy
+                          {copiedKey === 'test' ? (
+                            <>
+                              <Check size={12} className="stroke-[3]" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={12} />
+                              Copy
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -1019,6 +1056,18 @@ export default function TenantsPage() {
             type={alertModal.type}
             onClose={() => setAlertModal(null)}
           />
+        )}
+
+        {/* Floating Toast Notification */}
+        {copyStatus && (
+          <div className="fixed bottom-6 right-6 z-50 shadow-2xl">
+            <div className={`text-white text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2 border ${copyVariant === 'error' ? 'bg-rose-600 border-rose-500' : 'bg-slate-950 border-slate-800'}`}>
+              <span className={`flex h-4 w-4 items-center justify-center rounded-full text-slate-950 font-black text-[10px] ${copyVariant === 'error' ? 'bg-rose-300' : 'bg-emerald-500'}`}>
+                {copyVariant === 'error' ? '!' : '✓'}
+              </span>
+              <span>{copyStatus}</span>
+            </div>
+          </div>
         )}
       </div>
     </PermissionGate>

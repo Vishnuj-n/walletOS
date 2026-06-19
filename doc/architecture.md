@@ -11,8 +11,8 @@ walletOS/
 ├── apps/
 │   ├── api/      Express + Prisma. The only process that touches the database.
 │   ├── web/      Next.js. User-facing wallet UI. Calls apps/api.
-│   └── admin/    Next.js. Admin dashboard. Calls apps/api with Supabase JWTs.
-└── docs/
+│   └── admin/    Next.js. Admin dashboard. Calls apps/api with admin session tokens.
+└── doc/
 ```
 
 `apps/web` and `apps/admin` are separate Next.js apps. They do not share a Next.js instance. They are deployed to different domains (`app.walletOS.io` and `admin.walletOS.io`). Keeping them separate means admin auth, admin routing, and admin deploys are completely isolated from the user-facing app.
@@ -21,7 +21,7 @@ walletOS/
 
 ## Database
 
-**Postgres via Supabase.** Chosen over MongoDB for three concrete reasons this project required:
+**Postgres.** Chosen over MongoDB for three concrete reasons this project required:
 
 `SELECT FOR UPDATE` — the PRD mandates row-level locking before any debit to prevent simultaneous debits from producing a negative balance. Postgres locks the wallet row at the database level. MongoDB has no equivalent primitive; the workaround requires application-level conditional updates that are easier to misconfigure.
 
@@ -29,7 +29,7 @@ Foreign key constraints — the double-entry ledger requires that a transaction 
 
 Audit log immutability — the PRD requires that the database user the application connects with has `DELETE` and `UPDATE` revoked on `audit_logs`. In Postgres this is two SQL lines. In MongoDB it requires a custom role with non-standard granularity.
 
-**Prisma** is the ORM. It provides type-safe queries, a migration system, and connection pooling. The Prisma client is a singleton in `src/config/database.ts`. All database access goes through it — no raw `pg` queries except for the `SELECT 1` health check and the `SELECT FOR UPDATE` lock.
+**Prisma** is the ORM. It provides type-safe queries, a migration system, and connection pooling. The Prisma client is a singleton in `src/lib/prisma.ts`. All database access goes through it — no raw `pg` queries except for the `SELECT 1` health check and the `SELECT FOR UPDATE` lock.
 
 **`SELECT FOR UPDATE` pattern for debits and credits:**
 
@@ -44,11 +44,22 @@ await prisma.$transaction(async (tx) => {
 })
 ```
 
+**Transfer pattern** locks both wallets in lexicographic order to prevent deadlocks:
+
+```typescript
+await prisma.$transaction(async (tx) => {
+  const wallets = [fromId, toId].sort()
+  const [walletA] = await tx.$queryRaw`SELECT * FROM wallets WHERE id = ${wallets[0]} FOR UPDATE`
+  const [walletB] = await tx.$queryRaw`SELECT * FROM wallets WHERE id = ${wallets[1]} FOR UPDATE`
+  // debit from source, credit to destination — both or neither
+})
+```
+
 **Money columns** use `Decimal(20,4)` throughout. No `Float` anywhere. Floats cannot represent monetary values exactly.
 
 ---
 
-## Auth — two separate systems
+## Auth — three separate systems
 
 **API key auth (for developer integrations):**
 
@@ -63,17 +74,21 @@ Every request to `apps/api` from a developer context goes through `middleware/au
 
 Key scopes: `read_only` → read-only GET access. `read_write` → create wallets, credit, debit, transfer. `admin` → freeze, close, list all wallets, manage webhooks.
 
-**Supabase Auth (for admin dashboard):**
+**Admin session auth (for admin dashboard):**
 
-Admins log in through `apps/admin` using Supabase Auth (email + password). Supabase issues a JWT. Every request from the admin app sends this JWT as a Bearer token to `apps/api`, where `middleware/adminAuth.ts`:
-1. Calls `supabaseAdmin.auth.getUser(token)` to verify the JWT
-2. Looks up `AdminUser` by `supabase_uid`
-3. Checks `isActive`
-4. Sets `req.adminUser = { id, email, tenantId, role }`
+Admins log in through `apps/admin` using email + password. A custom session token (`adm_xxx`) is created and stored in `session_tokens`. Every request from the admin app sends this token as a Bearer token to `apps/api`, where `middleware/adminAuth.ts`:
+1. Extract Bearer token starting with `adm_`
+2. SHA-256 hash the token
+3. Lookup in `session_tokens` by hash, verify not expired
+4. Parse scope (`admin:<adminUserId>`)
+5. Look up `AdminUser` by id, verify `isActive`, match tenant
+6. Sets `req.adminUser = { id, email, tenantId, role }`
 
-Admin roles: `support` (view + manual credit/debit), `finance` (view + export reports), `superadmin` (everything including tenant management and key revocation).
+Admin roles: `support` (0) → view-only, manual credit/debit. `finance` (1) → view + export reports. `tenant_admin` (2) → tenant-scoped management. `superadmin` (3) → everything including tenant management, key revocation, cross-tenant search.
 
-The live API key never reaches the browser. The admin dashboard uses Supabase JWTs. The user-facing web app uses short-lived session tokens scoped to a single wallet.
+**User session auth (for end-user wallet UI):**
+
+The consuming project's backend requests a short-lived session token (`sess_xxx`) scoped to a single wallet. The end-user browser uses this token via `middleware/userSessionAuth.ts`. Session tokens expire in 1 hour and are cryptographically scoped to one `wallet_id`.
 
 ---
 
@@ -83,6 +98,8 @@ The live API key never reaches the browser. The admin dashboard uses Supabase JW
 
 A `wlt_test_` key cannot read live wallets. A `wlt_live_` key cannot read sandbox wallets. The separation is enforced in every query, not just at the route level.
 
+For admin routes, sandbox mode is controlled via `X-Sandbox: true` header.
+
 ---
 
 ## Request lifecycle
@@ -90,8 +107,7 @@ A `wlt_test_` key cannot read live wallets. A `wlt_live_` key cannot read sandbo
 Every request passes through this middleware stack in order:
 
 ```
-helmet()          → security headers
-cors()            → origins from ALLOWED_ORIGINS env var, never hardcoded
+cors()            → dynamic CORS: global CORS_ORIGINS env + per-tenant DB-backed allowedOrigins
 express.json()    → body parsing, 1mb limit
 requestId()       → attaches req_xxx to req and X-Request-Id response header
 [route handlers]
@@ -99,6 +115,57 @@ errorHandler()    → last middleware, formats all errors to PRD error shape
 ```
 
 Rate limiting sits inside the route handlers, after `apiKeyAuth` has set `req.apiKeyId`, so limits apply per API key rather than per IP.
+
+**Dynamic CORS detail:**
+
+```
+1. Check global CORS_ORIGINS env var (comma-separated, supports /regex/ patterns)
+2. If no match, resolve tenant via:
+   a. X-Tenant-Id header
+   b. X-API-Key header → SHA-256 hash → lookup api_keys
+   c. Authorization header (sess_/adm_ token) → SHA-256 hash → lookup session_tokens
+   d. Subdomain of Host header
+3. Look up TenantConfig.allowedOrigins for that tenant
+4. Allow if origin matches, reject otherwise
+```
+
+---
+
+## Idempotency
+
+Every write endpoint requires an `Idempotency-Key` header (max 255 chars). The middleware:
+
+1. Checks for existing transaction with same `(tenantId, idempotencyKey)` within a **30-day** window
+2. If found with matching parameters → returns cached response (200/201)
+3. If found with different parameters → returns 409 `IDEMPOTENCY_CONFLICT`
+4. Uses `pg_advisory_xact_lock` for concurrency-safe transfer idempotency
+5. After response is sent, stores the response in transaction metadata for future lookups
+
+---
+
+## Webhook subsystem
+
+After any wallet or transaction write commits, `webhookService.publishWebhookEvent()` fires asynchronously:
+
+1. Queries `webhooks` for the tenant where `isActive = true`
+2. Filters by event subscription match (exact event or wildcard `*`)
+3. Creates `WebhookDelivery` record with attempt 1
+4. Dispatches POST with `X-WalletOS-Signature` header (HMAC-SHA256)
+
+**SSRF protection:** Validates URLs before dispatch — resolves DNS, blocks private IPv4/IPv6 ranges, rejects non-http/https protocols.
+
+**Retry backoff (after failed delivery):**
+| Attempt | Delay |
+|---|---|
+| 2 | 30s |
+| 3 | 2m |
+| 4 | 15m |
+| 5 | 2h |
+| After 5 failures | Status → `failed`, no more retries |
+
+**Circuit breaker:** After 5 consecutive failures, webhook status is set to `failed`. Admin can re-enable manually.
+
+**Background retry worker:** Polls every 30s for pending deliveries with `nextAttempt <= now`. Concurrency limited (default 5). Uses atomic lease pattern (`updateMany` with time-bounded condition) to prevent double-dispatch.
 
 ---
 
@@ -130,21 +197,21 @@ Every error log includes the `request_id` so a single log line can be correlated
 
 ## Config and environment
 
-All environment variables are read in `src/config/index.ts`. The module throws on startup if a required variable is missing. No other file reads `process.env` directly.
-
-Variables split by concern:
+Environment is read directly via `process.env` throughout the codebase. Key variables:
 
 ```
 Database:   DATABASE_URL
-Supabase:   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, SUPABASE_ANON_KEY
-CORS:       ALLOWED_ORIGINS (comma-separated)
+CORS:       CORS_ORIGINS (comma-separated, supports /regex/ patterns)
 Rate limit: RATE_LIMIT_READ, RATE_LIMIT_WRITE
 Sessions:   USER_SESSION_SECRET, USER_SESSION_TTL_SECONDS
+Webhooks:   WEBHOOK_CONCURRENCY_LIMIT (default 5)
+Port:       PORT (default 3333)
 ```
 
-Dev uses `.env`. Production uses the hosting platform's secret manager (Supabase, Railway, Render). `.env.example` is committed with every variable name and a comment. `.env` is gitignored.
+Dev uses `.env`. Production uses the hosting platform's secret manager. `.env.example` is committed with every variable name and a comment. `.env` is gitignored.
 
 ---
+
 ## Deployment targets
 
 | App | Dev port | Prod domain |
@@ -154,8 +221,6 @@ Dev uses `.env`. Production uses the hosting platform's secret manager (Supabase
 | `apps/admin` | 3001 | `admin.walletOS.io` |
 
 Each app deploys independently. `apps/api` is a Node.js server. `apps/web` and `apps/admin` are Next.js apps that can run on any Node.js hosting or export as static builds where appropriate.
-
-Supabase hosts the Postgres database. The `DATABASE_URL` in production points at the Supabase connection string with PgBouncer pooling enabled for the API server.
 
 ---
 
@@ -167,10 +232,14 @@ Supabase hosts the Postgres database. The `DATABASE_URL` in production points at
 
 **SHA-256 over bcrypt for API keys.** API keys are high-entropy secrets, not low-entropy human passwords. SHA-256 provides complete security for high-entropy values without the CPU penalty of bcrypt. This is critical for performance since the hash comparison runs on every API request.
 
-**Supabase Auth for admins, not a custom session system.** Building session management, token rotation, and credential storage correctly is expensive. Supabase Auth handles this and adds MFA support for free. The tradeoff is a runtime dependency on Supabase's auth service — mitigated by the fact that the database is already on Supabase.
+**Custom admin sessions over Supabase Auth.** Supabase Auth adds a runtime dependency on Supabase's auth service. Custom `adm_` session tokens keep the auth path entirely in the Postgres database, eliminating an external dependency for admin operations. SHA-256 hashing, expiry enforcement, and scope isolation provide equivalent security without network calls to Supabase.
+
+**Dynamic CORS over static env.** Multi-tenant deployments need per-tenant origin control. A static env var cannot scale to hundreds of tenants each with custom domains. The two-tier approach (global `CORS_ORIGINS` env + per-tenant `allowedOrigins` from DB) covers both first-party and tenant-specific deployments.
 
 **`is_sandbox` column, not a separate schema.** A separate schema (or separate database) for sandbox data is cleaner in principle but adds deployment complexity — migrations must run twice, connection configs multiply. A boolean column keeps migrations simple and the isolation is enforced in every query through the middleware-set `req.isSandbox`. If sandbox data volume becomes a problem in Phase 2, the column makes it straightforward to partition or archive.
 
-**Wallet closure with grace period.** The system uses a `pending_closure` status to allow account recovery before permanent closure. Users and support agents can make mistakes, and a grace period provides a safety window for recovery.
+**30-day idempotency window.** Longer than the standard 24h because financial operations (reversals, refunds, settlement reconciliation) often span weeks. The 30-day window matches typical billing cycles and reduces support tickets for expired idempotency keys.
 
-**Webhook circuit breaker.** The system implements a circuit breaker for webhook delivery. Endpoints that fail repeatedly are marked as `degraded` and dispatching is paused to prevent dead tenant endpoints from trapping thousands of events in the retry queue.
+**Webhook circuit breaker.** Endpoints that fail repeatedly are marked as `failed` and dispatching is paused to prevent dead tenant endpoints from trapping thousands of events in the retry queue.
+
+**Admin audit log.** A separate `AdminAuditLog` table tracks all admin actions independently from the system `AuditLog`. This ensures admin activity can be reviewed without mixing with transaction-level audit trails and provides a clear separation of concerns for compliance.

@@ -1560,6 +1560,13 @@ router.post(
           name,
           contactEmail: contact_email,
           config,
+          tenantConfig: {
+            create: {
+              defaultCurrency: 'USD',
+              autoCreateWallet: false,
+              allowedOrigins: [],
+            },
+          },
         },
       });
 
@@ -3873,6 +3880,9 @@ router.post(
 const tenantConfigUpdateSchema = z.object({
   defaultCurrency: z.string().length(3).optional(),
   autoCreateWallet: z.boolean().optional(),
+  allowedOrigins: z.array(z.string().regex(/^https?:\/\/[a-zA-Z0-9.-]+(:\d+)?$/, {
+    message: 'Each origin must be a valid http or https URL (scheme://host:port without path, query, or fragment)',
+  })).optional(),
 });
 
 /**
@@ -3893,6 +3903,7 @@ router.get(
       tenant_id: config.tenantId,
       default_currency: config.defaultCurrency,
       auto_create_wallet: config.autoCreateWallet,
+      allowed_origins: config.allowedOrigins,
       updated_at: config.updatedAt.toISOString(),
     });
   })
@@ -3906,28 +3917,80 @@ router.put(
   '/tenant-config',
   requireAdminRole(['tenant_admin', 'superadmin'] as const),
   asyncHandler(async (req, res) => {
+    const tenantId = req.adminUser!.tenantId;
+    const idempotencyKey = req.headers['idempotency-key'] as string;
+
+    if (!idempotencyKey) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key header is required');
+    }
+
+    if (idempotencyKey.length > 255) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'Idempotency-Key must be at most 255 characters');
+    }
+
+    // Check for existing idempotency record (AuditLog from last 30 days)
+    const existingAudit = await prisma.auditLog.findFirst({
+      where: {
+        tenantId,
+        action: 'tenant_config.updated',
+        timestamp: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days
+        },
+        changes: {
+          path: ['idempotency_key'],
+          equals: idempotencyKey,
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+    });
+
+    if (existingAudit) {
+      const cachedChanges = existingAudit.changes as any;
+      if (cachedChanges?.response) {
+        res.setHeader('X-Idempotency-Cache', 'Hit');
+        res.json(cachedChanges.response);
+        return;
+      }
+    }
+
     const parsed = tenantConfigUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(400, ErrorCode.VALIDATION_ERROR, parsed.error.issues[0].message);
     }
 
-    const updateData: { defaultCurrency?: string; autoCreateWallet?: boolean } = {};
+    const updateData: { defaultCurrency?: string; autoCreateWallet?: boolean; allowedOrigins?: string[] } = {};
     if (parsed.data.defaultCurrency !== undefined) updateData.defaultCurrency = parsed.data.defaultCurrency;
     if (parsed.data.autoCreateWallet !== undefined) updateData.autoCreateWallet = parsed.data.autoCreateWallet;
+    if (parsed.data.allowedOrigins !== undefined) updateData.allowedOrigins = parsed.data.allowedOrigins;
 
     const config = await prisma.tenantConfig.upsert({
-      where: { tenantId: req.adminUser!.tenantId },
-      create: { tenantId: req.adminUser!.tenantId, ...updateData },
+      where: { tenantId },
+      create: { tenantId, ...updateData },
       update: updateData,
     });
 
+    const responsePayload = {
+      id: config.id,
+      tenant_id: config.tenantId,
+      default_currency: config.defaultCurrency,
+      auto_create_wallet: config.autoCreateWallet,
+      allowed_origins: config.allowedOrigins,
+      updated_at: config.updatedAt.toISOString(),
+    };
+
     await prisma.auditLog.create({
       data: {
-        tenantId: req.adminUser!.tenantId,
+        tenantId,
         entityType: 'TenantConfig',
         entityId: config.id,
         action: 'tenant_config.updated',
-        changes: updateData,
+        changes: {
+          ...updateData,
+          idempotency_key: idempotencyKey,
+          response: responsePayload,
+        },
         actorId: req.adminUser!.email,
         actorType: 'admin',
         actorRole: req.adminUser!.role,
@@ -3935,13 +3998,7 @@ router.put(
       },
     });
 
-    res.json({
-      id: config.id,
-      tenant_id: config.tenantId,
-      default_currency: config.defaultCurrency,
-      auto_create_wallet: config.autoCreateWallet,
-      updated_at: config.updatedAt.toISOString(),
-    });
+    res.json(responsePayload);
   })
 );
 

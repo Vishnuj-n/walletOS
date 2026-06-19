@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { KeyRound, RefreshCcw, ShieldCheck, Webhook, Plus, Trash2, CheckCircle2, Activity, Play, AlertTriangle, Code, Key } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { KeyRound, RefreshCcw, ShieldCheck, Webhook, Plus, Trash2, CheckCircle2, Activity, Play, AlertTriangle, Code, Key, Settings } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { PermissionGate } from '../../../components/PermissionGate';
 import {
@@ -12,6 +12,10 @@ import {
   createWebhook,
   deleteWebhook,
   testWebhook,
+  fetchTenantConfig,
+  updateTenantConfig,
+  TenantConfigResponse,
+  UpdateTenantConfigRequest,
 } from '../../../services/adminService';
 import type { TenantApiKeySettingsResponse } from '@walletos/types';
 
@@ -44,13 +48,21 @@ export default function SettingsPage() {
   const { adminUser, hasRole } = useAuth();
   const canManageSettings = hasRole('tenant_admin');
   
-  const [activeTab, setActiveTab] = useState<'api-keys' | 'webhooks'>('api-keys');
+  const [activeTab, setActiveTab] = useState<'api-keys' | 'webhooks' | 'tenant-config'>('api-keys');
   const [settings, setSettings] = useState<TenantApiKeySettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rotationError, setRotationError] = useState<string | null>(null);
 
   const [revealedKey, setRevealedKey] = useState<{ scope: 'live' | 'test'; value: string } | null>(null);
+
+  // Tenant Config States
+  const [tenantConfig, setTenantConfig] = useState<TenantConfigResponse | null>(null);
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [newOrigin, setNewOrigin] = useState('');
+  const [configError, setConfigError] = useState<string | null>(null);
+  const currencyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
@@ -102,6 +114,66 @@ export default function SettingsPage() {
     }
   };
 
+  // Tenant Config Handlers
+  const loadTenantConfig = useCallback(async () => {
+    if (!canManageSettings) return;
+    setConfigLoading(true);
+    setConfigError(null);
+    try {
+      const data = await fetchTenantConfig();
+      setTenantConfig(data);
+    } catch (err) {
+      setConfigError(err instanceof Error ? err.message : 'Failed to load tenant configuration');
+    } finally {
+      setConfigLoading(false);
+    }
+  }, [canManageSettings]);
+
+  const handleUpdateTenantConfig = async (updatedFields: Partial<UpdateTenantConfigRequest>) => {
+    if (!tenantConfig) return;
+    setConfigSaving(true);
+    setConfigError(null);
+    try {
+      const requestPayload: UpdateTenantConfigRequest = {
+        defaultCurrency: updatedFields.defaultCurrency ?? tenantConfig.default_currency,
+        autoCreateWallet: updatedFields.autoCreateWallet ?? tenantConfig.auto_create_wallet,
+        allowedOrigins: updatedFields.allowedOrigins ?? tenantConfig.allowed_origins,
+      };
+      const updated = await updateTenantConfig(requestPayload);
+      setTenantConfig(updated);
+    } catch (err) {
+      setConfigError(err instanceof Error ? err.message : 'Failed to update configuration');
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleAddOrigin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newOrigin.trim() || !tenantConfig) return;
+    const originToAdd = newOrigin.trim();
+    
+    if (!originToAdd.startsWith('http://') && !originToAdd.startsWith('https://')) {
+      setConfigError('CORS origin must start with http:// or https://');
+      return;
+    }
+
+    if (tenantConfig.allowed_origins.includes(originToAdd)) {
+      setNewOrigin('');
+      return;
+    }
+
+    const updatedOrigins = [...tenantConfig.allowed_origins, originToAdd];
+    await handleUpdateTenantConfig({ allowedOrigins: updatedOrigins });
+    setNewOrigin('');
+  };
+
+  const handleRemoveOrigin = async (originToRemove: string) => {
+    if (!tenantConfig) return;
+    const updatedOrigins = tenantConfig.allowed_origins.filter((o: string) => o !== originToRemove);
+    await handleUpdateTenantConfig({ allowedOrigins: updatedOrigins });
+  };
+
   // Webhook States
   const [webhooks, setWebhooks] = useState<WebhookEndpoint[]>([]);
   const [webhookModalOpen, setWebhookModalOpen] = useState(false);
@@ -143,13 +215,15 @@ export default function SettingsPage() {
   // Load API settings and local storage webhooks on mount
   useEffect(() => {
     loadSettings();
+    loadTenantConfig();
 
     const intervalId = window.setInterval(() => {
       loadSettings();
+      loadTenantConfig();
     }, 300000);
 
     return () => window.clearInterval(intervalId);
-  }, [loadSettings]);
+  }, [loadSettings, loadTenantConfig]);
 
   const tenantId = adminUser?.tenantId;
 
@@ -410,6 +484,18 @@ export default function SettingsPage() {
                 <Webhook size={16} />
                 Webhook Endpoints
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('tenant-config')}
+                className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-bold transition-all ${
+                  activeTab === 'tenant-config'
+                    ? 'border-indigo-500 text-indigo-600 font-extrabold'
+                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                }`}
+              >
+                <Settings size={16} />
+                Tenant Configuration
+              </button>
             </nav>
           </div>
 
@@ -630,6 +716,122 @@ export default function SettingsPage() {
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Tenant Configuration View */}
+          {activeTab === 'tenant-config' && (
+            <div className="space-y-5 animate-fade-in">
+              {configError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
+                  {configError}
+                </div>
+              )}
+
+              {configLoading ? (
+                <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500">
+                  <RefreshCcw className="animate-spin inline-block mr-2 text-indigo-500 animate-spin" size={20} />
+                  Loading tenant configurations...
+                </div>
+              ) : (
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* General Config Settings */}
+                  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-6">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800">Ledger Configuration</h3>
+                      <p className="text-xs text-slate-500 mt-1">Configure ledger-wide tenant defaults and behavior.</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Default Currency</label>
+                        <input
+                          type="text"
+                          value={tenantConfig?.default_currency || ''}
+                          onChange={(e) => {
+                            const val = e.target.value.toUpperCase();
+                            setTenantConfig(prev => prev ? { ...prev, default_currency: val } : prev);
+                            if (currencyDebounceRef.current) clearTimeout(currencyDebounceRef.current);
+                            currencyDebounceRef.current = setTimeout(() => {
+                              handleUpdateTenantConfig({ defaultCurrency: val });
+                            }, 500);
+                          }}
+                          maxLength={3}
+                          className="w-full max-w-[150px] rounded-lg border border-slate-200 py-2 px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-mono font-bold text-slate-700 bg-white"
+                          placeholder="USD"
+                        />
+                        <p className="text-[10px] text-slate-400">Three-letter ISO currency identifier (e.g. USD, EUR).</p>
+                      </div>
+
+                      <div className="flex items-start gap-3 pt-2">
+                        <input
+                          id="autoCreateWallet"
+                          type="checkbox"
+                          checked={tenantConfig?.auto_create_wallet || false}
+                          onChange={(e) => handleUpdateTenantConfig({ autoCreateWallet: e.target.checked })}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 mt-0.5"
+                        />
+                        <label htmlFor="autoCreateWallet" className="select-none cursor-pointer">
+                          <span className="block text-xs font-bold text-slate-700">Auto-Create User Wallets</span>
+                          <span className="block text-[10px] text-slate-400 mt-0.5">Automatically instantiate default ledger wallet on new customer onboarding flows.</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CORS Multi-tenant Origins */}
+                  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-6">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800">CORS Allowed Origins</h3>
+                      <p className="text-xs text-slate-500 mt-1">Configure external domains permitted to consume your sandbox and live APIs directly from browser client environments.</p>
+                    </div>
+
+                    <form onSubmit={handleAddOrigin} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newOrigin}
+                        onChange={(e) => setNewOrigin(e.target.value)}
+                        placeholder="https://app.yourdomain.com"
+                        className="flex-grow rounded-lg border border-slate-200 py-2 px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all text-slate-700 bg-white"
+                      />
+                      <button
+                        type="submit"
+                        disabled={configSaving}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-sm font-semibold text-white shadow transition-colors disabled:opacity-50"
+                      >
+                        <Plus size={16} />
+                        Add
+                      </button>
+                    </form>
+
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Registered Origins</label>
+                      
+                      {!tenantConfig?.allowed_origins || tenantConfig.allowed_origins.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">
+                          No external CORS origins registered. API calls will be blocked by browsers by default unless matched by global configs.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden bg-slate-50/20">
+                          {tenantConfig.allowed_origins.map((origin: string) => (
+                            <div key={origin} className="flex items-center justify-between px-4 py-2.5 text-xs">
+                              <code className="font-mono font-medium text-slate-700">{origin}</code>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveOrigin(origin)}
+                                className="text-slate-400 hover:text-rose-600 transition-colors p-1"
+                                title="Remove allowed origin"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
