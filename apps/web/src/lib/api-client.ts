@@ -113,8 +113,20 @@ export function fetchLedgerActivities(
 
   if (cursor) params.set('after', cursor);
   if (filters.type && filters.type !== 'all') params.set('type', filters.type);
-  if (filters.from && !isNaN(Date.parse(filters.from))) params.set('from', filters.from);
-  if (filters.to && !isNaN(Date.parse(filters.to))) params.set('to', filters.to);
+  if (filters.from && !isNaN(Date.parse(filters.from))) {
+    // Treat plain YYYY-MM-DD as start-of-day UTC
+    const fromValue = /^\d{4}-\d{2}-\d{2}$/.test(filters.from)
+      ? `${filters.from}T00:00:00.000Z`
+      : filters.from;
+    params.set('from', fromValue);
+  }
+  if (filters.to && !isNaN(Date.parse(filters.to))) {
+    // Treat plain YYYY-MM-DD as end-of-day UTC so the chosen date is fully inclusive
+    const toValue = /^\d{4}-\d{2}-\d{2}$/.test(filters.to)
+      ? `${filters.to}T23:59:59.999Z`
+      : filters.to;
+    params.set('to', toValue);
+  }
 
   return requestJson<LedgerActivityListDto>(`/transactions?${params.toString()}`, token);
 }

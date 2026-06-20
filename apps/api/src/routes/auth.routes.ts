@@ -7,6 +7,15 @@ import { userSessionAuthMiddleware } from '../middleware/userSessionAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 
+/**
+ * Formats a Date object as India Standard Time (UTC+05:30) in ISO 8601 format: YYYY-MM-DDTHH:mm:ss.sss+05:30
+ */
+function toISTString(date: Date): string {
+  const offsetMs = 5.5 * 60 * 60 * 1000;
+  const istTime = new Date(date.getTime() + offsetMs);
+  return istTime.toISOString().replace('Z', '+05:30');
+}
+
 const router = Router();
 
 router.post(
@@ -71,7 +80,7 @@ router.post(
 
     res.status(200).json({
       token,
-      expires_at: expiresAt.toISOString(),
+      expires_at: toISTString(expiresAt),
       wallet: walletProfile,
     });
   })
@@ -165,7 +174,7 @@ router.post(
 
     res.status(200).json({
       token: rawToken,
-      expires_at: expiresAt.toISOString(),
+      expires_at: toISTString(expiresAt),
       adminUser: {
         id: adminUser.id,
         email: adminUser.email,

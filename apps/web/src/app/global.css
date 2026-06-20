@@ -154,6 +154,11 @@
     @apply rounded-2xl border border-border/70 bg-app px-4 py-3 text-foreground outline-none ring-0 transition focus:border-foreground;
   }
 
+  .filter-clear-btn {
+    @apply mt-3 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-app px-3 py-1.5 text-xs font-medium text-muted transition hover:border-red-400 hover:text-red-500 active:scale-95;
+  }
+
+
   .transaction-row {
     @apply grid w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-app/70 focus-visible:bg-app/80 focus-visible:outline-none sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.9fr)_minmax(0,1fr)_auto];
   }

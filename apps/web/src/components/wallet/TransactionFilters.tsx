@@ -23,6 +23,12 @@ export function TransactionFilters({ filters, onChange }: TransactionFiltersProp
       });
     };
 
+  const hasDateFilter = filters.from !== null || filters.to !== null;
+
+  const clearDates = () => {
+    onChange({ ...filters, from: null, to: null });
+  };
+
   return (
     <section className="filter-bar" aria-label="Transaction filters">
       <div className="filter-tabs" role="group" aria-label="Transaction type">
@@ -61,6 +67,16 @@ export function TransactionFilters({ filters, onChange }: TransactionFiltersProp
           />
         </label>
       </div>
+      {hasDateFilter && (
+        <button
+          type="button"
+          className="filter-clear-btn"
+          onClick={clearDates}
+          aria-label="Clear date filters"
+        >
+          ✕ Clear dates
+        </button>
+      )}
     </section>
   );
 }
