@@ -2,17 +2,17 @@
 
 step 1: add company name and email (once mail sent)
 
-![](https://chatgpt.com/c/assets/Pasted%20image%2020260620210634.png)
+![](assets/Pasted%20image%2020260620210634.png)
 
-![](https://chatgpt.com/c/assets/Pasted%20image%2020260620210544.png)
+![](assets/Pasted%20image%2020260620210544.png)
 
 step 2: First add new password
 
 step 3: type your password and enter
 
-![](https://chatgpt.com/c/assets/Pasted%20image%2020260620210846.png)
+![](assets/Pasted%20image%2020260620210846.png)
 
-![](https://chatgpt.com/c/assets/Pasted%20image%2020260620210924.png)
+![](assets/Pasted%20image%2020260620210924.png)
 
 ## EMAIL SEND USING SMTP (SIMILAR FLOW EXCEPT .env Change)
 
@@ -21,10 +21,10 @@ GLOBAL_SMTP="true"
 
 Step 1: create session token
 
-![](https://chatgpt.com/c/assets/Pasted%20image%2020260620211016.png)
+![](assets/Pasted%20image%2020260620211016.png)
 
 Step 2: add session token to the url example:
 
 `https://wallet-os-uqrm.vercel.app/?token=sess_e1f3c633d38bedcbbdf85b9d740c23ad749eb9c1485307d1de1fe8ba9f31f546`
 
-![](https://chatgpt.com/c/assets/Pasted%20image%2020260620211139.png)
+![](assets/Pasted%20image%2020260620211139.png)
