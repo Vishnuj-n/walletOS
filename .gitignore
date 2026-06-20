@@ -60,3 +60,5 @@ graphify-out/
 .gemini
 .patch
 staged_changes.patch
+next-env.d.ts
+doc/one.py
